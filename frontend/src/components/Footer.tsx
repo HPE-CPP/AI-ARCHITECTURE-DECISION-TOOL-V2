@@ -78,9 +78,9 @@ export function Footer() {
               initial={{ y: 100, opacity: 0 }}
               whileInView={{ y: 0, opacity: 1 }}
               transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-              className="text-[15vw] md:text-[18vw] font-bold tracking-[-0.05em] leading-none text-[color:var(--text-primary)] pointer-events-none select-none"
+              className="text-[15vw] md:text-[16vw] font-bold tracking-[-0.05em] leading-none text-[color:var(--text-primary)] pointer-events-none select-none"
             >
-              AADP.
+              ARCHGUIDE.
             </motion.h1>
           </div>
         </div>
@@ -89,12 +89,12 @@ export function Footer() {
         <div className="w-full px-8 md:px-16 pb-12 pt-12 border-t border-[color:var(--border)] flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-3">
             <Hexagon size={24} />
-            <span className="font-bold text-lg tracking-tighter">AADP.</span>
+            <span className="font-bold text-lg tracking-tighter">ARCHGUIDE.</span>
           </div>
 
           <div className="flex items-center gap-8 text-xs font-medium text-[color:var(--text-secondary)]">
-            <Link href="#">About AADP</Link>
-            <Link href="#">AADP Products</Link>
+            <Link href="#">About ArchGuide</Link>
+            <Link href="#">ArchGuide Products</Link>
             <Link href="#">Privacy</Link>
             <Link href="#">Terms</Link>
           </div>

@@ -7,7 +7,7 @@ import { GlobalBackground } from "@/components/GlobalBackground";
 import { Footer } from "@/components/Footer";
 
 export const metadata: Metadata = {
-  title: "AI Architecture Decision Platform",
+  title: "ArchGuide",
   description:
     "Enterprise-grade AI system for choosing between RAG, Fine-Tuning, CAG, and Hybrid architectures.",
 };

@@ -91,7 +91,7 @@ export default function LandingPage() {
 
         <AnimatedSection delay={1.4} className="mt-4">
           <p className="text-lg sm:text-xl text-[color:var(--text-secondary)] max-w-xl mx-auto font-medium leading-relaxed tracking-tight">
-            Stop guessing between RAG, Fine-Tuning, or Hybrid. <br className="hidden md:block" />
+            Stop guessing between RAG, Fine-Tuning, or CAG. <br className="hidden md:block" />
             Let our deterministic intelligence validate your use case instantly.
           </p>
         </AnimatedSection>
@@ -151,7 +151,7 @@ export default function LandingPage() {
             {[
               { title: "RAG", desc: "Retrieval-Augmented Generation for dynamic data without hallucination.", icon: Database },
               { title: "Fine-Tuning", desc: "Teach models domains, structural behaviors, and specialized tasks.", icon: Cpu },
-              { title: "Hybrid Configs", desc: "Context caching and multi-tier architectures for enterprise scale.", icon: Layers }
+              { title: "CAG", desc: "Context caching and multi-tier architectures for enterprise scale.", icon: Layers }
             ].map((feature, i) => (
               <motion.div
                 key={i}

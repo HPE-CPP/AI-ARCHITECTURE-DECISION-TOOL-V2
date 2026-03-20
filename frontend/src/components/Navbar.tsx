@@ -11,11 +11,11 @@ export function Navbar() {
   const { scrollY } = useScroll();
   const scrollVelocity = useVelocity(scrollY);
   const { theme, toggleTheme } = useTheme();
-  
+
   const [activeTab, setActiveTab] = useState("home");
   const [phase, setPhase] = useState<"top" | "pill" | "sphere">("top");
   const [isForcedPill, setIsForcedPill] = useState(false);
-  
+
   // Navigation links - Analyze moved to the last position
   const navLinks = [
     { name: "Home", href: "/", id: "home" },
@@ -61,7 +61,7 @@ export function Navbar() {
   // Navbar morphing logic
   useMotionValueEvent(scrollY, "change", (latest) => {
     const velocity = scrollVelocity.get();
-    
+
     // If the user scrolls significantly, reset the forced pill state
     if (Math.abs(velocity) > 100) {
       setIsForcedPill(false);
@@ -161,13 +161,13 @@ export function Navbar() {
           </div>
           <AnimatePresence>
             {phase !== "sphere" && (
-              <motion.span 
+              <motion.span
                 initial={{ opacity: 0, width: 0 }}
                 animate={{ opacity: 1, width: "auto" }}
                 exit={{ opacity: 0, width: 0 }}
                 className="font-bold text-lg tracking-tighter whitespace-nowrap overflow-hidden pr-2 text-[color:var(--text-primary)]"
               >
-                AADP.
+                ArchGuide.
               </motion.span>
             )}
           </AnimatePresence>
@@ -176,7 +176,7 @@ export function Navbar() {
         {/* Navigation Items */}
         <AnimatePresence>
           {phase !== "sphere" && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -189,11 +189,10 @@ export function Navbar() {
                     key={link.id}
                     href={link.href}
                     onClick={(e) => handleNavClick(e, link.href)}
-                    className={`relative px-4 py-1.5 font-bold text-xs tracking-tight transition-all rounded-full z-10 ${
-                      isActive 
-                        ? "text-[color:var(--background)]" 
+                    className={`relative px-4 py-1.5 font-bold text-xs tracking-tight transition-all rounded-full z-10 ${isActive
+                        ? "text-[color:var(--background)]"
                         : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
-                    }`}
+                      }`}
                   >
                     {link.name}
                     {isActive && (
@@ -213,7 +212,7 @@ export function Navbar() {
         {/* Actions Container */}
         <AnimatePresence>
           {phase !== "sphere" && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
