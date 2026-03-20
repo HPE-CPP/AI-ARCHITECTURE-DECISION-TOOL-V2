@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Sparkles, Database, Layers, Cpu, Zap, Fingerprint } from "lucide-react";
 import { AnimatedSection } from "@/components/AnimatedScroll";
 import { Magnetic } from "@/components/Magnetic";
+import { ReadyToArchitect } from "@/components/CTA";
 
 // Refined "Rise Up" variant for the Hero to ensure smoothness
 const heroRiseVariant = {
@@ -246,6 +247,8 @@ export default function LandingPage() {
           </div>
         </div>
       </motion.section>
+      {/* CTA SECTION - Renders only on Home */}
+      <ReadyToArchitect />
 
 
     </div>
