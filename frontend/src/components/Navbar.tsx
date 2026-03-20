@@ -10,7 +10,20 @@ export function Navbar() {
   const pathname = usePathname();
   const { scrollY } = useScroll();
   const scrollVelocity = useVelocity(scrollY);
-  const { theme, toggleTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  
+  // Use resolvedTheme (it's more reliable than theme)
+  // Default to "dark" during SSR to match ThemeProvider's defaultTheme
+  const currentTheme = mounted ? resolvedTheme : "dark";
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  };
 
   const [activeTab, setActiveTab] = useState("home");
   const [phase, setPhase] = useState<"top" | "pill" | "sphere">("top");
@@ -88,7 +101,7 @@ export function Navbar() {
       maxWidth: "800px",
       borderRadius: "99px",
       y: 20,
-      backgroundColor: theme === "dark" ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
+      backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
       border: "1px solid rgba(150,150,150,0.05)",
       padding: "12px 24px",
       backdropFilter: "blur(20px)",
@@ -99,8 +112,8 @@ export function Navbar() {
       maxWidth: "600px",
       borderRadius: "99px",
       y: 20,
-      backgroundColor: theme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
-      border: theme === "dark" ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)",
+      backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+      border: currentTheme === "dark" ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)",
       padding: "10px 24px",
       backdropFilter: "blur(20px)",
       WebkitBackdropFilter: "blur(20px)",
@@ -111,8 +124,8 @@ export function Navbar() {
       maxWidth: "56px",
       borderRadius: "99px",
       y: 20,
-      backgroundColor: theme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)",
-      border: theme === "dark" ? "1px solid rgba(255,255,255,0.3)" : "1px solid rgba(0,0,0,0.3)",
+      backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)",
+      border: currentTheme === "dark" ? "1px solid rgba(255,255,255,0.3)" : "1px solid rgba(0,0,0,0.3)",
       padding: "10px",
       backdropFilter: "blur(20px)",
       WebkitBackdropFilter: "blur(20px)",
@@ -222,7 +235,7 @@ export function Navbar() {
                 onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all active:scale-90"
               >
-                {theme === "dark" ? <Moon size={14} /> : <Sun size={14} />}
+                {mounted ? (resolvedTheme === "dark" ? <Moon size={14} /> : <Sun size={14} />) : <div className="w-3.5 h-3.5" />}
               </button>
             </motion.div>
           )}

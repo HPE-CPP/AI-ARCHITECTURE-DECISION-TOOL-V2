@@ -247,52 +247,7 @@ export default function LandingPage() {
         </div>
       </motion.section>
 
-      {/* READY TO ARCHITECT (CTA) */}
-      <motion.section
-        style={{ opacity: ctaOpacity }}
-        className="w-full min-h-screen flex flex-col justify-center items-center py-24 px-6 text-center z-[999] relative isolate"
-      >
-        <div className="absolute inset-0 bg-[color:var(--background)] z-[-1]" />
 
-        <div className="max-w-4xl mx-auto w-full flex flex-col items-center relative z-10">
-          <h2 className="text-6xl md:text-8xl font-black tracking-tighter mb-10 leading-[1.15] flex flex-col">
-            <span className="block overflow-hidden h-[1.2em] -mb-[0.1em]">
-              <motion.span
-                className="block"
-                initial={{ y: "100%" }}
-                whileInView={{ y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] as const }}
-              >
-                Ready to
-              </motion.span>
-            </span>
-            <span className="block overflow-hidden h-[1.2em]">
-              <motion.span
-                className="block opacity-30 text-[0.8em]"
-                initial={{ y: "100%" }}
-                whileInView={{ y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 1.2, delay: 0.15, ease: [0.16, 1, 0.3, 1] as const }}
-              >
-                architect.
-              </motion.span>
-            </span>
-          </h2>
-
-          <p className="text-xl text-[color:var(--text-secondary)] mb-14 max-w-xl mx-auto tracking-tight font-medium">
-            Join engineers accelerating deployments intelligently.
-          </p>
-
-          <Magnetic>
-            <Link href="/analyze">
-              <button className="px-12 py-5 text-xl font-bold rounded-full bg-[color:var(--primary)] text-[color:var(--background)] hover:invert hover:scale-105 transition-all duration-500 flex items-center gap-6 shadow-2xl">
-                Begin Analysis <ArrowRight size={24} />
-              </button>
-            </Link>
-          </Magnetic>
-        </div>
-      </motion.section>
     </div>
   );
 }
