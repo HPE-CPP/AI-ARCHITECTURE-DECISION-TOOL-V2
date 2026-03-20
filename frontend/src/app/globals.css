@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-primary: var(--primary);
+  --color-accent: var(--accent);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border: var(--border);
+  
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@layer base {
+  :root {
+    /* Strict Black & White Design System */
+    --background: #000000;
+    --surface: #0a0a0a;
+    --primary: #ffffff;
+    --accent: #333333;
+    --text-primary: #ffffff;
+    --text-secondary: #888888;
+    --border: rgba(255, 255, 255, 0.1);
+
+    --glass-bg: rgba(10, 10, 10, 0.6);
+  }
+
+  [data-theme="light"] {
+    --background: #ffffff;
+    --surface: #f5f5f5;
+    --primary: #000000;
+    --accent: #cccccc;
+    --text-primary: #000000;
+    --text-secondary: #666666;
+    --border: rgba(0, 0, 0, 0.1);
+
+    --glass-bg: rgba(255, 255, 255, 0.6);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    /* Lenis smooth scrolling handles behavior, avoid CSS smooth scroll conflict */
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  /* Make headings use Space Grotesk if available */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Space Grotesk", sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Glass Card */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel-hover:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Minimal Gradient text (just white/gray for B&W theme) */
+.gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #777777 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="light"] .gradient-text {
+  background: linear-gradient(135deg, #000000 0%, #888888 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-bg {
+  background: var(--primary);
+  color: var(--background);
+}
+
+/* Hide Scrollbar for ultra clean look */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+/* Animations */
+.reveal-text {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0% 100%);
+}
+
+.magnetic-wrap {
+  position: relative;
+  display: inline-block;
+}
