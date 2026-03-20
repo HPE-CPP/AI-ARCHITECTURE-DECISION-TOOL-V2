@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { motion, MotionValue } from 'framer-motion';
 import Link from 'next/link';
@@ -144,6 +144,14 @@ interface ReadyToArchitectProps {
 
 export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
     const { theme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Default to "dark" during SSR to match ThemeProvider's defaultTheme
+    const currentTheme = mounted ? theme : "dark";
 
     return (
         <div className="w-full px-6 py-20">
@@ -154,7 +162,7 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                     "rounded-[3rem] md:rounded-[5rem] overflow-hidden isolate shadow-2xl border transition-colors duration-500",
                     // DARK MODE: White Section, Black Text
                     // LIGHT MODE: Black Section, White Text
-                    theme === 'dark'
+                    currentTheme === 'dark'
                         ? "bg-white text-black border-black/5"
                         : "bg-black text-white border-white/10"
                 )}
@@ -197,7 +205,7 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                             <button className={cn(
                                 "px-10 py-5 text-lg font-bold rounded-full transition-all duration-500 flex items-center gap-4 shadow-xl",
                                 // Button flips to opposite of the section color
-                                theme === 'dark'
+                                currentTheme === 'dark'
                                     ? "bg-black text-white hover:bg-zinc-800"
                                     : "bg-white text-black hover:bg-zinc-200"
                             )}>
