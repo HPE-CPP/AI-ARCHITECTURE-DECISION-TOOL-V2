@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getQuestionnaireOptions, submitQuestionnaire, QuestionnaireOptions } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,17 +17,26 @@ export default function QuestionnaireForm() {
   useEffect(() => {
     getQuestionnaireOptions()
       .then(setOptionsData)
-      .catch((e) => setError("Failed to load generic options. Ensure backend is running."))
+      .catch((e) => setError("Failed to load options. Ensure backend is running."))
       .finally(() => setLoading(false));
   }, []);
 
-  const signals = optionsData ? Object.entries(optionsData.signals) : [];
-  const totalSteps = signals.length;
+  // Sort signals: Required first, then Optional
+  const sortedSignals = useMemo(() => {
+    if (!optionsData) return [];
+    return Object.entries(optionsData.signals).sort((a, b) => {
+      const aReq = a[1].required ? 1 : 0;
+      const bReq = b[1].required ? 1 : 0;
+      return bReq - aReq; // 1 (true) comes before 0 (false)
+    });
+  }, [optionsData]);
+
+  const totalSteps = sortedSignals.length;
 
   const handleNext = () => {
-    const [key, schema] = signals[currentStep];
+    const [key, schema] = sortedSignals[currentStep];
     if (schema.required && !answers[key]) {
-      setError("Please select an option to continue.");
+      setError("This information is required to proceed.");
       return;
     }
     setError(null);
@@ -54,8 +63,17 @@ export default function QuestionnaireForm() {
     }
   };
 
+  // Toggle Logic: If clicking the same option, remove it from state
   const handleChange = (key: string, value: string) => {
-    setAnswers((prev) => ({ ...prev, [key]: value }));
+    setAnswers((prev) => {
+      const newAnswers = { ...prev };
+      if (prev[key] === value) {
+        delete newAnswers[key];
+      } else {
+        newAnswers[key] = value;
+      }
+      return newAnswers;
+    });
     setError(null);
   };
 
@@ -66,12 +84,11 @@ export default function QuestionnaireForm() {
       setError(null);
       const provider = localStorage.getItem("llm_provider") || "openai";
       const result = await submitQuestionnaire(answers, provider);
-      
-      // Artificial delay for smooth UX
+
       setTimeout(() => {
         router.push(`/results/${result.analysis_id}`);
       }, 800);
-      
+
     } catch (err: any) {
       setError(err.message || "Submission failed");
       setSubmitting(false);
@@ -79,163 +96,151 @@ export default function QuestionnaireForm() {
   };
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center p-20 min-h-[400px]">
-      <div className="w-16 h-16 relative flex items-center justify-center">
-        <div className="absolute inset-0 rounded-full border-t-2 border-[color:var(--primary)] animate-spin" />
-        <div className="absolute inset-2 rounded-full border-t-2 border-[color:var(--accent)] animate-spin animation-delay-150" />
-      </div>
-      <p className="mt-6 text-[color:var(--text-secondary)] font-medium blink">Loading Questionnaire...</p>
+    <div className="flex flex-col items-center justify-center min-h-[300px]">
+      <Loader2 className="animate-spin text-[color:var(--primary)]" size={40} />
+      <p className="mt-4 text-[color:var(--text-secondary)] font-medium">Loading...</p>
     </div>
   );
 
-  if (!optionsData || signals.length === 0) return (
-    <div className="glass-panel p-10 border-red-500/20 flex flex-col items-center gap-4 text-red-400 rounded-3xl">
-      <AlertCircle size={40} /> 
-      <span className="font-semibold">{error || "Failed to load"}</span>
+  if (!optionsData || sortedSignals.length === 0) return (
+    <div className="glass-panel p-6 border-red-500/20 flex flex-col items-center gap-3 text-red-400 rounded-full">
+      <AlertCircle size={24} />
+      <span className="text-sm font-semibold">{error || "Failed to load"}</span>
     </div>
   );
 
-  const [currentKey, currentSchema] = signals[currentStep];
+  const [currentKey, currentSchema] = sortedSignals[currentStep];
   const progressPercent = ((currentStep + 1) / totalSteps) * 100;
 
   return (
-    <div className="w-full flex-col items-center relative gap-8">
-      {/* Progress Section */}
-      <div className="w-full max-w-3xl mx-auto mb-8">
-        <div className="flex justify-between items-center mb-3 text-sm font-medium text-[color:var(--text-secondary)] px-2">
-          <span>Question {currentStep + 1} of {totalSteps}</span>
-          <span className="text-[color:var(--primary)]">{Math.round(progressPercent)}%</span>
+    <div className="w-full flex flex-col items-center max-w-2xl mx-auto px-4">
+      {/* Compact Progress Bar */}
+      <div className="w-full mb-4">
+        <div className="flex justify-between items-center mb-1 text-[10px] font-bold uppercase tracking-widest text-[color:var(--text-secondary)]">
+          <span>{currentStep + 1} / {totalSteps}</span>
+          <span>{Math.round(progressPercent)}%</span>
         </div>
-        <div className="w-full h-px bg-[color:var(--surface)] overflow-hidden border border-[color:var(--border)] relative bg-[color:var(--background)]">
-          <motion.div 
-            className="h-full absolute top-0 left-0 bg-[color:var(--text-primary)]"
+        <div className="w-full h-1 bg-[color:var(--surface)] rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-[color:var(--text-primary)]"
             initial={{ width: 0 }}
             animate={{ width: `${progressPercent}%` }}
-            transition={{ type: "spring", stiffness: 100, damping: 20 }}
           />
         </div>
       </div>
 
-      <div className="w-full max-w-3xl mx-auto glass-panel p-8 md:p-12 relative overflow-hidden min-h-[450px] flex flex-col shadow-2xl">
-        <AnimatePresence mode="popLayout" initial={false}>
+      <div className="w-full glass-panel p-5 md:p-7 rounded-[2.5rem] shadow-xl flex flex-col transition-all min-h-fit">
+        <AnimatePresence>
           {error && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 flex items-center gap-3 text-sm font-medium"
+              exit={{ opacity: 0 }}
+              className="mb-4 p-2 px-4 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 flex items-center gap-2 text-xs font-medium"
             >
-              <AlertCircle size={20} className="shrink-0" />
+              <AlertCircle size={14} />
               <p>{error}</p>
             </motion.div>
           )}
         </AnimatePresence>
 
         <AnimatePresence mode="wait">
-          <motion.div 
+          <motion.div
             key={currentStep}
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="flex-1 flex flex-col"
+            exit={{ opacity: 0, x: -10 }}
+            className="flex flex-col"
           >
-            <div className="mb-8">
-              <div className="flex items-center gap-3 mb-4">
-                <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1 border ${
-                  currentSchema.required 
-                    ? "bg-[color:var(--surface)] text-[color:var(--text-primary)] border-[color:var(--border)]" 
-                    : "bg-[color:var(--background)] text-[color:var(--text-secondary)] border-[color:var(--border)]"
-                }`}>
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`px-3 py-0.5 rounded-full text-[9px] font-bold uppercase border ${currentSchema.required
+                    ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-[color:var(--text-primary)]"
+                    : "bg-[color:var(--surface)] text-[color:var(--text-secondary)] border-[color:var(--border)]"
+                  }`}>
                   {currentSchema.required ? "Required" : "Optional"}
                 </span>
-                <span className="text-[color:var(--text-secondary)] text-sm font-bold tracking-widest uppercase">
+                <span className="text-[color:var(--text-secondary)] text-[9px] font-bold uppercase tracking-widest">
                   Signal {currentStep + 1}
                 </span>
               </div>
-              
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight leading-tight">
+
+              <h2 className="text-xl md:text-2xl font-bold tracking-tight mb-1">
                 {currentKey.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
               </h2>
-              <p className="text-lg text-[color:var(--text-secondary)] leading-relaxed">
+              <p className="text-sm text-[color:var(--text-secondary)] leading-snug">
                 {currentSchema.description}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 mt-auto">
+            <div className="flex flex-col gap-2.5 mb-6">
               {currentSchema.options.map((opt) => {
                 const isSelected = answers[currentKey] === opt.value;
+                const [title, desc] = opt.label.split(" (");
                 return (
-                  <motion.div 
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                  <motion.button
                     key={opt.value}
+                    whileTap={{ scale: 0.99 }}
                     onClick={() => handleChange(currentKey, opt.value)}
                     className={`
-                      cursor-pointer p-4 md:p-5 border transition-all flex items-start gap-4 group
-                      ${isSelected 
-                        ? "border-[color:var(--text-primary)] bg-[color:var(--surface)]" 
-                        : "border-[color:var(--border)] bg-[color:var(--background)] hover:border-[color:var(--text-secondary)] hover:bg-[color:var(--surface)]/50"
+                      w-full px-6 py-3 rounded-full border text-left transition-all duration-200
+                      ${isSelected
+                        ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-[color:var(--text-primary)]"
+                        : "bg-transparent border-[color:var(--border)] text-[color:var(--text-primary)] hover:border-[color:var(--text-secondary)] hover:bg-[color:var(--surface)]"
                       }
                     `}
                   >
-                    <div className={`mt-0.5 shrink-0 w-5 h-5 border flex items-center justify-center transition-colors ${
-                      isSelected ? "border-[color:var(--text-primary)] bg-[color:var(--text-primary)]" : "border-[color:var(--border)] group-hover:border-[color:var(--text-secondary)]"
-                    }`}>
-                      {isSelected && <Check size={14} className="text-[color:var(--background)]" />}
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold leading-tight">{title}</span>
+                      {desc && (
+                        <span className={`text-xs mt-0.5 leading-tight opacity-70 ${isSelected ? "text-[color:var(--background)]" : "text-[color:var(--text-secondary)]"}`}>
+                          {desc.replace(")", "")}
+                        </span>
+                      )}
                     </div>
-                    
-                    <div className="flex-1">
-                      <div className={`text-base font-bold mb-1 ${isSelected ? "text-[color:var(--primary)]" : "text-[color:var(--text-primary)]"}`}>
-                        {opt.label.split(" (")[0]}
-                      </div>
-                      <div className={`text-sm ${isSelected ? "text-[color:var(--text-primary)] opacity-90" : "text-[color:var(--text-secondary)]"}`}>
-                        {opt.label.split(" (")[1]?.replace(")", "") || ""}
-                      </div>
-                    </div>
-                  </motion.div>
+                  </motion.button>
                 );
               })}
             </div>
           </motion.div>
         </AnimatePresence>
 
-        <div className="mt-12 flex items-center justify-between pt-6 border-t border-[color:var(--border)] relative z-10 w-full">
-          <button 
+        <div className="flex items-center justify-between pt-4 border-t border-[color:var(--border)] mt-auto">
+          <button
             onClick={handleBack}
             disabled={currentStep === 0 || submitting}
-            className="flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] hover:bg-[color:var(--background)] transition-all disabled:opacity-0"
+            className="flex items-center gap-1 text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] disabled:invisible p-2"
           >
-            <ChevronLeft size={20} /> Back
+            <ChevronLeft size={16} /> Back
           </button>
-          
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2">
             {!currentSchema.required && !answers[currentKey] && !submitting && (
-               <button 
+              <button
                 onClick={handleSkip}
-                className="flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-[color:var(--text-secondary)] relative hover:text-[color:var(--text-primary)] hover:bg-[color:var(--background)] transition-all group"
+                className="flex items-center gap-1 px-4 py-2 text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
               >
-                Skip <FastForward size={16} className="group-hover:translate-x-1 transition-transform" />
+                Skip <FastForward size={14} />
               </button>
             )}
 
-            <button 
+            <button
               onClick={handleNext}
               disabled={submitting}
               className={`
-                flex items-center gap-2 px-8 py-3 rounded-none font-bold transition-all group border
-                ${submitting 
-                  ? "bg-[color:var(--surface)] border-[color:var(--border)] text-[color:var(--text-secondary)] cursor-not-allowed" 
-                  : "bg-[color:var(--text-primary)] text-[color:var(--background)] border-[color:var(--text-primary)] hover:invert"
+                flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-xs transition-all
+                ${submitting
+                  ? "bg-[color:var(--surface)] text-[color:var(--text-secondary)] cursor-not-allowed border border-[color:var(--border)]"
+                  : "bg-[color:var(--text-primary)] text-[color:var(--background)] hover:bg-[#444] dark:hover:bg-[#ccc]"
                 }
               `}
             >
               {submitting ? (
-                <><Loader2 className="animate-spin text-[color:var(--text-secondary)]" size={20} /> Analyzing...</>
+                <><Loader2 className="animate-spin" size={14} /> Analyzing</>
               ) : currentStep === totalSteps - 1 ? (
-                <>Submit <Check size={20} /></>
+                <>Submit <Check size={14} /></>
               ) : (
-                <>Next <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" /></>
+                <>Next <ChevronRight size={14} /></>
               )}
             </button>
           </div>

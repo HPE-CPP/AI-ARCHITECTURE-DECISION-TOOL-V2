@@ -115,11 +115,14 @@ export default function LandingPage() {
       <motion.section
         id="features"
         style={{ opacity: featuresOpacity, scale: featuresScale, filter: featuresBlur }}
-        className="w-full py-24 min-h-screen flex flex-col justify-center items-center z-20"
+        className="w-full py-24 min-h-screen flex flex-col justify-center items-center z-20 isolate"
       >
         <div className="max-w-6xl mx-auto px-6 w-full">
+
+          {/* HEADER */}
           <div className="mb-20 flex flex-col items-center text-center">
             <h2 className="text-4xl md:text-6xl font-black tracking-tighter mb-6 leading-[1.2] flex flex-col">
+
               <span className="block overflow-hidden">
                 <motion.span
                   className="block"
@@ -131,6 +134,7 @@ export default function LandingPage() {
                   Unparalleled
                 </motion.span>
               </span>
+
               <span className="block overflow-hidden">
                 <motion.span
                   className="block opacity-30"
@@ -142,30 +146,52 @@ export default function LandingPage() {
                   Precision.
                 </motion.span>
               </span>
+
             </h2>
+
             <p className="text-[color:var(--text-secondary)] text-lg md:text-xl max-w-2xl mx-auto tracking-tight font-medium">
               Mapping your constraints against state-of-the-art benchmarks.
             </p>
           </div>
 
+          {/* CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               { title: "RAG", desc: "Retrieval-Augmented Generation for dynamic data without hallucination.", icon: Database },
-              { title: "Fine-Tuning", desc: "Teach models domains, structural behaviors, and specialized tasks.", icon: Cpu },
+              { title: "Fine - Tuning", desc: "Teach models domains, structural behaviors, and specialized tasks.", icon: Cpu },
               { title: "CAG", desc: "Context caching and multi-tier architectures for enterprise scale.", icon: Layers }
             ].map((feature, i) => (
+
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 50 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-10% 0px" }}
                 transition={{ duration: 1, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] as const }}
-                className="relative z-10 p-10 text-left group transition-all h-full bg-[color:var(--surface)]/50 backdrop-blur-3xl border border-[color:var(--border)] rounded-[3rem] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] duration-700 cursor-default shadow-xl"
+
+                className="relative z-10 p-10 text-left group transition-all h-full
+                     bg-gradient-to-br from-[color:var(--surface)]/90 via-[color:var(--surface)]/70 to-[color:var(--surface)]/40
+                     backdrop-blur-[80px] backdrop-saturate-[1.8]
+                     
+                     border border-black/40 dark:border-white/40
+                     
+                     rounded-[3rem]
+                     hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)]
+                     duration-700 cursor-default
+                     shadow-[0_20px_50px_rgba(0,0,0,0.3)]
+                     overflow-hidden"
               >
-                <div className="w-14 h-14 rounded-2xl border border-[color:var(--border)] flex items-center justify-center mb-8 group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
+
+                {/* Subtle Inner Glow */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/[0.05] to-transparent pointer-events-none" />
+
+                {/* ICON */}
+                <div className="relative z-10 w-14 h-14 rounded-2xl border border-[color:var(--border)] flex items-center justify-center mb-8 group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
                   <feature.icon className="w-6 h-6 text-[color:var(--text-primary)]" />
                 </div>
-                <h3 className="text-3xl font-black mb-4 tracking-tighter overflow-hidden">
+
+                {/* TITLE */}
+                <h3 className="relative z-10 text-3xl font-black mb-4 tracking-tighter overflow-hidden">
                   <motion.span
                     initial={{ y: "100%" }}
                     whileInView={{ y: 0 }}
@@ -176,9 +202,12 @@ export default function LandingPage() {
                     {feature.title}
                   </motion.span>
                 </h3>
-                <p className="text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)] transition-colors duration-500 font-medium">
+
+                {/* DESCRIPTION */}
+                <p className="relative z-10 text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)]/90 transition-colors duration-500 font-medium leading-relaxed">
                   {feature.desc}
                 </p>
+
               </motion.div>
             ))}
           </div>

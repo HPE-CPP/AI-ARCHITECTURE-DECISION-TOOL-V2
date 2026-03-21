@@ -40,7 +40,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],  # Allow all origins for development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -209,7 +209,7 @@ async def health():
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    provider: str = Query(default="openai", regex="^(openai|ollama)$"),
+    provider: str = Query(default="ollama", regex="^(openai|ollama)$"),
 ):
     """Upload a document for analysis."""
     # Validate file
@@ -260,7 +260,7 @@ async def upload_document(
 @app.post("/api/v1/questionnaire")
 async def submit_questionnaire(
     input_data: QuestionnaireInput,
-    provider: str = Query(default="openai", regex="^(openai|ollama)$"),
+    provider: str = Query(default="ollama", regex="^(openai|ollama)$"),
 ):
     """Process questionnaire input and return architecture recommendation."""
     analysis_id = str(uuid.uuid4())

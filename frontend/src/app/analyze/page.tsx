@@ -14,9 +14,18 @@ export default function AnalyzePage() {
     offset: ["start start", "end end"],
   });
 
+  const [provider, setProvider] = useState<"openai" | "ollama">("ollama");
+
   useEffect(() => {
     window.scrollTo(0, 0);
+    const saved = localStorage.getItem("llm_provider") as any;
+    if (saved) setProvider(saved);
   }, []);
+
+  const handleProviderChange = (newProvider: "openai" | "ollama") => {
+    setProvider(newProvider);
+    localStorage.setItem("llm_provider", newProvider);
+  };
 
   // Header transforms
   const headerOpacity = useTransform(scrollYProgress, [0, 0.15, 0.25], [1, 1, 0]);
@@ -30,6 +39,36 @@ export default function AnalyzePage() {
 
   return (
     <div className="w-full relative min-h-screen flex flex-col items-center overflow-x-hidden pt-0" ref={containerRef}>
+
+      {/* MODEL PROVIDER SELECTOR */}
+      <motion.div 
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] scale-90 sm:scale-100"
+      >
+        <div className="flex items-center gap-1 p-1 bg-[color:var(--surface)]/80 backdrop-blur-xl border border-[color:var(--border)] rounded-full shadow-2xl">
+          <button
+            onClick={() => handleProviderChange("ollama")}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+              provider === "ollama" 
+                ? "bg-[color:var(--text-primary)] text-[color:var(--background)]" 
+                : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+            }`}
+          >
+            Ollama 3.2
+          </button>
+          <button
+            onClick={() => handleProviderChange("openai")}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+              provider === "openai" 
+                ? "bg-[color:var(--text-primary)] text-[color:var(--background)]" 
+                : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+            }`}
+          >
+            OpenAI
+          </button>
+        </div>
+      </motion.div>
 
       {/* HEADER SECTION */}
       <motion.div
