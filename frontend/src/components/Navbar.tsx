@@ -179,7 +179,7 @@ export function Navbar() {
             </AnimatePresence>
           </Link>
 
-          {/* Desktop Navigation Items (Hidden on Mobile) */}
+          {/* Desktop Navigation Items */}
           <AnimatePresence>
             {phase !== "sphere" && (
               <motion.div
@@ -226,7 +226,8 @@ export function Navbar() {
                   onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
                   className="hidden md:flex w-8 h-8 items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all active:scale-90"
                 >
-                  {mounted ? (resolvedTheme === "dark" ? <Moon size={14} /> : <Sun size={14} />) : <div className="w-3.5 h-3.5" />}
+                  {/* FIX: If Dark, show Sun. If Light, show Moon. */}
+                  {mounted ? (resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />) : <div className="w-3.5 h-3.5" />}
                 </button>
 
                 {/* Mobile Menu Button */}
@@ -272,8 +273,8 @@ export function Navbar() {
                       href={link.href}
                       onClick={(e) => handleNavClick(e, link.href)}
                       className={`block w-full px-6 py-4 rounded-full text-lg font-bold transition-all border ${isActive
-                          ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-transparent"
-                          : "bg-[color:var(--text-primary)]/5 text-[color:var(--text-secondary)] border-[color:var(--border)]"
+                        ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-transparent"
+                        : "bg-[color:var(--text-primary)]/5 text-[color:var(--text-secondary)] border-[color:var(--border)]"
                         }`}
                     >
                       {link.name}
@@ -291,6 +292,7 @@ export function Navbar() {
               onClick={toggleTheme}
               className="mt-4 flex items-center justify-center gap-2 w-full py-4 rounded-full border border-[color:var(--border)] text-[color:var(--text-primary)] font-bold"
             >
+              {/* FIX: Consistent logic for mobile menu icon */}
               {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
               Switch to {resolvedTheme === "dark" ? "Light" : "Dark"} Mode
             </motion.button>
