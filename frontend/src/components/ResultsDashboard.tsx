@@ -151,7 +151,7 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
           <div className="glass-panel p-8 flex-1 bg-[color:var(--surface)]">
             <h4 className="font-bold text-xl mb-6 flex items-center gap-3">
               <span className="w-8 h-8 rounded-full bg-[color:var(--background)] border border-red-500/20 text-red-500 flex items-center justify-center">
-                <Slash size={14} className="-rotate-45" />
+                <Slash size={14} className="-rotate-135" />
               </span>
               Why not others?
             </h4>
