@@ -4,6 +4,7 @@ Deterministic rule-based scoring for RAG, Fine-Tuning, CAG, and Hybrid architect
 """
 import logging
 from typing import Optional
+from services.signal_extractor import SIGNAL_SCHEMA
 
 logger = logging.getLogger(__name__)
 

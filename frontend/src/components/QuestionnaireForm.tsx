@@ -82,7 +82,7 @@ export default function QuestionnaireForm() {
     try {
       setSubmitting(true);
       setError(null);
-      const provider = localStorage.getItem("llm_provider") || "openai";
+      const provider = localStorage.getItem("llm_provider") || "ollama";
       const result = await submitQuestionnaire(answers, provider);
 
       setTimeout(() => {

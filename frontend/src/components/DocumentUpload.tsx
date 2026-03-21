@@ -38,7 +38,7 @@ export default function DocumentUpload() {
       setError(null);
       setProgress(10);
       
-      const provider = localStorage.getItem("llm_provider") || "openai";
+      const provider = localStorage.getItem("llm_provider") || "ollama";
       
       // Simulating progress while uploading
       const progressInterval = setInterval(() => {

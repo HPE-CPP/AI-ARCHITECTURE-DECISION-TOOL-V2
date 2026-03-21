@@ -40,36 +40,6 @@ export default function AnalyzePage() {
   return (
     <div className="w-full relative min-h-screen flex flex-col items-center overflow-x-hidden pt-0" ref={containerRef}>
 
-      {/* MODEL PROVIDER SELECTOR */}
-      <motion.div 
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] scale-90 sm:scale-100"
-      >
-        <div className="flex items-center gap-1 p-1 bg-[color:var(--surface)]/80 backdrop-blur-xl border border-[color:var(--border)] rounded-full shadow-2xl">
-          <button
-            onClick={() => handleProviderChange("ollama")}
-            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
-              provider === "ollama" 
-                ? "bg-[color:var(--text-primary)] text-[color:var(--background)]" 
-                : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
-            }`}
-          >
-            Ollama 3.2
-          </button>
-          <button
-            onClick={() => handleProviderChange("openai")}
-            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
-              provider === "openai" 
-                ? "bg-[color:var(--text-primary)] text-[color:var(--background)]" 
-                : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
-            }`}
-          >
-            OpenAI
-          </button>
-        </div>
-      </motion.div>
-
       {/* HEADER SECTION */}
       <motion.div
         style={{ opacity: headerOpacity, y: headerY, filter: headerBlur }}
@@ -78,6 +48,32 @@ export default function AnalyzePage() {
         <AnimatedSection delay={0.1}>
           <div className="inline-flex items-center gap-2 px-4 sm:px-5 py-1.5 rounded-full border border-[color:var(--border)] text-[0.55rem] sm:text-[0.65rem] font-bold uppercase tracking-widest text-[color:var(--text-secondary)] mb-6 sm:mb-8 bg-[color:var(--surface)]/50 backdrop-blur-md">
             Analysis Initialized
+          </div>
+        </AnimatedSection>
+
+        {/* MODEL PROVIDER SELECTOR (Integrated) */}
+        <AnimatedSection delay={0.2}>
+          <div className="flex items-center gap-1 p-1 bg-[color:var(--surface)]/80 backdrop-blur-xl border border-[color:var(--border)] rounded-full shadow-2xl mb-10 scale-90 sm:scale-100">
+            <button
+              onClick={() => handleProviderChange("ollama")}
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+                provider === "ollama" 
+                  ? "bg-[color:var(--text-primary)] text-[color:var(--background)] shadow-lg" 
+                  : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+              }`}
+            >
+              Ollama 3.2
+            </button>
+            <button
+              onClick={() => handleProviderChange("openai")}
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+                provider === "openai" 
+                  ? "bg-[color:var(--text-primary)] text-[color:var(--background)] shadow-lg" 
+                  : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+              }`}
+            >
+              OpenAI
+            </button>
           </div>
         </AnimatedSection>
 
