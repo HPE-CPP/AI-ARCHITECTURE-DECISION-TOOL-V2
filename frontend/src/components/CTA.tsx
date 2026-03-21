@@ -38,16 +38,14 @@ export function DottedSurface({ className }: DottedSurfaceProps) {
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
         camera.position.set(0, 300, 1000);
 
-        // Renderer Setup
         const renderer = new THREE.WebGLRenderer({
-            alpha: false, // Made false for complete opacity
+            alpha: false,
             antialias: true
         });
 
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(containerRef.current.offsetWidth, containerRef.current.offsetHeight);
 
-        // Match the background of the Three.js canvas to the container inversion
         const bgColor = theme === 'dark' ? 0xffffff : 0x000000;
         renderer.setClearColor(bgColor, 1);
 
@@ -57,7 +55,6 @@ export function DottedSurface({ className }: DottedSurfaceProps) {
         const positions = new Float32Array(numParticles * 3);
         const colors = new Float32Array(numParticles * 3);
 
-        // Dots: Black dots on White bg (Dark Mode), White dots on Black bg (Light Mode)
         const dotColor = theme === 'dark' ? new THREE.Color(0, 0, 0) : new THREE.Color(1, 1, 1);
 
         let i = 0;
@@ -150,18 +147,15 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
         setMounted(true);
     }, []);
 
-    // Default to "dark" during SSR to match ThemeProvider's defaultTheme
     const currentTheme = mounted ? theme : "dark";
 
     return (
-        <div className="w-full px-6 py-20">
+        <div className="w-full px-4 md:px-6 py-12 md:py-20">
             <motion.section
                 style={{ opacity: ctaOpacity }}
                 className={cn(
-                    "relative max-w-6xl mx-auto min-h-[500px] flex flex-col justify-center items-center text-center",
-                    "rounded-[3rem] md:rounded-[5rem] overflow-hidden isolate shadow-2xl border transition-colors duration-500",
-                    // DARK MODE: White Section, Black Text
-                    // LIGHT MODE: Black Section, White Text
+                    "relative max-w-6xl mx-auto min-h-[600px] md:min-h-[500px] flex flex-col justify-center items-center text-center",
+                    "rounded-[2.5rem] md:rounded-[5rem] overflow-hidden isolate shadow-2xl border transition-colors duration-500",
                     currentTheme === 'dark'
                         ? "bg-white text-black border-black/5"
                         : "bg-black text-white border-white/10"
@@ -170,9 +164,10 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                 {/* BACKGROUND EFFECT */}
                 <DottedSurface className="z-[-1]" />
 
-                <div className="max-w-4xl mx-auto w-full px-8 py-20 flex flex-col items-center relative z-10">
-                    <h2 className="text-5xl md:text-7xl font-black tracking-tighter mb-8 leading-[1.1] flex flex-col">
-                        <span className="block overflow-hidden h-[1.2em] -mb-[0.1em]">
+                <div className="max-w-4xl mx-auto w-full px-6 md:px-8 py-16 md:py-20 flex flex-col items-center relative z-10">
+                    <h2 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 md:mb-8 leading-[1.1] flex flex-col">
+                        {/* Wrapper for "Stop Guessing" */}
+                        <span className="block overflow-hidden h-auto md:h-[1.2em] py-1">
                             <motion.span
                                 className="block"
                                 initial={{ y: "100%" }}
@@ -183,7 +178,9 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                                 Stop Guessing.
                             </motion.span>
                         </span>
-                        <span className="block overflow-hidden h-[1.2em]">
+
+                        {/* Wrapper for "Start Building" */}
+                        <span className="block overflow-hidden h-auto md:h-[1.2em] py-1">
                             <motion.span
                                 className="block opacity-30 text-[0.85em]"
                                 initial={{ y: "100%" }}
@@ -196,20 +193,19 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                         </span>
                     </h2>
 
-                    <p className="text-lg md:text-xl opacity-60 mb-12 max-w-md mx-auto tracking-tight font-medium">
+                    <p className="text-base md:text-xl opacity-60 mb-10 md:mb-12 max-w-xs md:max-w-md mx-auto tracking-tight font-medium leading-relaxed">
                         Transform your business needs into the right AI strategy with precision.
                     </p>
 
                     <Magnetic>
                         <Link href="/analyze">
                             <button className={cn(
-                                "px-10 py-5 text-lg font-bold rounded-full transition-all duration-500 flex items-center gap-4 shadow-xl",
-                                // Button flips to opposite of the section color
+                                "px-8 md:px-10 py-4 md:py-5 text-base md:text-lg font-bold rounded-full transition-all duration-500 flex items-center gap-3 md:gap-4 shadow-xl active:scale-95",
                                 currentTheme === 'dark'
                                     ? "bg-black text-white hover:bg-zinc-800"
                                     : "bg-white text-black hover:bg-zinc-200"
                             )}>
-                                Begin Analysis <ArrowRight size={22} />
+                                Begin Analysis <ArrowRight size={mounted && window.innerWidth < 768 ? 18 : 22} />
                             </button>
                         </Link>
                     </Magnetic>

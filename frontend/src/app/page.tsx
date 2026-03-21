@@ -73,7 +73,7 @@ export default function LandingPage() {
                 initial="initial"
                 animate="animate"
               >
-                Design your
+                Design Your
               </motion.span>
             </span>
             <span className="block overflow-hidden h-[1.2em]">
@@ -84,7 +84,7 @@ export default function LandingPage() {
                 animate="animate"
                 transition={{ ...heroRiseVariant.animate.transition, delay: 0.15 }}
               >
-                AI architecture.
+                Architecture.
               </motion.span>
             </span>
           </h1>
