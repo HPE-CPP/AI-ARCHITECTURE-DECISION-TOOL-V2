@@ -237,9 +237,9 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 gap-5">
             {[
-              { step: "01", title: "Context Injection", desc: "Handshake architecture req-docs through proprietary signal extraction.", icon: Fingerprint },
-              { step: "02", title: "Signal Analysis", desc: " Engine maps constraints into deterministic signal vectorization.", icon: Zap },
-              { step: "03", title: "Output Logic", desc: "A mathematically proven recommendation with factor-based rationale.", icon: Layers }
+              { step: "01", title: "Requirements Understanding", desc: "We analyze your inputs — whether through documents or guided questions — to identify key factors like data size, update frequency, and complexity.", icon: Fingerprint },
+              { step: "02", title: "Signal Extraction & Evaluation", desc: "Your inputs are converted into structured signals and evaluated using deterministic logic to assess suitability across different AI architectures.", icon: Zap },
+              { step: "03", title: "Architecture Recommendation", desc: "Based on the analysis, we provide a clear recommendation with rankings, confidence scores, and detailed reasoning for each option.", icon: Layers }
             ].map((step, i) => (
               <motion.div
                 key={i}

@@ -71,21 +71,19 @@ export default function AnalyzePage() {
           <div className="flex items-center gap-1 p-1 bg-[color:var(--surface)]/80 backdrop-blur-xl border border-[color:var(--border)] rounded-full shadow-2xl mb-10 scale-90 sm:scale-100">
             <button
               onClick={() => handleProviderChange("ollama")}
-              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
-                provider === "ollama" 
-                  ? "bg-[color:var(--text-primary)] text-[color:var(--background)] shadow-lg" 
-                  : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
-              }`}
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${provider === "ollama"
+                ? "bg-[color:var(--text-primary)] text-[color:var(--background)] shadow-lg"
+                : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+                }`}
             >
               Ollama 3.2
             </button>
             <button
               onClick={() => handleProviderChange("openai")}
-              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
-                provider === "openai" 
-                  ? "bg-[color:var(--text-primary)] text-[color:var(--background)] shadow-lg" 
-                  : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
-              }`}
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${provider === "openai"
+                ? "bg-[color:var(--text-primary)] text-[color:var(--background)] shadow-lg"
+                : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+                }`}
             >
               OpenAI
             </button>
@@ -93,13 +91,13 @@ export default function AnalyzePage() {
         </AnimatedSection>
 
         <h1 className="text-4xl sm:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.9] mb-6 text-[color:var(--text-primary)]">
-          Select Context <br />
-          <span className="opacity-30">Injector.</span>
+          Select Your <br />
+          <span className="opacity-30">Input Method.</span>
         </h1>
 
         <AnimatedSection delay={0.3}>
           <p className="text-base sm:text-xl text-[color:var(--text-secondary)] max-w-2xl mx-auto font-medium leading-relaxed tracking-tight px-4">
-            Handshake document handshake or a <br className="hidden md:block" /> deterministic guided flow.
+            Provide your requirements by uploading a document or answering a guided set of questions.
           </p>
         </AnimatedSection>
       </motion.div>
@@ -129,7 +127,7 @@ export default function AnalyzePage() {
                   Document
                 </h2>
                 <p className="text-xs sm:text-lg font-medium text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)] opacity-80 transition-colors duration-500 px-2 sm:px-6 max-w-sm">
-                  Handshake architecture req-docs through signal extraction.
+                  Upload your requirements document and let the system automatically extract key signals for analysis.
                 </p>
                 <div className="absolute bottom-6 sm:bottom-10 opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-500 font-bold text-[color:var(--background)] flex items-center gap-2 sm:gap-3 uppercase tracking-tighter text-[10px] sm:text-sm">
                   BEGIN <ArrowRight size={14} className="sm:w-5 sm:h-5" />
@@ -149,7 +147,7 @@ export default function AnalyzePage() {
                   Guided Flow
                 </h2>
                 <p className="text-xs sm:text-lg font-medium text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)] opacity-80 transition-colors duration-500 px-2 sm:px-6 max-w-sm">
-                  Proprietary context flow maps constraints into vector signals.
+                  Answer a few structured questions to help us understand your use case and recommend the best architecture.
                 </p>
                 <div className="absolute bottom-6 sm:bottom-10 opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-500 font-bold text-[color:var(--background)] flex items-center gap-2 sm:gap-3 uppercase tracking-tighter text-[10px] sm:text-sm">
                   START <ArrowRight size={14} className="sm:w-5 sm:h-5" />
