@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Hexagon, Moon, Sun, Menu, X } from "lucide-react";
-import { motion, useScroll, useMotionValueEvent, AnimatePresence, useVelocity } from "framer-motion";
+import { motion, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
 
 export function Navbar() {
@@ -13,20 +13,48 @@ export function Navbar() {
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // Ref to track if we are currently animating a scroll from a click
+  const isScrollingProgrammatically = useRef(false);
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Set initial phase to "sphere" for the entrance animation
+  const [phase, setPhase] = useState<"top" | "pill" | "sphere">("sphere");
+  const [isForcedPill, setIsForcedPill] = useState(false);
+
+  // New State: Strictly track when expansion is visually complete
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
+
+  // Handle initial expansion and mounting
+  useEffect(() => {
+    setMounted(true);
+
+    const timer = setTimeout(() => {
+      const currentScroll = window.scrollY;
+      if (currentScroll < 50) {
+        setPhase("top");
+      } else {
+        setPhase("pill");
+      }
+    }, 400); // 400ms delay to let the user see the "sphere" state first
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // When phase becomes sphere, immediately drop the `isExpanded` state to hide items before shrinking
+  useEffect(() => {
+    if (phase === "sphere") {
+      setIsExpanded(false);
+    }
+  }, [phase]);
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark");
   };
 
   const [activeTab, setActiveTab] = useState("home");
-  const [phase, setPhase] = useState<"top" | "pill" | "sphere">("top");
-  const [isForcedPill, setIsForcedPill] = useState(false);
 
   const navLinks = [
     { name: "Home", href: "/", id: "home" },
@@ -68,6 +96,14 @@ export function Navbar() {
   }, [pathname]);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
+    if (!mounted) return;
+
+    if (isScrollingProgrammatically.current) {
+      if (latest < 50) setPhase("top");
+      else setPhase("pill");
+      return;
+    }
+
     const velocity = scrollVelocity.get();
     if (Math.abs(velocity) > 100) setIsForcedPill(false);
 
@@ -124,8 +160,36 @@ export function Navbar() {
     }
   };
 
+  // Rising item variants for staggered loading
+  const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (customDelay: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: customDelay,
+        type: "spring",
+        stiffness: 300,
+        damping: 24
+      }
+    }),
+    exit: {
+      opacity: 0,
+      y: -10,
+      transition: { duration: 0.15 }
+    }
+  };
+
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    setIsMobileMenuOpen(false); // Close mobile menu on click
+    setIsMobileMenuOpen(false);
+    isScrollingProgrammatically.current = true;
+    setPhase("pill");
+
+    if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    scrollTimeout.current = setTimeout(() => {
+      isScrollingProgrammatically.current = false;
+    }, 1000);
+
     if (pathname === "/") {
       if (href === "/") {
         e.preventDefault();
@@ -149,9 +213,13 @@ export function Navbar() {
       <div className="fixed top-0 left-0 w-full flex justify-center z-50 pointer-events-none px-4">
         <motion.nav
           variants={variants}
-          initial="top"
+          initial="sphere"
           animate={phase}
           transition={{ type: "spring", stiffness: 220, damping: 28, mass: 1 }}
+          // Trigger the isExpanded state ONLY when the navbar finishes physically opening
+          onAnimationComplete={(variant) => {
+            if (variant === "top" || variant === "pill") setIsExpanded(true);
+          }}
           onClick={() => {
             if (phase === "sphere") {
               setIsForcedPill(true);
@@ -160,17 +228,22 @@ export function Navbar() {
           }}
           className={`pointer-events-auto flex items-center justify-between overflow-hidden mx-auto shadow-2xl ${phase === "sphere" ? "cursor-pointer hover:scale-110 transition-transform active:scale-95 shadow-white/5" : ""}`}
         >
-          {/* Logo Container */}
+          {/* Main Logo Container */}
           <Link href="/" className="flex items-center gap-2 group shrink-0 relative z-10 transition-transform active:scale-95">
-            <div className="w-8 h-8 flex items-center justify-center">
+            {/* The base hexagon fades out slightly when in sphere mode so the absolute sphere logo takes over beautifully */}
+            <div className={`w-8 h-8 flex items-center justify-center transition-opacity duration-300 ${isExpanded ? "opacity-100" : "opacity-0"}`}>
               <Hexagon className="text-[color:var(--text-primary)] w-6 h-6" />
             </div>
+
             <AnimatePresence>
-              {phase !== "sphere" && (
+              {isExpanded && (
                 <motion.span
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
-                  exit={{ opacity: 0, width: 0 }}
+                  key="logo-text"
+                  custom={0} // 0 delay (starts immediately)
+                  variants={itemVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
                   className="font-bold text-lg tracking-tighter whitespace-nowrap overflow-hidden pr-2 text-[color:var(--text-primary)]"
                 >
                   ArchGuide.
@@ -179,13 +252,16 @@ export function Navbar() {
             </AnimatePresence>
           </Link>
 
-          {/* Desktop Navigation Items */}
+          {/* Desktop Navigation Items (Middle) */}
           <AnimatePresence>
-            {phase !== "sphere" && (
+            {isExpanded && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
+                key="nav-links"
+                custom={0.15} // Slight delay after logo
+                variants={itemVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
                 className="hidden md:flex items-center gap-1 justify-center shrink-0 relative z-0 p-1"
               >
                 {navLinks.map((link) => {
@@ -213,24 +289,25 @@ export function Navbar() {
             )}
           </AnimatePresence>
 
-          {/* Actions & Mobile Toggle */}
+          {/* Actions & Mobile Toggle (Right) */}
           <AnimatePresence>
-            {phase !== "sphere" && (
+            {isExpanded && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                key="nav-actions"
+                custom={0.3} // Longest delay
+                variants={itemVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
                 className="flex items-center gap-2 shrink-0 relative z-10"
               >
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
                   className="hidden md:flex w-8 h-8 items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all active:scale-90"
                 >
-                  {/* FIX: If Dark, show Sun. If Light, show Moon. */}
                   {mounted ? (resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />) : <div className="w-3.5 h-3.5" />}
                 </button>
 
-                {/* Mobile Menu Button */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(!isMobileMenuOpen); }}
                   className="md:hidden w-8 h-8 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90 transition-transform"
@@ -241,12 +318,19 @@ export function Navbar() {
             )}
           </AnimatePresence>
 
-          {/* Sphere Logo */}
-          {phase === "sphere" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center">
-              <Hexagon size={24} className="text-[color:var(--text-primary)]" />
-            </motion.div>
-          )}
+          {/* Sphere Center Logo - Handles smooth transition while the rest is hidden */}
+          <AnimatePresence>
+            {!isExpanded && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              >
+                <Hexagon size={24} className="text-[color:var(--text-primary)]" />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.nav>
       </div>
 
@@ -284,7 +368,6 @@ export function Navbar() {
               })}
             </div>
 
-            {/* Theme Toggle in Mobile Menu */}
             <motion.button
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -292,7 +375,6 @@ export function Navbar() {
               onClick={toggleTheme}
               className="mt-4 flex items-center justify-center gap-2 w-full py-4 rounded-full border border-[color:var(--border)] text-[color:var(--text-primary)] font-bold"
             >
-              {/* FIX: Consistent logic for mobile menu icon */}
               {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
               Switch to {resolvedTheme === "dark" ? "Light" : "Dark"} Mode
             </motion.button>
