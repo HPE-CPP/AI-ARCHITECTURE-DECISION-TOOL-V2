@@ -1,9 +1,9 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Hexagon, Moon, Sun } from "lucide-react";
-import { motion, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, useSpring } from "framer-motion";
+import { usePathname } from "next/navigation";
+import { Hexagon, Moon, Sun, Menu, X } from "lucide-react";
+import { motion, useScroll, useMotionValueEvent, AnimatePresence, useVelocity } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
 
 export function Navbar() {
@@ -11,14 +11,13 @@ export function Navbar() {
   const { scrollY } = useScroll();
   const scrollVelocity = useVelocity(scrollY);
   const [mounted, setMounted] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  
-  // Use resolvedTheme (it's more reliable than theme)
-  // Default to "dark" during SSR to match ThemeProvider's defaultTheme
+  const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
 
   const toggleTheme = () => {
@@ -29,7 +28,6 @@ export function Navbar() {
   const [phase, setPhase] = useState<"top" | "pill" | "sphere">("top");
   const [isForcedPill, setIsForcedPill] = useState(false);
 
-  // Navigation links - Analyze moved to the last position
   const navLinks = [
     { name: "Home", href: "/", id: "home" },
     { name: "Features", href: "/#features", id: "features" },
@@ -37,13 +35,11 @@ export function Navbar() {
     { name: "Analyze", href: "/analyze", id: "analyze" },
   ];
 
-  // Logic to determine active tab
   useEffect(() => {
     if (pathname === "/analyze") {
       setActiveTab("analyze");
       return;
     }
-
     if (pathname !== "/") {
       setActiveTab("");
       return;
@@ -71,14 +67,9 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [pathname]);
 
-  // Navbar morphing logic
   useMotionValueEvent(scrollY, "change", (latest) => {
     const velocity = scrollVelocity.get();
-
-    // If the user scrolls significantly, reset the forced pill state
-    if (Math.abs(velocity) > 100) {
-      setIsForcedPill(false);
-    }
+    if (Math.abs(velocity) > 100) setIsForcedPill(false);
 
     if (latest < 50) {
       setPhase("top");
@@ -134,6 +125,7 @@ export function Navbar() {
   };
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    setIsMobileMenuOpen(false); // Close mobile menu on click
     if (pathname === "/") {
       if (href === "/") {
         e.preventDefault();
@@ -153,101 +145,158 @@ export function Navbar() {
   };
 
   return (
-    <div className="fixed top-0 left-0 w-full flex justify-center z-50 pointer-events-none px-4">
-      <motion.nav
-        variants={variants}
-        initial="top"
-        animate={phase}
-        transition={{ type: "spring", stiffness: 220, damping: 28, mass: 1 }}
-        onClick={() => {
-          if (phase === "sphere") {
-            setIsForcedPill(true);
-            setPhase("pill");
-          }
-        }}
-        className={`pointer-events-auto flex items-center justify-between overflow-hidden mx-auto shadow-2xl ${phase === "sphere" ? "cursor-pointer hover:scale-110 transition-transform active:scale-95 shadow-white/5" : ""}`}
-      >
-        {/* Logo Container */}
-        <Link href="/" className="flex items-center gap-2 group shrink-0 relative z-10 transition-transform active:scale-95">
-          <div className="w-8 h-8 flex items-center justify-center">
-            <Hexagon className="text-[color:var(--text-primary)] w-6 h-6" />
-          </div>
+    <>
+      <div className="fixed top-0 left-0 w-full flex justify-center z-50 pointer-events-none px-4">
+        <motion.nav
+          variants={variants}
+          initial="top"
+          animate={phase}
+          transition={{ type: "spring", stiffness: 220, damping: 28, mass: 1 }}
+          onClick={() => {
+            if (phase === "sphere") {
+              setIsForcedPill(true);
+              setPhase("pill");
+            }
+          }}
+          className={`pointer-events-auto flex items-center justify-between overflow-hidden mx-auto shadow-2xl ${phase === "sphere" ? "cursor-pointer hover:scale-110 transition-transform active:scale-95 shadow-white/5" : ""}`}
+        >
+          {/* Logo Container */}
+          <Link href="/" className="flex items-center gap-2 group shrink-0 relative z-10 transition-transform active:scale-95">
+            <div className="w-8 h-8 flex items-center justify-center">
+              <Hexagon className="text-[color:var(--text-primary)] w-6 h-6" />
+            </div>
+            <AnimatePresence>
+              {phase !== "sphere" && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="font-bold text-lg tracking-tighter whitespace-nowrap overflow-hidden pr-2 text-[color:var(--text-primary)]"
+                >
+                  ArchGuide.
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </Link>
+
+          {/* Desktop Navigation Items (Hidden on Mobile) */}
           <AnimatePresence>
             {phase !== "sphere" && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="font-bold text-lg tracking-tighter whitespace-nowrap overflow-hidden pr-2 text-[color:var(--text-primary)]"
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="hidden md:flex items-center gap-1 justify-center shrink-0 relative z-0 p-1"
               >
-                ArchGuide.
-              </motion.span>
+                {navLinks.map((link) => {
+                  const isActive = activeTab === link.id;
+                  return (
+                    <Link
+                      key={link.id}
+                      href={link.href}
+                      onClick={(e) => handleNavClick(e, link.href)}
+                      className={`relative px-4 py-1.5 font-bold text-xs tracking-tight transition-all rounded-full z-10 ${isActive ? "text-[color:var(--background)]" : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+                        }`}
+                    >
+                      {link.name}
+                      {isActive && (
+                        <motion.div
+                          layoutId="navbar-active-pill"
+                          transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                          className="absolute inset-0 bg-[color:var(--text-primary)] rounded-full -z-10 shadow-sm"
+                        />
+                      )}
+                    </Link>
+                  );
+                })}
+              </motion.div>
             )}
           </AnimatePresence>
-        </Link>
 
-        {/* Navigation Items */}
-        <AnimatePresence>
-          {phase !== "sphere" && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="flex items-center gap-1 justify-center shrink-0 relative z-0 p-1"
-            >
-              {navLinks.map((link) => {
+          {/* Actions & Mobile Toggle */}
+          <AnimatePresence>
+            {phase !== "sphere" && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2 shrink-0 relative z-10"
+              >
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
+                  className="hidden md:flex w-8 h-8 items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all active:scale-90"
+                >
+                  {mounted ? (resolvedTheme === "dark" ? <Moon size={14} /> : <Sun size={14} />) : <div className="w-3.5 h-3.5" />}
+                </button>
+
+                {/* Mobile Menu Button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(!isMobileMenuOpen); }}
+                  className="md:hidden w-8 h-8 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90 transition-transform"
+                >
+                  {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Sphere Logo */}
+          {phase === "sphere" && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center">
+              <Hexagon size={24} className="text-[color:var(--text-primary)]" />
+            </motion.div>
+          )}
+        </motion.nav>
+      </div>
+
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed inset-0 z-40 md:hidden bg-[color:var(--background)] pt-24 px-6 flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-3">
+              {navLinks.map((link, i) => {
                 const isActive = activeTab === link.id;
                 return (
-                  <Link
+                  <motion.div
                     key={link.id}
-                    href={link.href}
-                    onClick={(e) => handleNavClick(e, link.href)}
-                    className={`relative px-4 py-1.5 font-bold text-xs tracking-tight transition-all rounded-full z-10 ${isActive
-                        ? "text-[color:var(--background)]"
-                        : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
-                      }`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
                   >
-                    {link.name}
-                    {isActive && (
-                      <motion.div
-                        layoutId="navbar-active-pill"
-                        transition={{ type: "spring", stiffness: 400, damping: 35 }}
-                        className="absolute inset-0 bg-[color:var(--text-primary)] rounded-full -z-10 shadow-sm"
-                      />
-                    )}
-                  </Link>
+                    <Link
+                      href={link.href}
+                      onClick={(e) => handleNavClick(e, link.href)}
+                      className={`block w-full px-6 py-4 rounded-full text-lg font-bold transition-all border ${isActive
+                          ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-transparent"
+                          : "bg-[color:var(--text-primary)]/5 text-[color:var(--text-secondary)] border-[color:var(--border)]"
+                        }`}
+                    >
+                      {link.name}
+                    </Link>
+                  </motion.div>
                 );
               })}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
 
-        {/* Actions Container */}
-        <AnimatePresence>
-          {phase !== "sphere" && (
-            <motion.div
+            {/* Theme Toggle in Mobile Menu */}
+            <motion.button
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex items-center shrink-0 relative z-10"
+              transition={{ delay: 0.4 }}
+              onClick={toggleTheme}
+              className="mt-4 flex items-center justify-center gap-2 w-full py-4 rounded-full border border-[color:var(--border)] text-[color:var(--text-primary)] font-bold"
             >
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all active:scale-90"
-              >
-                {mounted ? (resolvedTheme === "dark" ? <Moon size={14} /> : <Sun size={14} />) : <div className="w-3.5 h-3.5" />}
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Sphere Logo */}
-        {phase === "sphere" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center">
-            <Hexagon size={24} className="text-[color:var(--text-primary)]" />
+              {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+              Switch to {resolvedTheme === "dark" ? "Light" : "Dark"} Mode
+            </motion.button>
           </motion.div>
         )}
-      </motion.nav>
-    </div>
+      </AnimatePresence>
+    </>
   );
 }
