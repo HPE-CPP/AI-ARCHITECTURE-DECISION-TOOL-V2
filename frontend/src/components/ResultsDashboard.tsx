@@ -6,19 +6,19 @@ import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend
 } from "recharts";
 import { motion } from "framer-motion";
-import { CheckCircle, Download, Slash, AlertTriangle } from "lucide-react";
+import { CheckCircle, Download, Slash } from "lucide-react";
 import { exportAnalysis } from "@/lib/api";
 
 export function ResultsDashboard({ result }: { result: AnalysisResult }) {
   const {
     recommended, scores, confidence, ranking, why_not,
-    factor_breakdown, architecture_details, sensitivity
+    factor_breakdown, architecture_details
   } = result;
 
   const radarData = useMemo(() => {
     if (!factor_breakdown) return [];
-    const _signals = Object.keys(Object.values(factor_breakdown)[0] || {});
-    return _signals.map(signal => {
+    const signals = Object.keys(Object.values(factor_breakdown)[0] || {});
+    return signals.map(signal => {
       const dataPoint: any = { subject: signal.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) };
       Object.keys(factor_breakdown).forEach(arch => {
         dataPoint[arch] = factor_breakdown[arch][signal];
@@ -50,49 +50,48 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
         <div className="absolute -top-32 -right-32 w-[600px] h-[600px] rounded-full blur-[120px] bg-white/[0.03] pointer-events-none group-hover:bg-white/[0.05] transition-colors duration-700" />
 
         <div className="flex-1 text-center lg:text-left z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[color:var(--text-primary)] bg-[color:var(--background)] text-[color:var(--text-primary)] mb-8 font-semibold text-sm shadow-sm backdrop-blur-sm">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--text-primary)] bg-[var(--background)] text-[var(--text-primary)] mb-8 font-semibold text-sm shadow-sm backdrop-blur-sm">
             <CheckCircle size={16} /> Analysis Complete
           </div>
-          <h2 className="text-[color:var(--text-secondary)] font-bold tracking-widest uppercase mb-4 opacity-80">Recommended Architecture</h2>
-          <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-[color:var(--text-primary)] mb-6 drop-shadow-xl">
+          <h2 className="text-[var(--text-secondary)] font-bold tracking-widest uppercase mb-4 opacity-80">Recommended Architecture</h2>
+          <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-[var(--text-primary)] mb-6 drop-shadow-xl">
             {topArch?.full_name || recommended}
           </h1>
-          <p className="text-xl text-[color:var(--text-secondary)] leading-relaxed max-w-2xl font-medium">
+          <p className="text-xl text-[var(--text-secondary)] leading-relaxed max-w-2xl font-medium">
             {topArch?.description}
           </p>
           <button
             onClick={() => exportAnalysis(result.analysis_id)}
-            className="mt-10 flex items-center gap-3 px-8 py-4 rounded-full border border-[color:var(--border)] bg-[color:var(--background)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn"
+            className="mt-10 flex items-center gap-3 px-8 py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn"
           >
-            <Download size={20} className="group-hover/btn:text-[color:var(--background)] text-[color:var(--text-primary)] transition-colors" /> Download JSON Report
+            <Download size={20} className="group-hover/btn:text-[var(--background)] text-[var(--text-primary)] transition-colors" /> Download JSON Report
           </button>
         </div>
 
         <div className="w-full lg:w-auto flex flex-col sm:flex-row gap-4 z-10">
           {/* Confidence Widget */}
-          <motion.div
-            whileHover={{ backgroundColor: "rgba(99, 102, 241, 0.05)", y: -5 }}
-            className="flex-1 lg:w-48 p-8 rounded-[2rem] bg-[color:var(--surface)] border border-[color:var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors"
-          >
-            <span className="text-xs font-bold text-[color:var(--text-secondary)] uppercase tracking-widest mb-3">Confidence</span>
-            <div className="text-5xl font-black text-[color:var(--primary)]">
-              {(confidence! * 100).toFixed(0)}<span className="text-2xl text-[color:var(--text-secondary)]">%</span>
+          <div className="flex-1 lg:w-48 p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
+            <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-3">Confidence</span>
+            <div className="text-5xl font-black text-[var(--primary)]">
+              {(confidence! * 100).toFixed(0)}<span className="text-2xl text-[var(--text-secondary)]">%</span>
             </div>
-            <div className="w-full h-px border border-[color:var(--border)] bg-[color:var(--background)] relative mt-6 overflow-hidden">
-              <motion.div initial={{ width: 0 }} animate={{ width: `${confidence! * 100}%` }} transition={{ duration: 1, delay: 0.8 }} className="absolute top-0 left-0 h-full bg-[color:var(--text-primary)]" />
+            <div className="w-full h-px border border-[var(--border)] bg-[var(--background)] relative mt-6 overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }} 
+                animate={{ width: `${confidence! * 100}%` }} 
+                transition={{ duration: 1, delay: 0.8 }} 
+                className="absolute top-0 left-0 h-full bg-[var(--text-primary)]" 
+              />
             </div>
-          </motion.div>
+          </div>
 
           {/* Overall Score Widget */}
-          <motion.div
-            whileHover={{ backgroundColor: "rgba(16, 185, 129, 0.05)", y: -5 }}
-            className="flex-1 lg:w-48 p-8 rounded-[2rem] bg-[color:var(--surface)] border border-[color:var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors"
-          >
-            <span className="text-xs font-bold text-[color:var(--text-secondary)] uppercase tracking-widest mb-3">Overall Score</span>
-            <div className="text-5xl font-black text-[color:var(--accent)]">
-              {scores[recommended].toFixed(1)}<span className="text-2xl text-[color:var(--text-secondary)]">/100</span>
+          <div className="flex-1 lg:w-48 p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
+            <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-3">Overall Score</span>
+            <div className="text-5xl font-black text-[var(--accent)]">
+              {scores[recommended].toFixed(1)}<span className="text-2xl text-[var(--text-secondary)]">/100</span>
             </div>
-          </motion.div>
+          </div>
         </div>
       </motion.div>
 
@@ -116,7 +115,15 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
                 <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '16px', color: 'var(--text-primary)', fontWeight: 'bold' }} />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 {ranking?.slice(0, 3).map((arch, i) => (
-                  <Radar key={arch} name={arch} dataKey={arch} stroke={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"} fill={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"} fillOpacity={i === 0 ? 0.3 : 0.1} strokeWidth={i === 0 ? 3 : 2} />
+                  <Radar 
+                    key={arch} 
+                    name={arch} 
+                    dataKey={arch} 
+                    stroke={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"} 
+                    fill={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"} 
+                    fillOpacity={i === 0 ? 0.3 : 0.1} 
+                    strokeWidth={i === 0 ? 3 : 2} 
+                  />
                 ))}
               </RadarChart>
             </ResponsiveContainer>
@@ -148,18 +155,18 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
             </div>
           </div>
 
-          <div className="glass-panel p-8 flex-1 bg-[color:var(--surface)]">
+          <div className="glass-panel p-8 flex-1 bg-[var(--surface)]">
             <h4 className="font-bold text-xl mb-6 flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full bg-[color:var(--background)] border border-red-500/20 text-red-500 flex items-center justify-center">
+              <span className="w-8 h-8 rounded-full bg-[var(--background)] border border-red-500/20 text-red-500 flex items-center justify-center">
                 <Slash size={14} className="-rotate-135" />
               </span>
               Why not others?
             </h4>
             <div className="space-y-5">
               {Object.entries(why_not || {}).slice(0, 3).map(([arch, reason]) => (
-                <div key={arch} className="flex flex-col border-b border-[color:var(--border)] pb-4 last:border-0 last:pb-0">
-                  <span className="text-sm font-bold text-[color:var(--primary)] mb-1">{arch}</span>
-                  <span className="text-sm text-[color:var(--text-secondary)] leading-relaxed select-text">{reason}</span>
+                <div key={arch} className="flex flex-col border-b border-[var(--border)] pb-4 last:border-0 last:pb-0">
+                  <span className="text-sm font-bold text-[var(--primary)] mb-1">{arch}</span>
+                  <span className="text-sm text-[var(--text-secondary)] leading-relaxed select-text">{reason}</span>
                 </div>
               ))}
             </div>
