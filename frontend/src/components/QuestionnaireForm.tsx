@@ -19,6 +19,16 @@ export default function QuestionnaireForm() {
       .then(setOptionsData)
       .catch((e) => setError("Failed to load options. Ensure backend is running."))
       .finally(() => setLoading(false));
+
+    // PERSISTENCE: Restore answers from localStorage
+    const saved = localStorage.getItem("questionnaire_answers");
+    if (saved) {
+      try {
+        setAnswers(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved answers", e);
+      }
+    }
   }, []);
 
   // Sort signals: Required first, then Optional
@@ -72,6 +82,8 @@ export default function QuestionnaireForm() {
       } else {
         newAnswers[key] = value;
       }
+      // PERSISTENCE: Save to localStorage
+      localStorage.setItem("questionnaire_answers", JSON.stringify(newAnswers));
       return newAnswers;
     });
     setError(null);

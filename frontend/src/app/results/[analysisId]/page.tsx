@@ -123,7 +123,27 @@ export default function ResultsPage({ params }: { params: Promise<{ analysisId: 
       {/* --- NEW: Back / Edit Button --- */}
       <div className="flex items-center w-full">
         <button
-          onClick={() => router.back()}
+          onClick={() => {
+            const currentMode = localStorage.getItem("analyze_mode");
+            
+            // PATH-DEPENDENT ROUTING: 
+            // If the user came from Document Upload, take them back there.
+            // If they came from Questionnaire, keep the pre-fill logic.
+            if (currentMode === "upload") {
+              router.push("/analyze");
+            } else {
+              // Default/Questionnaire path
+              localStorage.setItem("analyze_mode", "questionnaire");
+              if (result?.signals) {
+                const answers: Record<string, string> = {};
+                Object.entries(result.signals).forEach(([key, sig]) => {
+                  if (sig.value) answers[key] = sig.value;
+                });
+                localStorage.setItem("questionnaire_answers", JSON.stringify(answers));
+              }
+              router.push("/analyze");
+            }
+          }}
           className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
         >
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />

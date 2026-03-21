@@ -18,9 +18,24 @@ export default function AnalyzePage() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    const saved = localStorage.getItem("llm_provider") as any;
-    if (saved) setProvider(saved);
+    const savedProvider = localStorage.getItem("llm_provider") as any;
+    if (savedProvider) setProvider(savedProvider);
+
+    // PERSISTENCE: Restore mode from localStorage
+    const savedMode = localStorage.getItem("analyze_mode") as "upload" | "questionnaire" | null;
+    if (savedMode) setMode(savedMode);
   }, []);
+
+  const handleModeChange = (newMode: "upload" | "questionnaire" | null) => {
+    setMode(newMode);
+    if (newMode) {
+      localStorage.setItem("analyze_mode", newMode);
+    } else {
+      localStorage.removeItem("analyze_mode");
+      // Optional: Clear answers when resetting workspace entirely
+      localStorage.removeItem("questionnaire_answers");
+    }
+  };
 
   const handleProviderChange = (newProvider: "openai" | "ollama") => {
     setProvider(newProvider);
@@ -103,7 +118,7 @@ export default function AnalyzePage() {
             >
               {/* UPLOAD CARD */}
               <div
-                onClick={() => setMode("upload")}
+                onClick={() => handleModeChange("upload")}
                 className="group relative cursor-pointer p-5 sm:p-10 border border-[color:var(--border)] rounded-[2rem] sm:rounded-[3.5rem] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] transition-colors duration-500 ease-in-out overflow-hidden flex flex-col items-center justify-center text-center h-[320px] sm:h-[480px] shadow-2xl active:scale-[0.98]"
               >
                 <div className="w-12 h-12 sm:w-20 sm:h-20 mb-6 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
@@ -123,7 +138,7 @@ export default function AnalyzePage() {
 
               {/* QUESTIONNAIRE CARD */}
               <div
-                onClick={() => setMode("questionnaire")}
+                onClick={() => handleModeChange("questionnaire")}
                 className="group relative cursor-pointer p-5 sm:p-10 border border-[color:var(--border)] rounded-[2rem] sm:rounded-[3.5rem] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] transition-colors duration-500 ease-in-out overflow-hidden flex flex-col items-center justify-center text-center h-[320px] sm:h-[480px] shadow-2xl active:scale-[0.98]"
               >
                 <div className="w-12 h-12 sm:w-20 sm:h-20 mb-6 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
@@ -152,7 +167,7 @@ export default function AnalyzePage() {
             >
               <div className="mb-10 flex justify-center">
                 <button
-                  onClick={() => setMode(null)}
+                  onClick={() => handleModeChange(null)}
                   className="px-6 sm:px-8 py-3 sm:py-4 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--text-primary)] font-bold text-[10px] sm:text-xs uppercase tracking-widest hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all shadow-xl active:scale-95"
                 >
                   ← Reset Workspace
