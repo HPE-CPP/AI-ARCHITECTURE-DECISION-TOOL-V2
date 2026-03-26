@@ -46,6 +46,8 @@ export function CreateProjectModal({
       setLoading(true);
       await onSubmit(name.trim(), description.trim());
       onClose();
+    } catch (err: any) {
+      setNameError(err.message || "An error occurred");
     } finally {
       setLoading(false);
     }

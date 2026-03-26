@@ -19,7 +19,7 @@ function AnalyzePageInner() {
     offset: ["start start", "end end"],
   });
 
-  const { user, signIn } = useAuth();
+  const { user, signIn, signOut } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId");
@@ -138,6 +138,7 @@ function AnalyzePageInner() {
         onAuthSuccess={handleAuthSuccess}
         onSkip={handleSkip}
         signIn={signIn}
+        signOut={signOut}
       />
 
       {/* Welcome Banner */}

@@ -20,7 +20,7 @@ import { AuthModal } from "@/components/AuthModal";
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { user, signIn } = useAuth();
+  const { user, signIn, signOut } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -58,11 +58,14 @@ export default function ProjectsPage() {
   }, [projects, debouncedSearch]);
 
   const handleCreate = useCallback(async (name: string, description: string) => {
+    const exists = projects.some((p) => p.name.trim().toLowerCase() === name.toLowerCase());
+    if (exists) {
+      throw new Error("Project already exists. Please choose a different name.");
+    }
     const project = createProject({ name, description, userId: user?.uid ?? null });
-    setProjects((prev) => [project, ...prev]);
     setLastActiveProjectId(project.id);
     router.push(`/analyze?projectId=${project.id}`);
-  }, [user, router]);
+  }, [user, router, projects]);
 
   const handleEdit = useCallback((project: Project) => {
     setEditTarget(project);
@@ -71,28 +74,23 @@ export default function ProjectsPage() {
 
   const handleEditSubmit = useCallback(async (name: string, description: string) => {
     if (!editTarget) return;
-    const updated = updateProject(editTarget.id, { name, description });
-    if (updated) {
-      setProjects((prev) => prev.map((p) => p.id === updated.id ? updated : p));
+    
+    // Check if another project has this name
+    const exists = projects.some((p) => p.id !== editTarget.id && p.name.trim().toLowerCase() === name.toLowerCase());
+    if (exists) {
+      throw new Error("Project already exists. Please choose a different name.");
     }
+
+    const updated = updateProject(editTarget.id, { name, description });
     setEditTarget(null);
-  }, [editTarget]);
+  }, [editTarget, projects]);
 
   const handleDelete = useCallback((id: string) => {
     deleteProject(id);
-    setProjects((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
   const handleDuplicate = useCallback((id: string) => {
-    const copy = duplicateProject(id);
-    if (copy) {
-      setProjects((prev) => {
-        const idx = prev.findIndex((p) => p.id === id);
-        const next = [...prev];
-        next.splice(idx + 1, 0, copy);
-        return next;
-      });
-    }
+    duplicateProject(id);
   }, []);
 
   const handleCloseModal = useCallback(() => {
@@ -119,6 +117,7 @@ export default function ProjectsPage() {
         onAuthSuccess={() => { setAuthModalOpen(false); setEditTarget(null); setCreateModalOpen(true); }}
         onSkip={() => setAuthModalOpen(false)}  // Skipping refuses project creation 
         signIn={signIn}
+        signOut={signOut}
         mode="project-limit"
       />
 
