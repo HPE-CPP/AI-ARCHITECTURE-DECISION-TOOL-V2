@@ -8,6 +8,7 @@ import { useTheme } from "./ThemeProvider";
 import { useAuth } from "@/lib/auth-context";
 import { getProjects } from "@/lib/projects-store";
 import { AuthModal } from "@/components/AuthModal";
+import { WelcomeBanner } from "@/components/WelcomeBanner";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -18,6 +19,8 @@ export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
+  const [welcomeName, setWelcomeName] = useState("");
   const [projectCount, setProjectCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -199,11 +202,22 @@ export function Navbar() {
 
   return (
     <>
-      {/* Expose AuthModal when signed out and clicking Sign In */}
+      {/* Expose WelcomeBanner and AuthModal when signed out and clicking Sign In */}
+      <WelcomeBanner
+        firstName={welcomeName}
+        visible={welcomeVisible}
+        onComplete={() => setWelcomeVisible(false)}
+      />
+
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        onAuthSuccess={() => setAuthModalOpen(false)}
+        onAuthSuccess={(u) => {
+          setAuthModalOpen(false);
+          const name = u.displayName?.split(" ")[0] || "there";
+          setWelcomeName(name);
+          setWelcomeVisible(true);
+        }}
         onSkip={() => setAuthModalOpen(false)}
         signIn={signIn}
       />
