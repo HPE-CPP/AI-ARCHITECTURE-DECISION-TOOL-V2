@@ -390,6 +390,87 @@ async def get_architectures():
     return {"architectures": ARCHITECTURE_DESCRIPTIONS}
 
 
+# === PROJECT MANAGEMENT API ===
+
+from typing import Literal
+
+# In-memory project store (replace with DB in production)
+project_store: dict[str, dict] = {}
+
+class ProjectCreate(BaseModel):
+    user_id: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=60)
+    description: Optional[str] = Field(default="", max_length=200)
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=60)
+    description: Optional[str] = Field(default=None, max_length=200)
+    status: Optional[str] = None
+    analysis_id: Optional[str] = None
+    mode: Optional[str] = None
+
+@app.post("/api/v1/projects", status_code=201)
+async def create_project(data: ProjectCreate):
+    """Create a new project."""
+    project_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    project = {
+        "id": project_id,
+        "user_id": data.user_id,
+        "name": data.name.strip(),
+        "description": data.description.strip() if data.description else "",
+        "status": "empty",
+        "analysis_id": None,
+        "mode": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    project_store[project_id] = project
+    return project
+
+@app.get("/api/v1/projects")
+async def list_projects(user_id: Optional[str] = Query(default=None)):
+    """List projects, optionally filtered by user_id."""
+    projects = list(project_store.values())
+    if user_id is not None:
+        projects = [p for p in projects if p.get("user_id") == user_id]
+    return {"projects": sorted(projects, key=lambda p: p["updated_at"], reverse=True)}
+
+@app.get("/api/v1/projects/{project_id}")
+async def get_project(project_id: str):
+    """Get a single project."""
+    if project_id not in project_store:
+        raise HTTPException(404, "Project not found")
+    return project_store[project_id]
+
+@app.put("/api/v1/projects/{project_id}")
+async def update_project_endpoint(project_id: str, data: ProjectUpdate):
+    """Update a project's metadata."""
+    if project_id not in project_store:
+        raise HTTPException(404, "Project not found")
+    project = project_store[project_id]
+    if data.name is not None:
+        project["name"] = data.name.strip()
+    if data.description is not None:
+        project["description"] = data.description.strip()
+    if data.status is not None:
+        project["status"] = data.status
+    if data.analysis_id is not None:
+        project["analysis_id"] = data.analysis_id
+    if data.mode is not None:
+        project["mode"] = data.mode
+    project["updated_at"] = datetime.utcnow().isoformat()
+    return project
+
+@app.delete("/api/v1/projects/{project_id}", status_code=204)
+async def delete_project(project_id: str):
+    """Delete a project."""
+    if project_id not in project_store:
+        raise HTTPException(404, "Project not found")
+    del project_store[project_id]
+    return None
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
