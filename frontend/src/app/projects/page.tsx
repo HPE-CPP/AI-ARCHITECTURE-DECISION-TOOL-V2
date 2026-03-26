@@ -16,16 +16,18 @@ import { useAuth } from "@/lib/auth-context";
 import { ProjectCard } from "@/components/ProjectCard";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
 import { AnimatedSection } from "@/components/AnimatedScroll";
+import { AuthModal } from "@/components/AuthModal";
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, signIn } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Project | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   // Load projects on mount
   useEffect(() => {
@@ -95,8 +97,26 @@ export default function ProjectsPage() {
 
   if (!mounted) return null;
 
+  const handleNewProjectClick = () => {
+    if (!user && projects.length >= 1) {
+      setAuthModalOpen(true);
+    } else {
+      setEditTarget(null);
+      setCreateModalOpen(true);
+    }
+  };
+
   return (
-    <div className="w-full min-h-screen pt-24 pb-20 px-4 sm:px-6 max-w-6xl mx-auto">
+    <>
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={() => { setAuthModalOpen(false); setEditTarget(null); setCreateModalOpen(true); }}
+        onSkip={() => setAuthModalOpen(false)}  // Skipping refuses project creation 
+        signIn={signIn}
+      />
+
+      <div className="w-full min-h-screen pt-24 pb-20 px-4 sm:px-6 max-w-6xl mx-auto">
 
       {/* Header */}
       <AnimatedSection delay={0.1}>
@@ -116,7 +136,7 @@ export default function ProjectsPage() {
           </div>
           <button
             id="new-project-btn"
-            onClick={() => { setEditTarget(null); setCreateModalOpen(true); }}
+            onClick={handleNewProjectClick}
             className="flex items-center gap-2 px-5 py-3 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold text-sm shadow-lg hover:opacity-90 active:scale-[0.98] transition-all shrink-0"
           >
             <Plus size={16} />
@@ -177,7 +197,7 @@ export default function ProjectsPage() {
             </p>
             <button
               id="create-first-project-btn"
-              onClick={() => setCreateModalOpen(true)}
+              onClick={handleNewProjectClick}
               className="flex items-center gap-2 px-7 py-4 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold shadow-xl hover:opacity-90 active:scale-[0.98] transition-all"
             >
               <Plus size={18} />
@@ -239,5 +259,6 @@ export default function ProjectsPage() {
         mode={editTarget ? "edit" : "create"}
       />
     </div>
+    </>
   );
 }

@@ -38,11 +38,14 @@ function AnalyzePageInner() {
     const savedProvider = localStorage.getItem("llm_provider") as any;
     if (savedProvider) setProvider(savedProvider);
 
-    // Restore mode — per-project if projectId, otherwise global
-    const modeKey = projectId ? getProjectKey(projectId, "mode") : "analyze_mode";
-    const savedMode = localStorage.getItem(modeKey) as "upload" | "questionnaire" | null;
-    if (savedMode) setMode(savedMode);
-  }, [projectId]);
+    // Force user to pick a mode unless they explicitly navigate via Edit Inputs (with a ?mode= param)
+    const modeParam = searchParams.get("mode") as "upload" | "questionnaire" | null;
+    if (modeParam === "upload" || modeParam === "questionnaire") {
+      setMode(modeParam);
+    } else {
+      setMode(null); // Clear mode to prevent accidentally jumping into a previous session's mode
+    }
+  }, [projectId, searchParams]);
 
   const handleModeChange = (newMode: "upload" | "questionnaire" | null) => {
     setMode(newMode);

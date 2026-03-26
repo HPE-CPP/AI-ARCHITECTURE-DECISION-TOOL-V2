@@ -137,9 +137,10 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
             const modeKey = projectId ? `project_${projectId}_mode` : "analyze_mode";
             const currentMode = localStorage.getItem(modeKey);
             const base = projectId ? `/analyze?projectId=${projectId}` : "/analyze";
+            const q = projectId ? "&" : "?";
 
             if (currentMode === "upload") {
-              router.push(base);
+              router.push(`${base}${q}mode=upload`);
             } else {
               // Pre-fill questionnaire answers
               const answersKey = projectId ? `project_${projectId}_answers` : "questionnaire_answers";
@@ -151,7 +152,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                 localStorage.setItem(answersKey, JSON.stringify(answers));
               }
               if (!projectId) localStorage.setItem("analyze_mode", "questionnaire");
-              router.push(base);
+              router.push(`${base}${q}mode=questionnaire`);
             }
           }}
           className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"

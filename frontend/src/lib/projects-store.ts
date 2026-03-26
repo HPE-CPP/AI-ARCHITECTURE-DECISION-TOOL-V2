@@ -16,8 +16,28 @@ export interface Project {
 
 const STORAGE_KEY = "archguide_projects";
 
+let sessionInitialized = false;
+
 function readAll(): Project[] {
   if (typeof window === "undefined") return [];
+  
+  if (!sessionInitialized) {
+    if (!sessionStorage.getItem("archguide_session")) {
+      try {
+        const all: Project[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        const authProjects = all.filter(p => p.userId !== null);
+        const deletedIds = all.filter(p => p.userId === null).map(p => p.id);
+        deletedIds.forEach(id => {
+          const prefix = `project_${id}_`;
+          Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(authProjects));
+        sessionStorage.setItem("archguide_session", "active");
+      } catch {}
+    }
+    sessionInitialized = true;
+  }
+  
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   } catch {
