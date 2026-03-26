@@ -10,9 +10,10 @@ interface AuthModalProps {
   onSkip: () => void;
   /** Pass the signIn function from useAuth() */
   signIn: () => Promise<{ displayName: string | null; uid: string; email: string | null }>;
+  mode?: "default" | "project-limit";
 }
 
-export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode = "default" }: AuthModalProps) {
   const [step, setStep] = useState<"main" | "skip-confirm">("main");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,10 +101,12 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn }: Au
                     </div>
 
                     <h2 className="text-2xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
-                      Save Your Progress
+                      {mode === "project-limit" ? "Sign In Required" : "Save Your Progress"}
                     </h2>
                     <p className="text-[color:var(--text-secondary)] font-medium mb-8 leading-relaxed">
-                      Sign in to save your analyses and access them anytime from any device.
+                      {mode === "project-limit" 
+                        ? "Only one project can be created without signing in. Please sign in to create more projects." 
+                        : "Sign in to save your analyses and access them anytime from any device."}
                     </p>
 
                     {/* Error */}
@@ -138,13 +141,13 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn }: Au
                       {loading ? "Connecting..." : "Continue with Google"}
                     </button>
 
-                    {/* Skip */}
+                    {/* Skip / Cancel */}
                     <button
-                      onClick={handleSkipRequest}
+                      onClick={mode === "project-limit" ? onClose : handleSkipRequest}
                       disabled={loading}
                       className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors"
                     >
-                      Skip for now
+                      {mode === "project-limit" ? "Cancel" : "Skip for now"}
                     </button>
                   </div>
                 </div>

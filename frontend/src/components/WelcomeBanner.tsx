@@ -25,12 +25,7 @@ export function WelcomeBanner({ firstName, visible, onComplete }: WelcomeBannerP
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.6 } }}
           transition={{ duration: 0.4 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center"
-          style={{
-            backdropFilter: "blur(24px)",
-            WebkitBackdropFilter: "blur(24px)",
-            background: "rgba(0,0,0,0.85)",
-          }}
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-[color:var(--surface)]/90 backdrop-blur-2xl"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.85, y: 20 }}
