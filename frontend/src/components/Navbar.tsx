@@ -225,6 +225,7 @@ export function Navbar() {
         }}
         onSkip={() => setAuthModalOpen(false)}
         signIn={signIn}
+        signOut={signOut}
       />
 
       <div className="fixed top-0 left-0 w-full flex justify-center z-50 pointer-events-none px-4">

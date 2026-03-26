@@ -10,15 +10,18 @@ interface AuthModalProps {
   onSkip: () => void;
   /** Pass the signIn function from useAuth() */
   signIn: () => Promise<{ displayName: string | null; uid: string; email: string | null }>;
+  /** Pass the signOut function from useAuth() */
+  signOut: () => Promise<void>;
   mode?: "default" | "project-limit";
 }
 
-export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode = "default" }: AuthModalProps) {
-  const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "transfer-confirm">("main");
+export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, signOut, mode = "default" }: AuthModalProps) {
+  const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "transfer-confirm" | "transfer-collision">("main");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<any>(null);
   const [anonProject, setAnonProject] = useState<any>(null);
+  const [collidingProjectId, setCollidingProjectId] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
     try {
@@ -55,11 +58,35 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
   const handleContinueAnyway = () => { onSkip(); };
 
   const handleAcceptTransfer = async () => {
-    const { updateProject } = await import("@/lib/projects-store");
+    const { updateProject, getProjects } = await import("@/lib/projects-store");
     if (anonProject && signedInUser) {
+      // Check for collision
+      const userProjects = getProjects(signedInUser.uid);
+      const collision = userProjects.find(p => p.name.trim().toLowerCase() === anonProject.name.trim().toLowerCase());
+      
+      if (collision) {
+        setCollidingProjectId(collision.id);
+        setStep("transfer-collision");
+        return;
+      }
+
       updateProject(anonProject.id, { userId: signedInUser.uid });
     }
     onAuthSuccess(signedInUser);
+  };
+
+  const handleReplaceAndTransfer = async () => {
+    const { updateProject, deleteProject } = await import("@/lib/projects-store");
+    if (anonProject && signedInUser && collidingProjectId) {
+      deleteProject(collidingProjectId);
+      updateProject(anonProject.id, { userId: signedInUser.uid });
+    }
+    onAuthSuccess(signedInUser);
+  };
+
+  const handleSignOutAndRename = async () => {
+    await signOut();
+    onClose();
   };
 
   const handleRejectTransfer = () => setStep("transfer-confirm");
@@ -259,6 +286,46 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                         className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-red-400 transition-colors"
                       >
                         No, Discard It
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : step === "transfer-collision" ? (
+              <motion.div
+                key="transfer-collision"
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="relative w-full max-w-sm"
+              >
+                <div
+                  className="relative overflow-hidden rounded-[2.5rem] border border-[color:var(--border)] shadow-2xl"
+                  style={{ background: "var(--surface)", backdropFilter: "blur(40px)" }}
+                >
+                  <div className="p-8 text-center flex flex-col items-center">
+                    <div className="w-14 h-14 rounded-2xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center mb-5">
+                      <AlertTriangle size={26} className="text-orange-400" />
+                    </div>
+                    <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
+                      Project Already Exists
+                    </h3>
+                    <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
+                      Your account already has a project named <span className="text-[color:var(--text-primary)] font-bold">"{anonProject?.name}"</span>. Do you want to replace it?
+                    </p>
+                    <div className="flex flex-col gap-2 w-full">
+                      <button
+                        onClick={handleReplaceAndTransfer}
+                        className="w-full py-3.5 px-6 rounded-full border border-[color:var(--border)] text-[color:var(--background)] bg-[color:var(--text-primary)] font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98]"
+                      >
+                        Yes, Replace It
+                      </button>
+                      <button
+                        onClick={handleSignOutAndRename}
+                        className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors"
+                      >
+                        Go Back and Rename
                       </button>
                     </div>
                   </div>
