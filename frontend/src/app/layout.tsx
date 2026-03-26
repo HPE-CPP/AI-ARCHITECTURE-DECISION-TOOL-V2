@@ -5,6 +5,7 @@ import { LenisProvider } from "@/components/LenisProvider";
 import { Navbar } from "@/components/Navbar";
 import { GlobalBackground } from "@/components/GlobalBackground";
 import { Footer } from "@/components/Footer";
+import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
   title: "ArchGuide",
@@ -21,21 +22,19 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased min-h-screen flex flex-col bg-[color:var(--background)] text-[color:var(--text-primary)] overflow-x-hidden">
         <ThemeProvider>
-          <LenisProvider>
-            <GlobalBackground />
+          <AuthProvider>
+            <LenisProvider>
+              <GlobalBackground />
 
-            <Navbar />
+              <Navbar />
 
-            <main className="flex-1 w-full">
-              {/* Note: I removed the max-w-7xl constraint here. 
-                  It is better to handle padding/width inside individual page components 
-                  to allow for full-width sections like Hero or CTA.
-              */}
-              {children}
-            </main>
+              <main className="flex-1 w-full">
+                {children}
+              </main>
 
-            <Footer />
-          </LenisProvider>
+              <Footer />
+            </LenisProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -4,8 +4,15 @@ import { useRouter } from "next/navigation";
 import { getQuestionnaireOptions, submitQuestionnaire, QuestionnaireOptions } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ChevronLeft, Loader2, AlertCircle, Check, FastForward } from "lucide-react";
+import { getProjectKey } from "@/lib/projects-store";
 
-export default function QuestionnaireForm() {
+interface QuestionnaireFormProps {
+  projectId?: string;
+  requireAuth?: () => Promise<void>;
+  onAnalysisStart?: (analysisId: string) => void;
+}
+
+export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisStart }: QuestionnaireFormProps) {
   const router = useRouter();
   const [optionsData, setOptionsData] = useState<QuestionnaireOptions | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -14,14 +21,17 @@ export default function QuestionnaireForm() {
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
 
+  // Determine storage keys (per-project if projectId is set)
+  const answersKey = projectId ? getProjectKey(projectId, "answers") : "questionnaire_answers";
+
   useEffect(() => {
     getQuestionnaireOptions()
       .then(setOptionsData)
-      .catch((e) => setError("Failed to load options. Ensure backend is running."))
+      .catch(() => setError("Failed to load options. Ensure backend is running."))
       .finally(() => setLoading(false));
 
-    // PERSISTENCE: Restore answers from localStorage
-    const saved = localStorage.getItem("questionnaire_answers");
+    // PERSISTENCE: Restore answers from storage (per-project or global)
+    const saved = localStorage.getItem(answersKey);
     if (saved) {
       try {
         setAnswers(JSON.parse(saved));
@@ -29,7 +39,7 @@ export default function QuestionnaireForm() {
         console.error("Failed to parse saved answers", e);
       }
     }
-  }, []);
+  }, [answersKey]);
 
   // Sort signals: Required first, then Optional
   const sortedSignals = useMemo(() => {
@@ -37,7 +47,7 @@ export default function QuestionnaireForm() {
     return Object.entries(optionsData.signals).sort((a, b) => {
       const aReq = a[1].required ? 1 : 0;
       const bReq = b[1].required ? 1 : 0;
-      return bReq - aReq; // 1 (true) comes before 0 (false)
+      return bReq - aReq;
     });
   }, [optionsData]);
 
@@ -59,9 +69,7 @@ export default function QuestionnaireForm() {
 
   const handleBack = () => {
     setError(null);
-    if (currentStep > 0) {
-      setCurrentStep((prev) => prev - 1);
-    }
+    if (currentStep > 0) setCurrentStep((prev) => prev - 1);
   };
 
   const handleSkip = () => {
@@ -73,7 +81,7 @@ export default function QuestionnaireForm() {
     }
   };
 
-  // Toggle Logic: If clicking the same option, remove it from state
+  // Toggle Logic: clicking same option removes it
   const handleChange = (key: string, value: string) => {
     setAnswers((prev) => {
       const newAnswers = { ...prev };
@@ -82,8 +90,7 @@ export default function QuestionnaireForm() {
       } else {
         newAnswers[key] = value;
       }
-      // PERSISTENCE: Save to localStorage
-      localStorage.setItem("questionnaire_answers", JSON.stringify(newAnswers));
+      localStorage.setItem(answersKey, JSON.stringify(newAnswers));
       return newAnswers;
     });
     setError(null);
@@ -92,13 +99,25 @@ export default function QuestionnaireForm() {
   const handleSubmit = async () => {
     if (!optionsData) return;
     try {
+      // Show auth gate before submitting
+      if (requireAuth) await requireAuth();
+
       setSubmitting(true);
       setError(null);
       const provider = localStorage.getItem("llm_provider") || "ollama";
       const result = await submitQuestionnaire(answers, provider);
 
+      // Notify parent of analysis ID for project tracking
+      onAnalysisStart?.(result.analysis_id);
+
+      // Per-project storage
+      if (projectId) {
+        localStorage.setItem(getProjectKey(projectId, "analysisId"), result.analysis_id);
+        localStorage.setItem(getProjectKey(projectId, "mode"), "questionnaire");
+      }
+
       setTimeout(() => {
-        router.push(`/results/${result.analysis_id}`);
+        router.push(`/results/${result.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
       }, 800);
 
     } catch (err: any) {
@@ -237,6 +256,7 @@ export default function QuestionnaireForm() {
             )}
 
             <button
+              id="questionnaire-next-btn"
               onClick={handleNext}
               disabled={submitting}
               className={`
@@ -250,7 +270,7 @@ export default function QuestionnaireForm() {
               {submitting ? (
                 <><Loader2 className="animate-spin" size={14} /> Analyzing</>
               ) : currentStep === totalSteps - 1 ? (
-                <>Submit <Check size={14} /></>
+                <>Analyze <Check size={14} /></>
               ) : (
                 <>Next <ChevronRight size={14} /></>
               )}

@@ -1,58 +1,69 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Hexagon, Moon, Sun, Menu, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Hexagon, Moon, Sun, Menu, X, FolderOpen, LogOut, User } from "lucide-react";
 import { motion, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
+import { useAuth } from "@/lib/auth-context";
+import { getProjects } from "@/lib/projects-store";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { scrollY } = useScroll();
   const scrollVelocity = useVelocity(scrollY);
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [projectCount, setProjectCount] = useState(0);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Ref to track if we are currently animating a scroll from a click
   const isScrollingProgrammatically = useRef(false);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Set initial phase to "sphere" for the entrance animation
   const [phase, setPhase] = useState<"top" | "pill" | "sphere">("sphere");
   const [isForcedPill, setIsForcedPill] = useState(false);
-
-  // New State: Strictly track when expansion is visually complete
   const [isExpanded, setIsExpanded] = useState(false);
 
   const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
 
-  // Handle initial expansion and mounting
+  const { user, signOut } = useAuth();
+
+  // Load project count for badge
+  useEffect(() => {
+    if (mounted) {
+      setProjectCount(getProjects(user?.uid ?? null).length);
+    }
+  }, [mounted, user, pathname]);
+
   useEffect(() => {
     setMounted(true);
-
     const timer = setTimeout(() => {
       const currentScroll = window.scrollY;
-      if (currentScroll < 50) {
-        setPhase("top");
-      } else {
-        setPhase("pill");
-      }
-    }, 400); // 400ms delay to let the user see the "sphere" state first
-
+      if (currentScroll < 50) setPhase("top");
+      else setPhase("pill");
+    }, 400);
     return () => clearTimeout(timer);
   }, []);
 
-  // When phase becomes sphere, immediately drop the `isExpanded` state to hide items before shrinking
   useEffect(() => {
-    if (phase === "sphere") {
-      setIsExpanded(false);
-    }
+    if (phase === "sphere") setIsExpanded(false);
   }, [phase]);
 
-  const toggleTheme = () => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark");
-  };
+  // Close user menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
   const [activeTab, setActiveTab] = useState("home");
 
@@ -61,22 +72,17 @@ export function Navbar() {
     { name: "Features", href: "/#features", id: "features" },
     { name: "How It Works", href: "/#how-it-works", id: "how-it-works" },
     { name: "Analyze", href: "/analyze", id: "analyze" },
+    { name: "Projects", href: "/projects", id: "projects" },
   ];
 
   useEffect(() => {
-    if (pathname === "/analyze") {
-      setActiveTab("analyze");
-      return;
-    }
-    if (pathname !== "/") {
-      setActiveTab("");
-      return;
-    }
+    if (pathname === "/analyze") { setActiveTab("analyze"); return; }
+    if (pathname === "/projects") { setActiveTab("projects"); return; }
+    if (pathname !== "/") { setActiveTab(""); return; }
 
     const handleScroll = () => {
       const sections = ["home", "features", "how-it-works"];
       const scrollPos = window.scrollY + 150;
-
       for (const section of sections) {
         const element = document.getElementById(section);
         if (element) {
@@ -89,7 +95,6 @@ export function Navbar() {
         }
       }
     };
-
     handleScroll();
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
@@ -97,35 +102,26 @@ export function Navbar() {
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     if (!mounted) return;
-
     if (isScrollingProgrammatically.current) {
       if (latest < 50) setPhase("top");
       else setPhase("pill");
       return;
     }
-
     const velocity = scrollVelocity.get();
     if (Math.abs(velocity) > 100) setIsForcedPill(false);
-
-    if (latest < 50) {
-      setPhase("top");
-    } else if (latest >= 50 && latest < 250) {
-      setPhase("pill");
-    } else if (latest >= 250) {
-      if (isForcedPill) {
-        setPhase("pill");
-      } else if (velocity > 10) {
-        setPhase("sphere");
-      } else if (velocity < -10) {
-        setPhase("pill");
-      }
+    if (latest < 50) { setPhase("top"); }
+    else if (latest >= 50 && latest < 250) { setPhase("pill"); }
+    else if (latest >= 250) {
+      if (isForcedPill) { setPhase("pill"); }
+      else if (velocity > 10) { setPhase("sphere"); }
+      else if (velocity < -10) { setPhase("pill"); }
     }
   });
 
   const variants = {
     top: {
       width: "100%",
-      maxWidth: "800px",
+      maxWidth: "860px",
       borderRadius: "99px",
       y: 20,
       backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
@@ -136,7 +132,7 @@ export function Navbar() {
     },
     pill: {
       width: "100%",
-      maxWidth: "600px",
+      maxWidth: "680px",
       borderRadius: "99px",
       y: 20,
       backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
@@ -160,53 +156,44 @@ export function Navbar() {
     }
   };
 
-  // Rising item variants for staggered loading
   const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     visible: (customDelay: number) => ({
       opacity: 1,
       y: 0,
-      transition: {
-        delay: customDelay,
-        type: "spring",
-        stiffness: 300,
-        damping: 24
-      }
+      transition: { delay: customDelay, type: "spring", stiffness: 300, damping: 24 }
     }),
-    exit: {
-      opacity: 0,
-      y: -10,
-      transition: { duration: 0.15 }
-    }
+    exit: { opacity: 0, y: -10, transition: { duration: 0.15 } }
   };
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     setIsMobileMenuOpen(false);
     isScrollingProgrammatically.current = true;
     setPhase("pill");
-
     if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-    scrollTimeout.current = setTimeout(() => {
-      isScrollingProgrammatically.current = false;
-    }, 1000);
+    scrollTimeout.current = setTimeout(() => { isScrollingProgrammatically.current = false; }, 1000);
 
     if (pathname === "/") {
-      if (href === "/") {
-        e.preventDefault();
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      } else if (href.startsWith("/#")) {
+      if (href === "/") { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+      else if (href.startsWith("/#")) {
         e.preventDefault();
         const id = href.split("#")[1];
-        const element = document.getElementById(id);
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth" });
-        }
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
       }
     } else if (pathname === "/analyze" && href === "/analyze") {
       e.preventDefault();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
+
+  const handleSignOut = async () => {
+    setUserMenuOpen(false);
+    await signOut();
+  };
+
+  // Get user display info
+  const userInitial = user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
+  const userFirstName = user?.displayName?.split(" ")[0] || user?.email?.split("@")[0] || "";
 
   return (
     <>
@@ -216,30 +203,24 @@ export function Navbar() {
           initial="sphere"
           animate={phase}
           transition={{ type: "spring", stiffness: 220, damping: 28, mass: 1 }}
-          // Trigger the isExpanded state ONLY when the navbar finishes physically opening
           onAnimationComplete={(variant) => {
             if (variant === "top" || variant === "pill") setIsExpanded(true);
           }}
           onClick={() => {
-            if (phase === "sphere") {
-              setIsForcedPill(true);
-              setPhase("pill");
-            }
+            if (phase === "sphere") { setIsForcedPill(true); setPhase("pill"); }
           }}
           className={`pointer-events-auto flex items-center justify-between overflow-hidden mx-auto shadow-2xl ${phase === "sphere" ? "cursor-pointer hover:scale-110 transition-transform active:scale-95 shadow-white/5" : ""}`}
         >
-          {/* Main Logo Container */}
+          {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group shrink-0 relative z-10 transition-transform active:scale-95">
-            {/* The base hexagon fades out slightly when in sphere mode so the absolute sphere logo takes over beautifully */}
             <div className={`w-8 h-8 flex items-center justify-center transition-opacity duration-300 ${isExpanded ? "opacity-100" : "opacity-0"}`}>
               <Hexagon className="text-[color:var(--text-primary)] w-6 h-6" />
             </div>
-
             <AnimatePresence>
               {isExpanded && (
                 <motion.span
                   key="logo-text"
-                  custom={0} // 0 delay (starts immediately)
+                  custom={0}
                   variants={itemVariants}
                   initial="hidden"
                   animate="visible"
@@ -252,12 +233,12 @@ export function Navbar() {
             </AnimatePresence>
           </Link>
 
-          {/* Desktop Navigation Items (Middle) */}
+          {/* Desktop Nav Links */}
           <AnimatePresence>
             {isExpanded && (
               <motion.div
                 key="nav-links"
-                custom={0.15} // Slight delay after logo
+                custom={0.15}
                 variants={itemVariants}
                 initial="hidden"
                 animate="visible"
@@ -271,10 +252,14 @@ export function Navbar() {
                       key={link.id}
                       href={link.href}
                       onClick={(e) => handleNavClick(e, link.href)}
-                      className={`relative px-4 py-1.5 font-bold text-xs tracking-tight transition-all rounded-full z-10 ${isActive ? "text-[color:var(--background)]" : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
-                        }`}
+                      className={`relative px-4 py-1.5 font-bold text-xs tracking-tight transition-all rounded-full z-10 flex items-center gap-1.5 ${isActive ? "text-[color:var(--background)]" : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"}`}
                     >
                       {link.name}
+                      {link.id === "projects" && projectCount > 0 && (
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none ${isActive ? "bg-[color:var(--background)] text-[color:var(--text-primary)]" : "bg-[color:var(--text-primary)] text-[color:var(--background)]"}`}>
+                          {projectCount}
+                        </span>
+                      )}
                       {isActive && (
                         <motion.div
                           layoutId="navbar-active-pill"
@@ -289,25 +274,76 @@ export function Navbar() {
             )}
           </AnimatePresence>
 
-          {/* Actions & Mobile Toggle (Right) */}
+          {/* Actions (Right) */}
           <AnimatePresence>
             {isExpanded && (
               <motion.div
                 key="nav-actions"
-                custom={0.3} // Longest delay
+                custom={0.3}
                 variants={itemVariants}
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="flex items-center gap-2 shrink-0 relative z-10"
+                className="hidden md:flex items-center gap-2 shrink-0 relative z-10"
               >
+                {/* Theme Toggle */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
-                  className="hidden md:flex w-8 h-8 items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all active:scale-90"
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all active:scale-90"
                 >
                   {mounted ? (resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />) : <div className="w-3.5 h-3.5" />}
                 </button>
 
+                {/* User Avatar or nothing */}
+                {mounted && user ? (
+                  <div className="relative" ref={userMenuRef}>
+                    <button
+                      id="user-avatar-btn"
+                      onClick={(e) => { e.stopPropagation(); setUserMenuOpen(!userMenuOpen); }}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--text-primary)]/5 hover:bg-[color:var(--text-primary)]/10 transition-all active:scale-95"
+                    >
+                      <div className="w-5 h-5 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] flex items-center justify-center text-[9px] font-black shrink-0">
+                        {userInitial}
+                      </div>
+                      <span className="text-xs font-bold text-[color:var(--text-primary)] max-w-[80px] truncate">{userFirstName}</span>
+                    </button>
+
+                    {/* Dropdown */}
+                    <AnimatePresence>
+                      {userMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -8 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                          className="absolute right-0 top-full mt-2 w-44 rounded-2xl border border-[color:var(--border)] shadow-2xl overflow-hidden z-50"
+                          style={{ background: "var(--surface)", backdropFilter: "blur(20px)" }}
+                        >
+                          <div className="px-4 py-3 border-b border-[color:var(--border)]">
+                            <p className="text-xs font-black text-[color:var(--text-primary)] truncate">{user.displayName || "User"}</p>
+                            <p className="text-[10px] text-[color:var(--text-secondary)] truncate">{user.email}</p>
+                          </div>
+                          <Link
+                            href="/projects"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="flex items-center gap-2.5 px-4 py-3 text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)]/5 transition-all"
+                          >
+                            <FolderOpen size={13} /> My Projects
+                          </Link>
+                          <button
+                            id="sign-out-btn"
+                            onClick={handleSignOut}
+                            className="w-full flex items-center gap-2.5 px-4 py-3 text-xs font-bold text-red-400 hover:bg-red-500/5 transition-all"
+                          >
+                            <LogOut size={13} /> Sign Out
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ) : null}
+
+                {/* Mobile toggle */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(!isMobileMenuOpen); }}
                   className="md:hidden w-8 h-8 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90 transition-transform"
@@ -318,7 +354,35 @@ export function Navbar() {
             )}
           </AnimatePresence>
 
-          {/* Sphere Center Logo - Handles smooth transition while the rest is hidden */}
+          {/* Mobile toggle only (when nav items exist) */}
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.div
+                key="mobile-toggle"
+                custom={0.3}
+                variants={itemVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="flex md:hidden items-center gap-2 shrink-0 relative z-10"
+              >
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all"
+                >
+                  {mounted ? (resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />) : <div className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(!isMobileMenuOpen); }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90 transition-transform"
+                >
+                  {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Sphere Center Logo */}
           <AnimatePresence>
             {!isExpanded && (
               <motion.div
@@ -334,7 +398,7 @@ export function Navbar() {
         </motion.nav>
       </div>
 
-      {/* Mobile Menu Overlay */}
+      {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <motion.div
@@ -351,33 +415,55 @@ export function Navbar() {
                     key={link.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.1 }}
+                    transition={{ delay: i * 0.07 }}
                   >
                     <Link
                       href={link.href}
                       onClick={(e) => handleNavClick(e, link.href)}
-                      className={`block w-full px-6 py-4 rounded-full text-lg font-bold transition-all border ${isActive
+                      className={`flex items-center justify-between w-full px-6 py-4 rounded-full text-lg font-bold transition-all border ${isActive
                         ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-transparent"
                         : "bg-[color:var(--text-primary)]/5 text-[color:var(--text-secondary)] border-[color:var(--border)]"
                         }`}
                     >
-                      {link.name}
+                      <span className="flex items-center gap-2">
+                        {link.name}
+                      </span>
+                      {link.id === "projects" && projectCount > 0 && (
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isActive ? "bg-[color:var(--background)] text-[color:var(--text-primary)]" : "bg-[color:var(--text-primary)] text-[color:var(--background)]"}`}>
+                          {projectCount}
+                        </span>
+                      )}
                     </Link>
                   </motion.div>
                 );
               })}
             </div>
 
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              onClick={toggleTheme}
-              className="mt-4 flex items-center justify-center gap-2 w-full py-4 rounded-full border border-[color:var(--border)] text-[color:var(--text-primary)] font-bold"
-            >
-              {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-              Switch to {resolvedTheme === "dark" ? "Light" : "Dark"} Mode
-            </motion.button>
+            {/* Mobile: User actions */}
+            {user && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.35 }}
+                className="flex flex-col gap-2"
+              >
+                <div className="flex items-center gap-3 px-6 py-3 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]">
+                  <div className="w-7 h-7 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] flex items-center justify-center text-xs font-black">
+                    {userInitial}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold truncate">{user.displayName}</p>
+                    <p className="text-xs text-[color:var(--text-secondary)] truncate">{user.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center justify-center gap-2 w-full py-4 rounded-full border border-red-500/30 text-red-400 font-bold text-sm"
+                >
+                  <LogOut size={16} /> Sign Out
+                </button>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

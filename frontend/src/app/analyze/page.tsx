@@ -1,12 +1,17 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { UploadCloud, PenTool, ArrowRight } from "lucide-react";
 import DocumentUpload from "@/components/DocumentUpload";
 import QuestionnaireForm from "@/components/QuestionnaireForm";
 import { AnimatedSection } from "@/components/AnimatedScroll";
+import { AuthModal } from "@/components/AuthModal";
+import { WelcomeBanner } from "@/components/WelcomeBanner";
+import { useAuth } from "@/lib/auth-context";
+import { getProject, updateProject, getProjectKey } from "@/lib/projects-store";
+import { useSearchParams, useRouter } from "next/navigation";
 
-export default function AnalyzePage() {
+function AnalyzePageInner() {
   const [mode, setMode] = useState<"upload" | "questionnaire" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
@@ -14,26 +19,40 @@ export default function AnalyzePage() {
     offset: ["start start", "end end"],
   });
 
+  const { user, signIn } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
+  const project = projectId ? getProject(projectId) : null;
+
   const [provider, setProvider] = useState<"openai" | "ollama">("ollama");
+
+  // Auth modal state
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
+  const [welcomeName, setWelcomeName] = useState("");
 
   useEffect(() => {
     window.scrollTo(0, 0);
     const savedProvider = localStorage.getItem("llm_provider") as any;
     if (savedProvider) setProvider(savedProvider);
 
-    // PERSISTENCE: Restore mode from localStorage
-    const savedMode = localStorage.getItem("analyze_mode") as "upload" | "questionnaire" | null;
+    // Restore mode — per-project if projectId, otherwise global
+    const modeKey = projectId ? getProjectKey(projectId, "mode") : "analyze_mode";
+    const savedMode = localStorage.getItem(modeKey) as "upload" | "questionnaire" | null;
     if (savedMode) setMode(savedMode);
-  }, []);
+  }, [projectId]);
 
   const handleModeChange = (newMode: "upload" | "questionnaire" | null) => {
     setMode(newMode);
+    const modeKey = projectId ? getProjectKey(projectId, "mode") : "analyze_mode";
     if (newMode) {
-      localStorage.setItem("analyze_mode", newMode);
+      localStorage.setItem(modeKey, newMode);
     } else {
-      localStorage.removeItem("analyze_mode");
-      // Optional: Clear answers when resetting workspace entirely
-      localStorage.removeItem("questionnaire_answers");
+      localStorage.removeItem(modeKey);
+      const answersKey = projectId ? getProjectKey(projectId, "answers") : "questionnaire_answers";
+      localStorage.removeItem(answersKey);
     }
   };
 
@@ -41,6 +60,60 @@ export default function AnalyzePage() {
     setProvider(newProvider);
     localStorage.setItem("llm_provider", newProvider);
   };
+
+  /**
+   * Called just before analysis starts. If user is not signed in, show auth modal.
+   * Returns a promise that resolves when auth is complete (or skipped).
+   */
+  const requireAuth = useCallback((): Promise<void> => {
+    if (user) return Promise.resolve(); // Already signed in
+    return new Promise((resolve) => {
+      setPendingAction(() => resolve);
+      setAuthModalOpen(true);
+    });
+  }, [user]);
+
+  const handleAuthSuccess = async (u: { displayName: string | null }) => {
+    setAuthModalOpen(false);
+    const firstName = u.displayName?.split(" ")[0] || "there";
+    setWelcomeName(firstName);
+    setWelcomeVisible(true);
+    // pendingAction will be resolved after welcome banner
+  };
+
+  const handleWelcomeComplete = () => {
+    setWelcomeVisible(false);
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+    } else {
+      router.push("/projects");
+    }
+  };
+
+  const handleSkip = () => {
+    setAuthModalOpen(false);
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+    }
+  };
+
+  const handleAuthModalClose = () => {
+    setAuthModalOpen(false);
+    setPendingAction(null);
+  };
+
+  // Mark project as in_progress once analysis starts
+  const handleAnalysisStart = useCallback((analysisId: string) => {
+    if (projectId) {
+      updateProject(projectId, {
+        status: "in_progress",
+        analysisId,
+        mode: mode ?? undefined,
+      });
+    }
+  }, [projectId, mode]);
 
   // Header transforms
   const headerOpacity = useTransform(scrollYProgress, [0, 0.15, 0.25], [1, 1, 0]);
@@ -55,6 +128,22 @@ export default function AnalyzePage() {
   return (
     <div className="w-full relative min-h-screen flex flex-col items-center overflow-x-hidden pt-0" ref={containerRef}>
 
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={handleAuthModalClose}
+        onAuthSuccess={handleAuthSuccess}
+        onSkip={handleSkip}
+        signIn={signIn}
+      />
+
+      {/* Welcome Banner */}
+      <WelcomeBanner
+        firstName={welcomeName}
+        visible={welcomeVisible}
+        onComplete={handleWelcomeComplete}
+      />
+
       {/* HEADER SECTION */}
       <motion.div
         style={{ opacity: headerOpacity, y: headerY, filter: headerBlur }}
@@ -62,11 +151,11 @@ export default function AnalyzePage() {
       >
         <AnimatedSection delay={0.1}>
           <div className="inline-flex items-center gap-2 px-4 sm:px-5 py-1.5 rounded-full border border-[color:var(--border)] text-[0.55rem] sm:text-[0.65rem] font-bold uppercase tracking-widest text-[color:var(--text-secondary)] mb-6 sm:mb-8 bg-[color:var(--surface)]/50 backdrop-blur-md">
-            Analysis Initialized
+            {project ? `Project: ${project.name}` : "Analysis Initialized"}
           </div>
         </AnimatedSection>
 
-        {/* MODEL PROVIDER SELECTOR (Integrated) */}
+        {/* MODEL PROVIDER SELECTOR */}
         <AnimatedSection delay={0.2}>
           <div className="flex items-center gap-1 p-1 bg-[color:var(--surface)]/80 backdrop-blur-xl border border-[color:var(--border)] rounded-full shadow-2xl mb-10 scale-90 sm:scale-100">
             <button
@@ -111,7 +200,6 @@ export default function AnalyzePage() {
               initial="hidden"
               animate="visible"
               exit={{ opacity: 0, scale: 0.95, filter: "blur(20px)", transition: { duration: 0.5 } }}
-              // Changed grid-cols-1 to grid-cols-2 to keep them in one row on mobile
               className="grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-8 w-full max-w-5xl mx-auto"
             >
               {/* UPLOAD CARD */}
@@ -122,7 +210,6 @@ export default function AnalyzePage() {
                 <div className="w-12 h-12 sm:w-20 sm:h-20 mb-6 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
                   <UploadCloud size={24} className="text-[color:var(--text-primary)] sm:w-8 sm:h-8" />
                 </div>
-
                 <h2 className="text-xl sm:text-4xl font-black mb-3 sm:mb-5 tracking-tighter text-[color:var(--text-primary)] group-hover:text-[color:var(--background)] transition-colors duration-500">
                   Document
                 </h2>
@@ -142,7 +229,6 @@ export default function AnalyzePage() {
                 <div className="w-12 h-12 sm:w-20 sm:h-20 mb-6 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
                   <PenTool size={24} className="text-[color:var(--text-primary)] sm:w-8 sm:h-8" />
                 </div>
-
                 <h2 className="text-xl sm:text-4xl font-black mb-3 sm:mb-5 tracking-tighter text-[color:var(--text-primary)] group-hover:text-[color:var(--background)] transition-colors duration-500">
                   Guided Flow
                 </h2>
@@ -173,13 +259,37 @@ export default function AnalyzePage() {
               </div>
 
               <div className="w-full relative z-10 glass-panel border border-[color:var(--border)] rounded-[2.5rem] sm:rounded-[4rem] p-6 sm:p-20 bg-[color:var(--surface)]/70 backdrop-blur-3xl shadow-2xl">
-                {mode === "upload" && <DocumentUpload />}
-                {mode === "questionnaire" && <QuestionnaireForm />}
+                {mode === "upload" && (
+                  <DocumentUpload
+                    projectId={projectId ?? undefined}
+                    requireAuth={requireAuth}
+                    onAnalysisStart={handleAnalysisStart}
+                  />
+                )}
+                {mode === "questionnaire" && (
+                  <QuestionnaireForm
+                    projectId={projectId ?? undefined}
+                    requireAuth={requireAuth}
+                    onAnalysisStart={handleAnalysisStart}
+                  />
+                )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+export default function AnalyzePage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-t-[color:var(--text-primary)] border-[color:var(--border)] animate-spin" />
+      </div>
+    }>
+      <AnalyzePageInner />
+    </Suspense>
   );
 }

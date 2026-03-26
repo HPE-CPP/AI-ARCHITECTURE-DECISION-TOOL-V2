@@ -1,15 +1,18 @@
 "use client";
-import React, { useEffect, useState, use } from "react";
+import React, { useEffect, useState, use, Suspense } from "react";
 import { getAnalysis, submitFollowUp, AnalysisResult } from "@/lib/api";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { DecisionTrace } from "@/components/DecisionTrace";
 import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText } from "lucide-react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation"; // <-- Added for routing
+import { useRouter, useSearchParams } from "next/navigation";
+import { updateProject } from "@/lib/projects-store";
 
-export default function ResultsPage({ params }: { params: Promise<{ analysisId: string }> }) {
+function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> }) {
   const resolvedParams = use(params);
-  const router = useRouter(); // <-- Initialize router
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,12 +45,19 @@ export default function ResultsPage({ params }: { params: Promise<{ analysisId: 
     return () => clearInterval(interval);
   }, [resolvedParams.analysisId]);
 
-  // 2. Scroll to top when loading finishes
+  // 2. Scroll to top + mark project completed when results arrive
   useEffect(() => {
     if (!loading && result?.status === "complete") {
       window.scrollTo({ top: 0, behavior: "smooth" });
+      // Mark project as completed
+      if (projectId) {
+        updateProject(projectId, {
+          status: "completed",
+          analysisId: resolvedParams.analysisId,
+        });
+      }
     }
-  }, [loading, result?.status]);
+  }, [loading, result?.status, projectId, resolvedParams.analysisId]);
 
   const handleFollowUpChange = (signal: string, val: string) => {
     setFollowUpAnswers(prev => ({ ...prev, [signal]: val }));
@@ -120,28 +130,28 @@ export default function ResultsPage({ params }: { params: Promise<{ analysisId: 
   return (
     <div className="w-full max-w-screen-2xl mx-auto pt-24 pb-20 px-4 sm:px-6 lg:px-8 space-y-8">
 
-      {/* --- NEW: Back / Edit Button --- */}
-      <div className="flex items-center w-full">
+      {/* Back / Edit Button */}
+      <div className="flex items-center justify-between w-full">
         <button
           onClick={() => {
-            const currentMode = localStorage.getItem("analyze_mode");
-            
-            // PATH-DEPENDENT ROUTING: 
-            // If the user came from Document Upload, take them back there.
-            // If they came from Questionnaire, keep the pre-fill logic.
+            const modeKey = projectId ? `project_${projectId}_mode` : "analyze_mode";
+            const currentMode = localStorage.getItem(modeKey);
+            const base = projectId ? `/analyze?projectId=${projectId}` : "/analyze";
+
             if (currentMode === "upload") {
-              router.push("/analyze");
+              router.push(base);
             } else {
-              // Default/Questionnaire path
-              localStorage.setItem("analyze_mode", "questionnaire");
+              // Pre-fill questionnaire answers
+              const answersKey = projectId ? `project_${projectId}_answers` : "questionnaire_answers";
               if (result?.signals) {
                 const answers: Record<string, string> = {};
                 Object.entries(result.signals).forEach(([key, sig]) => {
                   if (sig.value) answers[key] = sig.value;
                 });
-                localStorage.setItem("questionnaire_answers", JSON.stringify(answers));
+                localStorage.setItem(answersKey, JSON.stringify(answers));
               }
-              router.push("/analyze");
+              if (!projectId) localStorage.setItem("analyze_mode", "questionnaire");
+              router.push(base);
             }
           }}
           className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
@@ -149,6 +159,16 @@ export default function ResultsPage({ params }: { params: Promise<{ analysisId: 
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
           Edit Inputs
         </button>
+
+        {projectId && (
+          <button
+            onClick={() => router.push("/projects")}
+            className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium text-sm"
+          >
+            My Projects
+            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+          </button>
+        )}
       </div>
 
       <ResultsDashboard result={result} />
@@ -314,5 +334,17 @@ export default function ResultsPage({ params }: { params: Promise<{ analysisId: 
 
       </div>
     </div>
+  );
+}
+
+export default function ResultsPage({ params }: { params: Promise<{ analysisId: string }> }) {
+  return (
+    <Suspense fallback={
+      <div className="w-full min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-t-[color:var(--text-primary)] border-[color:var(--border)] animate-spin" />
+      </div>
+    }>
+      <ResultsPageInner params={params} />
+    </Suspense>
   );
 }

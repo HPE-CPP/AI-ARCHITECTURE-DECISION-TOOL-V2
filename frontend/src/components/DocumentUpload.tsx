@@ -5,8 +5,15 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { UploadCloud, FileText, AlertCircle, Loader2, CheckCircle2, X } from "lucide-react";
 import { uploadDocument } from "@/lib/api";
+import { getProjectKey } from "@/lib/projects-store";
 
-export default function DocumentUpload() {
+interface DocumentUploadProps {
+  projectId?: string;
+  requireAuth?: () => Promise<void>;
+  onAnalysisStart?: (analysisId: string) => void;
+}
+
+export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart }: DocumentUploadProps) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -34,24 +41,36 @@ export default function DocumentUpload() {
   const handleProcess = async () => {
     if (!file) return;
     try {
+      // Show auth gate if provided
+      if (requireAuth) await requireAuth();
+
       setUploading(true);
       setError(null);
       setProgress(10);
-      
+
       const provider = localStorage.getItem("llm_provider") || "ollama";
-      
+
       // Simulating progress while uploading
       const progressInterval = setInterval(() => {
         setProgress(p => Math.min(p + 15, 90));
       }, 500);
 
       const res = await uploadDocument(file, provider);
-      
+
       clearInterval(progressInterval);
       setProgress(100);
 
+      // Notify parent of analysis start for project tracking
+      onAnalysisStart?.(res.analysis_id);
+
+      // Per-project storage
+      if (projectId) {
+        localStorage.setItem(getProjectKey(projectId, "analysisId"), res.analysis_id);
+        localStorage.setItem(getProjectKey(projectId, "mode"), "upload");
+      }
+
       setTimeout(() => {
-        router.push(`/results/${res.analysis_id}`);
+        router.push(`/results/${res.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
       }, 500);
 
     } catch (err: any) {
@@ -65,7 +84,7 @@ export default function DocumentUpload() {
     <div className="w-full flex flex-col items-center">
       <AnimatePresence mode="wait">
         {error && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -91,23 +110,21 @@ export default function DocumentUpload() {
             className={`
               w-full relative group cursor-pointer transition-all duration-300
               rounded-3xl border-2 border-dashed p-12 text-center overflow-hidden
-              ${isDragActive 
-                ? "border-[color:var(--primary)] bg-[color:var(--primary)]/5 scale-[1.02]" 
+              ${isDragActive
+                ? "border-[color:var(--primary)] bg-[color:var(--primary)]/5 scale-[1.02]"
                 : "border-[color:var(--border)] hover:border-[color:var(--primary)]/50 bg-[color:var(--surface)] hover:bg-[color:var(--surface)]/80"
               }
             `}
           >
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-[0.02] transition-opacity" />
             <input {...getInputProps()} />
-            
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 ${
-              isDragActive ? "bg-[color:var(--primary)] text-[color:var(--background)] scale-110" : "bg-[color:var(--background)] group-hover:scale-110 shadow-inner group-hover:bg-[color:var(--primary)] group-hover:text-[color:var(--background)]"
-            }`}>
-              <UploadCloud size={40} className={`transition-colors duration-300 ${
-                isDragActive ? "" : "text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)]"
-              }`} />
+
+            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 ${isDragActive ? "bg-[color:var(--primary)] text-[color:var(--background)] scale-110" : "bg-[color:var(--background)] group-hover:scale-110 shadow-inner group-hover:bg-[color:var(--primary)] group-hover:text-[color:var(--background)]"
+              }`}>
+              <UploadCloud size={40} className={`transition-colors duration-300 ${isDragActive ? "" : "text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)]"
+                }`} />
             </div>
-            
+
             <p className="text-2xl font-bold mb-3 text-[color:var(--text-primary)]">
               {isDragActive ? "Drop your file here" : "Click or drag & drop"}
             </p>
@@ -117,7 +134,7 @@ export default function DocumentUpload() {
           </div>
         </motion.div>
       ) : (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full relative overflow-hidden rounded-3xl bg-[color:var(--surface)] border border-[color:var(--border)] shadow-xl"
@@ -125,7 +142,7 @@ export default function DocumentUpload() {
           {/* Progress Bar Background */}
           {uploading && (
             <div className="absolute top-0 left-0 w-full h-1 bg-[color:var(--background)]">
-              <motion.div 
+              <motion.div
                 className="h-full bg-[color:var(--primary)]"
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
@@ -156,27 +173,25 @@ export default function DocumentUpload() {
 
             <div className="flex gap-4">
               <button
-                onClick={() => {
-                  setFile(null);
-                  setError(null);
-                }}
+                onClick={() => { setFile(null); setError(null); }}
                 disabled={uploading}
                 className="flex-1 py-4 px-6 rounded-full font-semibold border border-[color:var(--border)] hover:bg-[color:var(--background)] transition-all disabled:opacity-50 text-[color:var(--text-primary)]"
               >
                 Cancel
               </button>
               <button
+                id="begin-analysis-btn"
                 onClick={handleProcess}
                 disabled={uploading}
                 className="flex-[2] py-4 px-6 rounded-full font-bold bg-[color:var(--primary)] text-[color:var(--background)] shadow-lg hover:invert transition-all flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed disabled:transform-none"
               >
                 {uploading ? (
                   <>
-                    <Loader2 className="animate-spin" size={20} /> 
+                    <Loader2 className="animate-spin" size={20} />
                     {progress < 100 ? `Analyzing... ${progress}%` : "Finalizing..."}
                   </>
                 ) : (
-                  "Extract Architecture Signals"
+                  "Begin Analysis"
                 )}
               </button>
             </div>
