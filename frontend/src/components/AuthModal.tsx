@@ -14,16 +14,28 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode = "default" }: AuthModalProps) {
-  const [step, setStep] = useState<"main" | "skip-confirm">("main");
+  const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "transfer-confirm">("main");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signedInUser, setSignedInUser] = useState<any>(null);
+  const [anonProject, setAnonProject] = useState<any>(null);
 
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
       setError(null);
       const user = await signIn();
-      onAuthSuccess(user);
+      
+      const { getProjects } = await import("@/lib/projects-store");
+      const anonProjects = getProjects(null);
+      
+      if (anonProjects.length > 0) {
+        setSignedInUser(user);
+        setAnonProject(anonProjects[0]);
+        setStep("transfer");
+      } else {
+        onAuthSuccess(user);
+      }
     } catch (err: any) {
       // Handle user closing popup gracefully
       if (err?.code === "auth/popup-closed-by-user" || err?.code === "auth/cancelled-popup-request") {
@@ -41,6 +53,24 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
   const handleSkipRequest = () => setStep("skip-confirm");
   const handleGoBack = () => { setStep("main"); setError(null); };
   const handleContinueAnyway = () => { onSkip(); };
+
+  const handleAcceptTransfer = async () => {
+    const { updateProject } = await import("@/lib/projects-store");
+    if (anonProject && signedInUser) {
+      updateProject(anonProject.id, { userId: signedInUser.uid });
+    }
+    onAuthSuccess(signedInUser);
+  };
+
+  const handleRejectTransfer = () => setStep("transfer-confirm");
+
+  const handleConfirmRejection = async () => {
+    const { deleteProject } = await import("@/lib/projects-store");
+    if (anonProject) {
+      deleteProject(anonProject.id);
+    }
+    onAuthSuccess(signedInUser);
+  };
 
   const backdropVariants: Variants = {
     hidden: { opacity: 0 },
@@ -152,7 +182,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                   </div>
                 </div>
               </motion.div>
-            ) : (
+            ) : step === "skip-confirm" ? (
               <motion.div
                 key="confirm"
                 variants={modalVariants}
@@ -186,6 +216,86 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                       </button>
                       <button
                         onClick={handleGoBack}
+                        className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors"
+                      >
+                        Go Back
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : step === "transfer" ? (
+              <motion.div
+                key="transfer"
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="relative w-full max-w-sm"
+              >
+                <div
+                  className="relative overflow-hidden rounded-[2.5rem] border border-[color:var(--border)] shadow-2xl"
+                  style={{ background: "var(--surface)", backdropFilter: "blur(40px)" }}
+                >
+                  <div className="p-8 text-center flex flex-col items-center">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center mb-5">
+                      <Chrome size={26} className="text-blue-400" />
+                    </div>
+                    <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
+                      Transfer Project?
+                    </h3>
+                    <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
+                      Do you want to transfer your unsaved project <span className="text-[color:var(--text-primary)] font-bold">"{anonProject?.name}"</span> to this account?
+                    </p>
+                    <div className="flex flex-col gap-2 w-full">
+                      <button
+                        onClick={handleAcceptTransfer}
+                        className="w-full py-3.5 px-6 rounded-full border border-[color:var(--border)] text-[color:var(--background)] bg-[color:var(--text-primary)] font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98]"
+                      >
+                        Yes, Transfer It
+                      </button>
+                      <button
+                        onClick={handleRejectTransfer}
+                        className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-red-400 transition-colors"
+                      >
+                        No, Discard It
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="transfer-confirm"
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="relative w-full max-w-sm"
+              >
+                <div
+                  className="relative overflow-hidden rounded-[2.5rem] border border-[color:var(--border)] shadow-2xl"
+                  style={{ background: "var(--surface)", backdropFilter: "blur(40px)" }}
+                >
+                  <div className="p-8 text-center flex flex-col items-center">
+                    <div className="w-14 h-14 rounded-2xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center mb-5">
+                      <AlertTriangle size={26} className="text-orange-400" />
+                    </div>
+                    <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
+                      Discard Unsaved Work?
+                    </h3>
+                    <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
+                      You will instantly lose this work and it cannot be recovered. Are you sure?
+                    </p>
+                    <div className="flex flex-col gap-2 w-full">
+                      <button
+                        onClick={handleConfirmRejection}
+                        className="w-full py-3.5 px-6 rounded-full border border-red-500/20 bg-red-500/10 text-red-500 font-bold text-sm hover:bg-red-500/20 transition-all active:scale-[0.98]"
+                      >
+                        Yes, I'm sure
+                      </button>
+                      <button
+                        onClick={() => setStep("transfer")}
                         className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors"
                       >
                         Go Back

@@ -47,6 +47,9 @@ function readAll(): Project[] {
 
 function writeAll(projects: Project[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("projects-updated"));
+  }
 }
 
 export function getProjects(userId?: string | null): Project[] {

@@ -33,7 +33,12 @@ export default function ProjectsPage() {
   useEffect(() => {
     setMounted(true);
     const userId = user?.uid ?? null;
-    setProjects(getProjects(userId));
+    
+    const loadProjects = () => setProjects(getProjects(userId));
+    loadProjects();
+
+    window.addEventListener("projects-updated", loadProjects);
+    return () => window.removeEventListener("projects-updated", loadProjects);
   }, [user]);
 
   // Debounce search
