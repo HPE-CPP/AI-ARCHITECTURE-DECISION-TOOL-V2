@@ -38,9 +38,14 @@ export function Navbar() {
 
   // Load project count for badge
   useEffect(() => {
-    if (mounted) {
-      setProjectCount(getProjects(user?.uid ?? null).length);
-    }
+    if (!mounted) return;
+    const userId = user?.uid ?? null;
+
+    const loadCount = () => setProjectCount(getProjects(userId).length);
+    loadCount();
+
+    window.addEventListener("projects-updated", loadCount);
+    return () => window.removeEventListener("projects-updated", loadCount);
   }, [mounted, user, pathname]);
 
   useEffect(() => {
