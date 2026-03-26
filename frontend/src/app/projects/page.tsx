@@ -114,6 +114,7 @@ export default function ProjectsPage() {
         onAuthSuccess={() => { setAuthModalOpen(false); setEditTarget(null); setCreateModalOpen(true); }}
         onSkip={() => setAuthModalOpen(false)}  // Skipping refuses project creation 
         signIn={signIn}
+        mode="project-limit"
       />
 
       <div className="w-full min-h-screen pt-24 pb-20 px-4 sm:px-6 max-w-6xl mx-auto">

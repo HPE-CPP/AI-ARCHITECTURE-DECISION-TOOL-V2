@@ -88,7 +88,7 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
 
           {/* Action buttons - stop card click propagation */}
           <div
-            className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -147,8 +147,7 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center"
-            style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }}
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-[color:var(--surface)]/95 backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
             <Trash2 size={28} className="text-red-400 mb-3" />
