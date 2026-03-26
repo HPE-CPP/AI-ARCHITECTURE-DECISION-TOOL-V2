@@ -7,6 +7,7 @@ import { motion, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, V
 import { useTheme } from "./ThemeProvider";
 import { useAuth } from "@/lib/auth-context";
 import { getProjects } from "@/lib/projects-store";
+import { AuthModal } from "@/components/AuthModal";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -16,6 +17,7 @@ export function Navbar() {
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [projectCount, setProjectCount] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -29,7 +31,7 @@ export function Navbar() {
   const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
 
-  const { user, signOut } = useAuth();
+  const { user, signIn, signOut } = useAuth();
 
   // Load project count for badge
   useEffect(() => {
@@ -197,6 +199,15 @@ export function Navbar() {
 
   return (
     <>
+      {/* Expose AuthModal when signed out and clicking Sign In */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={() => setAuthModalOpen(false)}
+        onSkip={() => setAuthModalOpen(false)}
+        signIn={signIn}
+      />
+
       <div className="fixed top-0 left-0 w-full flex justify-center z-50 pointer-events-none px-4">
         <motion.nav
           variants={variants}
@@ -209,7 +220,7 @@ export function Navbar() {
           onClick={() => {
             if (phase === "sphere") { setIsForcedPill(true); setPhase("pill"); }
           }}
-          className={`pointer-events-auto flex items-center justify-between overflow-hidden mx-auto shadow-2xl ${phase === "sphere" ? "cursor-pointer hover:scale-110 transition-transform active:scale-95 shadow-white/5" : ""}`}
+          className={`pointer-events-auto flex items-center justify-between mx-auto shadow-2xl ${phase === "sphere" ? "cursor-pointer hover:scale-110 transition-transform active:scale-95 shadow-white/5" : ""}`}
         >
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group shrink-0 relative z-10 transition-transform active:scale-95">
@@ -294,53 +305,69 @@ export function Navbar() {
                   {mounted ? (resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />) : <div className="w-3.5 h-3.5" />}
                 </button>
 
-                {/* User Avatar or nothing */}
-                {mounted && user ? (
-                  <div className="relative" ref={userMenuRef}>
-                    <button
-                      id="user-avatar-btn"
-                      onClick={(e) => { e.stopPropagation(); setUserMenuOpen(!userMenuOpen); }}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--text-primary)]/5 hover:bg-[color:var(--text-primary)]/10 transition-all active:scale-95"
-                    >
-                      <div className="w-5 h-5 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] flex items-center justify-center text-[9px] font-black shrink-0">
-                        {userInitial}
-                      </div>
-                      <span className="text-xs font-bold text-[color:var(--text-primary)] max-w-[80px] truncate">{userFirstName}</span>
-                    </button>
+                {/* User Avatar, Sign In, or nothing */}
+                {mounted ? (
+                  user ? (
+                    <div className="relative" ref={userMenuRef}>
+                      <button
+                        id="user-avatar-btn"
+                        onClick={(e) => { e.stopPropagation(); setUserMenuOpen(!userMenuOpen); }}
+                        className={`flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--text-primary)]/5 hover:bg-[color:var(--text-primary)]/10 transition-all active:scale-95 ${phase === "top" ? "px-3 py-1.5" : "p-1"}`}
+                      >
+                        <div className={`${phase === "top" ? "w-5 h-5 text-[9px]" : "w-6 h-6 text-[10px]"} rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] flex items-center justify-center font-black shrink-0 transition-all`}>
+                          {userInitial}
+                        </div>
+                        {phase === "top" && (
+                          <span className="text-xs font-bold text-[color:var(--text-primary)] max-w-[80px] truncate pr-1">
+                            {userFirstName}
+                          </span>
+                        )}
+                      </button>
 
-                    {/* Dropdown */}
-                    <AnimatePresence>
-                      {userMenuOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95, y: -8 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95, y: -8 }}
-                          transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                          className="absolute right-0 top-full mt-2 w-44 rounded-2xl border border-[color:var(--border)] shadow-2xl overflow-hidden z-50"
-                          style={{ background: "var(--surface)", backdropFilter: "blur(20px)" }}
-                        >
-                          <div className="px-4 py-3 border-b border-[color:var(--border)]">
-                            <p className="text-xs font-black text-[color:var(--text-primary)] truncate">{user.displayName || "User"}</p>
-                            <p className="text-[10px] text-[color:var(--text-secondary)] truncate">{user.email}</p>
-                          </div>
-                          <Link
-                            href="/projects"
-                            onClick={() => setUserMenuOpen(false)}
-                            className="flex items-center gap-2.5 px-4 py-3 text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)]/5 transition-all"
+                      {/* Dropdown */}
+                      <AnimatePresence>
+                        {userMenuOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: -8 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            className="absolute right-0 top-[calc(100%+12px)] mt-0 w-48 rounded-2xl border border-[color:var(--border)] shadow-2xl overflow-hidden z-[9999]"
+                            style={{ background: "var(--surface)", backdropFilter: "blur(20px)" }}
                           >
-                            <FolderOpen size={13} /> My Projects
-                          </Link>
-                          <button
-                            id="sign-out-btn"
-                            onClick={handleSignOut}
-                            className="w-full flex items-center gap-2.5 px-4 py-3 text-xs font-bold text-red-400 hover:bg-red-500/5 transition-all"
-                          >
-                            <LogOut size={13} /> Sign Out
-                          </button>
-                        </motion.div>
+                            <div className="px-4 py-3 border-b border-[color:var(--border)]">
+                              <p className="text-xs font-black text-[color:var(--text-primary)] truncate">{user.displayName || "User"}</p>
+                              <p className="text-[10px] text-[color:var(--text-secondary)] truncate">{user.email}</p>
+                            </div>
+                            <Link
+                              href="/projects"
+                              onClick={() => setUserMenuOpen(false)}
+                              className="flex items-center gap-2.5 px-4 py-3 text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)]/5 transition-all"
+                            >
+                              <FolderOpen size={13} /> My Projects
+                            </Link>
+                            <button
+                              id="sign-out-btn"
+                              onClick={handleSignOut}
+                              className="w-full flex items-center gap-2.5 px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-500/10 transition-all"
+                            >
+                              <LogOut size={13} /> Sign Out
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAuthModalOpen(true)}
+                      className={`flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--text-primary)] text-[color:var(--background)] hover:opacity-90 transition-all active:scale-95 ${phase === "top" ? "px-3 py-1.5" : "p-1.5"}`}
+                    >
+                      <User size={14} className={phase === "top" ? "w-3 h-3" : "w-4 h-4"} />
+                      {phase === "top" && (
+                        <span className="text-xs font-bold pr-1">Sign In</span>
                       )}
-                    </AnimatePresence>
-                  </div>
+                    </button>
+                  )
                 ) : null}
 
                 {/* Mobile toggle */}
