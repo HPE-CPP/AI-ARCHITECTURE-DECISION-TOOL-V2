@@ -1,132 +1,128 @@
 import { v4 as uuidv4 } from "uuid";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export type ProjectStatus = "empty" | "in_progress" | "completed";
 
 export interface Project {
   id: string;
-  userId: string | null; // null = anonymous
+  user_id: string;
   name: string;
   description: string;
   status: ProjectStatus;
-  analysisId?: string;
+  analysis_id?: string;
   mode?: "upload" | "questionnaire";
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;
+  updated_at: string;
 }
 
-const STORAGE_KEY = "archguide_projects";
-
-let sessionInitialized = false;
-
-function readAll(): Project[] {
-  if (typeof window === "undefined") return [];
-  
-  if (!sessionInitialized) {
-    if (!sessionStorage.getItem("archguide_session")) {
-      try {
-        const all: Project[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-        const authProjects = all.filter(p => p.userId !== null);
-        const deletedIds = all.filter(p => p.userId === null).map(p => p.id);
-        deletedIds.forEach(id => {
-          const prefix = `project_${id}_`;
-          Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
-        });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(authProjects));
-        sessionStorage.setItem("archguide_session", "active");
-      } catch {}
-    }
-    sessionInitialized = true;
+export function getGuestId(): string {
+  if (typeof window === "undefined") return "guest_temp";
+  let guestId = localStorage.getItem("archguide_guest_id");
+  if (!guestId) {
+    guestId = "guest_" + uuidv4();
+    localStorage.setItem("archguide_guest_id", guestId);
   }
-  
+  return guestId;
+}
+
+export async function getProjects(userId?: string | null): Promise<Project[]> {
+  const uid = userId || getGuestId();
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const res = await fetch(`${API_BASE}/api/v1/projects?user_id=${uid}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.projects || [];
   } catch {
     return [];
   }
 }
 
-function writeAll(projects: Project[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("projects-updated"));
+export async function getProject(id: string): Promise<Project | undefined> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/projects/${id}`);
+    if (!res.ok) return undefined;
+    return await res.json();
+  } catch {
+    return undefined;
   }
 }
 
-export function getProjects(userId?: string | null): Project[] {
-  const all = readAll();
-  if (userId === undefined) return all;
-  return all.filter((p) => p.userId === (userId ?? null));
-}
-
-export function getProject(id: string): Project | undefined {
-  return readAll().find((p) => p.id === id);
-}
-
-export function createProject(
-  data: Pick<Project, "name" | "description" | "userId">
-): Project {
-  const now = new Date().toISOString();
-  const project: Project = {
-    id: uuidv4(),
-    userId: data.userId,
-    name: data.name.trim(),
-    description: data.description.trim(),
-    status: "empty",
-    createdAt: now,
-    updatedAt: now,
-  };
-  const all = readAll();
-  writeAll([project, ...all]);
+export async function createProject(
+  data: Pick<Project, "name" | "description"> & { userId?: string | null }
+): Promise<Project> {
+  const uid = data.userId || getGuestId();
+  const res = await fetch(`${API_BASE}/api/v1/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: uid,
+      name: data.name.trim(),
+      description: data.description.trim()
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to create project");
+  }
+  const project = await res.json();
+  notify();
   return project;
 }
 
-export function updateProject(id: string, patch: Partial<Omit<Project, "id" | "createdAt">>): Project | null {
-  const all = readAll();
-  const idx = all.findIndex((p) => p.id === id);
-  if (idx === -1) return null;
-  all[idx] = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
-  writeAll(all);
-  return all[idx];
+function notify() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("projects-updated"));
+  }
 }
 
-export function deleteProject(id: string): void {
-  writeAll(readAll().filter((p) => p.id !== id));
-  // Clean up per-project localStorage keys
-  const prefix = `project_${id}_`;
-  Object.keys(localStorage)
-    .filter((k) => k.startsWith(prefix))
-    .forEach((k) => localStorage.removeItem(k));
+export async function updateProject(id: string, patch: any): Promise<Project | null> {
+  const payload: any = {};
+  if (patch.name) payload.name = patch.name;
+  if (patch.description) payload.description = patch.description;
+  if (patch.status) payload.status = patch.status;
+  if (patch.userId) payload.user_id = patch.userId;
+  if (patch.user_id) payload.user_id = patch.user_id;
+  if (patch.analysisId) payload.analysis_id = patch.analysisId;
+  if (patch.mode) payload.mode = patch.mode;
+
+  const res = await fetch(`${API_BASE}/api/v1/projects/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) return null;
+  const project = await res.json();
+  notify();
+  return project;
 }
 
-export function duplicateProject(id: string): Project | null {
-  const original = getProject(id);
+export async function deleteProject(id: string): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/projects/${id}`, {
+    method: "DELETE",
+  });
+  notify();
+}
+
+export async function duplicateProject(id: string, userId?: string | null): Promise<Project | null> {
+  const original = await getProject(id);
   if (!original) return null;
-  const now = new Date().toISOString();
-  const copy: Project = {
-    ...original,
-    id: uuidv4(),
+  return createProject({
     name: `${original.name} (Copy)`,
-    status: "empty",
-    analysisId: undefined,
-    createdAt: now,
-    updatedAt: now,
-  };
-  const all = readAll();
-  const idx = all.findIndex((p) => p.id === id);
-  all.splice(idx + 1, 0, copy);
-  writeAll(all);
-  return copy;
+    description: original.description,
+    userId: userId || getGuestId()
+  });
 }
 
-// Per-project localStorage helpers
 export function getProjectKey(projectId: string, key: string) {
   return `project_${projectId}_${key}`;
 }
 
 export function getLastActiveProjectId(): string | null {
-  return localStorage.getItem("archguide_last_project") ?? null;
+  return typeof window !== "undefined" ? localStorage.getItem("archguide_last_project") : null;
 }
 
 export function setLastActiveProjectId(id: string) {
-  localStorage.setItem("archguide_last_project", id);
+  if (typeof window !== "undefined") {
+    localStorage.setItem("archguide_last_project", id);
+  }
 }

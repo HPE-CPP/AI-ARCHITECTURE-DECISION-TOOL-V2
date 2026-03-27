@@ -99,7 +99,7 @@ export default function LandingPage() {
 
         <AnimatedSection delay={1.6} className="mt-12">
           <Magnetic>
-            <Link href="/analyze">
+            <Link href="/projects">
               <button className="px-10 py-5 rounded-full text-[color:var(--background)] bg-[color:var(--primary)] font-bold text-sm hover:invert transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-95">
                 Begin Analysis <ArrowRight size={18} />
               </button>
