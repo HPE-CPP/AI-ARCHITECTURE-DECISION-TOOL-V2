@@ -34,7 +34,10 @@ export default function ProjectsPage() {
     setMounted(true);
     const userId = user?.uid ?? null;
     
-    const loadProjects = () => setProjects(getProjects(userId));
+    const loadProjects = async () => {
+      const data = await getProjects(userId);
+      setProjects(data);
+    };
     loadProjects();
 
     window.addEventListener("projects-updated", loadProjects);
@@ -62,9 +65,9 @@ export default function ProjectsPage() {
     if (exists) {
       throw new Error("Project already exists. Please choose a different name.");
     }
-    const project = createProject({ name, description, userId: user?.uid ?? null });
+    const project = await createProject({ name, description, userId: user?.uid ?? null });
     setLastActiveProjectId(project.id);
-    router.push(`/analyze?projectId=${project.id}`);
+    router.push(`/projects/${project.id}/analyze`);
   }, [user, router, projects]);
 
   const handleEdit = useCallback((project: Project) => {
@@ -81,17 +84,23 @@ export default function ProjectsPage() {
       throw new Error("Project already exists. Please choose a different name.");
     }
 
-    const updated = updateProject(editTarget.id, { name, description });
+    await updateProject(editTarget.id, { name, description });
     setEditTarget(null);
   }, [editTarget, projects]);
 
   const handleDelete = useCallback((id: string) => {
-    deleteProject(id);
-  }, []);
+    deleteProject(id).then(() => {
+      const userId = user?.uid ?? null;
+      getProjects(userId).then(setProjects);
+    });
+  }, [user]);
 
   const handleDuplicate = useCallback((id: string) => {
-    duplicateProject(id);
-  }, []);
+    duplicateProject(id).then(() => {
+      const userId = user?.uid ?? null;
+      getProjects(userId).then(setProjects);
+    });
+  }, [user]);
 
   const handleCloseModal = useCallback(() => {
     setCreateModalOpen(false);

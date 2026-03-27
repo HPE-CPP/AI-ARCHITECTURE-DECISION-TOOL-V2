@@ -30,7 +30,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
       const user = await signIn();
       
       const { getProjects } = await import("@/lib/projects-store");
-      const anonProjects = getProjects(null);
+      const anonProjects = await getProjects(null);
       
       if (anonProjects.length > 0) {
         setSignedInUser(user);
@@ -61,7 +61,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
     const { updateProject, getProjects } = await import("@/lib/projects-store");
     if (anonProject && signedInUser) {
       // Check for collision
-      const userProjects = getProjects(signedInUser.uid);
+      const userProjects = await getProjects(signedInUser.uid);
       const collision = userProjects.find(p => p.name.trim().toLowerCase() === anonProject.name.trim().toLowerCase());
       
       if (collision) {
@@ -70,7 +70,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
         return;
       }
 
-      updateProject(anonProject.id, { userId: signedInUser.uid });
+      await updateProject(anonProject.id, { userId: signedInUser.uid });
     }
     onAuthSuccess(signedInUser);
   };
@@ -78,8 +78,8 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
   const handleReplaceAndTransfer = async () => {
     const { updateProject, deleteProject } = await import("@/lib/projects-store");
     if (anonProject && signedInUser && collidingProjectId) {
-      deleteProject(collidingProjectId);
-      updateProject(anonProject.id, { userId: signedInUser.uid });
+      await deleteProject(collidingProjectId);
+      await updateProject(anonProject.id, { userId: signedInUser.uid });
     }
     onAuthSuccess(signedInUser);
   };
@@ -94,7 +94,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
   const handleConfirmRejection = async () => {
     const { deleteProject } = await import("@/lib/projects-store");
     if (anonProject) {
-      deleteProject(anonProject.id);
+      await deleteProject(anonProject.id);
     }
     onAuthSuccess(signedInUser);
   };

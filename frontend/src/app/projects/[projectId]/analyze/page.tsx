@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getProject, updateProject, getProjectKey } from "@/lib/projects-store";
 import { useSearchParams, useRouter } from "next/navigation";
 
-function AnalyzePageInner() {
+function AnalyzePageInner({ projectId }: { projectId: string }) {
   const [mode, setMode] = useState<"upload" | "questionnaire" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
@@ -22,8 +22,7 @@ function AnalyzePageInner() {
   const { user, signIn, signOut } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const projectId = searchParams.get("projectId");
-  const project = projectId ? getProject(projectId) : null;
+  const [project, setProject] = useState<any>(null);
 
   const [provider, setProvider] = useState<"openai" | "ollama">("ollama");
 
@@ -32,6 +31,12 @@ function AnalyzePageInner() {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [welcomeVisible, setWelcomeVisible] = useState(false);
   const [welcomeName, setWelcomeName] = useState("");
+
+  useEffect(() => {
+    if (projectId) {
+      getProject(projectId).then(setProject);
+    }
+  }, [projectId]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -286,14 +291,22 @@ function AnalyzePageInner() {
   );
 }
 
-export default function AnalyzePage() {
+export default function AnalyzePage({ params }: { params: Promise<{ projectId: string }> }) {
+  // Next.js 15+: params is a Promise and must be unwrapped with React.use()
+  const { projectId } = React.use(params);
+
+  if (!projectId) {
+    if (typeof window !== "undefined") window.location.href = "/projects";
+    return null;
+  }
+
   return (
     <Suspense fallback={
       <div className="w-full min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-t-[color:var(--text-primary)] border-[color:var(--border)] animate-spin" />
       </div>
     }>
-      <AnalyzePageInner />
+      <AnalyzePageInner projectId={projectId} />
     </Suspense>
   );
 }

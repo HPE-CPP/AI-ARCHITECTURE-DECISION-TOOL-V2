@@ -55,7 +55,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
         setProgress(p => Math.min(p + 15, 90));
       }, 500);
 
-      const res = await uploadDocument(file, provider);
+      const res = await uploadDocument(file, provider, projectId);
 
       clearInterval(progressInterval);
       setProgress(100);

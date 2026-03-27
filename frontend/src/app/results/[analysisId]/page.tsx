@@ -136,8 +136,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
           onClick={() => {
             const modeKey = projectId ? `project_${projectId}_mode` : "analyze_mode";
             const currentMode = localStorage.getItem(modeKey);
-            const base = projectId ? `/analyze?projectId=${projectId}` : "/analyze";
-            const q = projectId ? "&" : "?";
+            const base = projectId ? `/projects/${projectId}/analyze` : "/projects";
+            const q = "?";
 
             if (currentMode === "upload") {
               router.push(`${base}${q}mode=upload`);

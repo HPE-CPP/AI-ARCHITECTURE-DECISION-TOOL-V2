@@ -15,6 +15,9 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Query, BackgroundT
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import create_engine
+from dotenv import load_dotenv
+import redis
 
 
 from config import settings
@@ -23,6 +26,33 @@ from services.llm_client import LLMClient, get_llm_client
 from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
 from services.scoring_engine import ScoringEngine, ARCHITECTURE_DESCRIPTIONS
 from services.followup_generator import generate_followup_questions, SIGNAL_OPTIONS
+
+# Load environment variables
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# --- SQLAlchemy engine check ---
+engine = create_engine(DATABASE_URL)
+
+try:
+    with engine.connect() as connection:
+        print("Connection successful!")
+except Exception as e:
+    print(f"Failed to connect: {e}")
+
+# --- Redis connection check ---
+redis_client = redis.Redis.from_url(
+    os.getenv("REDIS_URL"),
+    password=os.getenv("REDIS_TOKEN"),
+    decode_responses=True
+)
+
+try:
+    redis_client.set("test", "hello")
+    print(f"Redis test key: {redis_client.get('test')}")
+except Exception as e:
+    print(f"Redis error: {e}")
 
 # Logging
 logging.basicConfig(level=logging.INFO)
