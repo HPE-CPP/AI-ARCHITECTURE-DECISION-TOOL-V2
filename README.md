@@ -1,138 +1,125 @@
-# Local Setup Guide
+# 🛠️ AI Architecture Decision Tool
 
-Follow these steps to run the project on your local machine.
+A professional, full-stack AI platform designed to help architects and engineers make data-driven decisions on system design, infrastructure, and technical trade-offs.
 
 ---
 
-## 1. Clone the Repository
+## 🚀 Getting Started
 
+### 1. Clone the Repository
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Hrithik875/AI-ARCHITECTURE-DECISION-TOOL-V2
 cd AI-ARCHITECTURE-DECISION-TOOL-V2
 ```
 
 ---
 
-## 2. Frontend Setup
+## 🎨 Frontend Setup (Next.js)
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+The frontend is built with Next.js 15, Framer Motion for premium animations, and Lucide for iconography.
 
-Frontend will run on:
+1. **Navigate to the frontend directory:**
+   ```bash
+   cd frontend
+   ```
 
-```
-http://localhost:3000
-```
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
----
+3. **Configure Environment Variables:**
+   Create a `.env.local` file in the `frontend/` directory (you can copy from `.env.example`):
+   ```bash
+   cp .env.example .env.local
+   ```
+   **Required variables:**
+   - `NEXT_PUBLIC_FIREBASE_API_KEY`: Your Firebase SDK config
+   - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`: Your Firebase Auth domain
+   - `NEXT_PUBLIC_API_URL`: `http://localhost:8000` (for local development)
 
-## 3. Backend Setup
-
-Open a **new terminal**
-
-```bash
-cd backend
-```
-
----
-
-### Create Virtual Environment (Python 3.11)
-
-```bash
-C:\Users\<your-username>\AppData\Local\Programs\Python\Python311\python.exe -m venv venv
-```
+4. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
+   Access at: [http://localhost:3000](http://localhost:3000)
 
 ---
 
-### Activate Virtual Environment
+## ⚙️ Backend Setup (FastAPI)
 
-```bash
-venv\Scripts\activate
-```
+The backend provides the AI analysis engine, vector storage (FAISS), and PostgreSQL persistence via SQLAlchemy.
 
----
+1. **Navigate to the backend directory:**
+   ```bash
+   cd backend
+   ```
 
-### Install Dependencies
+2. **Create a Virtual Environment:**
+   *Recommended: Python 3.11 (Avoid 3.13 due to dependency compatibility)*
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate  # Windows
+   # or
+   source venv/bin/activate # Linux/macOS
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+3. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
----
+4. **Configure Environment Variables:**
+   Create a `.env` file in the `backend/` directory (copy from `.env.example`):
+   ```bash
+   cp .env.example .env
+   ```
+   **Required Credentials:**
+   - `DATABASE_URL`: PostgreSQL connection string (Supabase recommended)
+   - `REDIS_URL` & `REDIS_TOKEN`: Upstash Redis credentials
+   - `OPENAI_API_KEY`: For embeddings and cloud-based LLM analysis
 
-### Configure Environment Variables
-
-Copy the `.env` file and fill in your credentials:
-
-```
-DATABASE_URL=postgresql+psycopg2://USER:PASSWORD@HOST:PORT/DATABASE
-REDIS_URL=rediss://your-host.upstash.io:6379
-REDIS_TOKEN=your-upstash-redis-token
-OPENAI_API_KEY=your-openai-api-key
-```
-
-Required services:
-- **Supabase** — PostgreSQL database (free tier works)
-- **Upstash** — Redis (free tier works)
-- **OpenAI** — API key for analysis + embeddings
-
----
-
-### Run Database Migrations
-
-> Tables are auto-created on first startup. For future schema changes:
-
-```bash
-alembic revision --autogenerate -m "describe your change"
-alembic upgrade head
-```
+5. **Run the API server:**
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+   - **Local URL:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
+   - **Interactive Docs (Swagger):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
-### Run Backend
+## 🛠️ Tech Stack
 
-```bash
-uvicorn app.main:app --reload
-```
-
-Backend will run on:
-
-```
-http://127.0.0.1:8000
-API Docs: http://127.0.0.1:8000/docs
-```
+- **Frontend**: Next.js 15, TypeScript, Framer Motion, Tailwind CSS
+- **Backend**: FastAPI (Python 3.11), SQLAlchemy, Alembic
+- **Database**: PostgreSQL (Persistence), FAISS (Vector Store for RAG)
+- **AI/LLM**: OpenAI (Analysis/Embeddings), Ollama (Local support)
+- **Auth**: Firebase Authentication
 
 ---
 
-## Notes
+## 📝 Important Notes
 
-* Make sure you are using **Python 3.11**
-* Do NOT use Python 3.13 (causes dependency issues)
-* Always activate `venv` before running backend
-* Entry point changed from `main:app` to `app.main:app`
+- **Database**: Tables are auto-created on the first run. For manual migrations, use `alembic upgrade head`.
+- **Python Version**: Stick to **Python 3.11**. Later versions may have issues with specific machine learning dependencies.
+- **Entry Point**: Always run the backend using `uvicorn app.main:app` (ensure you are in the `/backend` folder).
 
 ---
 
-## Running Both
+## 🏃 Running Both (Local Dev)
 
-Use two terminals:
+To run the full platform locally, open two terminal tabs:
 
-### Terminal 1 (Frontend)
-
+**Terminal 1 (Frontend):**
 ```bash
-cd frontend
-npm run dev
+cd frontend && npm run dev
 ```
 
-### Terminal 2 (Backend)
-
+**Terminal 2 (Backend):**
 ```bash
-cd backend
-venv\Scripts\activate
-uvicorn app.main:app --reload
+cd backend && venv\Scripts\activate && uvicorn app.main:app --reload
 ```
 
-Frontend + Backend should now be running locally.
+---
+*Built for modern architects.* 🏛️✨
+
