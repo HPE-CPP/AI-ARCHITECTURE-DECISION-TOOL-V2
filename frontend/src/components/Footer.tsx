@@ -96,7 +96,7 @@ export function Footer() {
             whileInView="visible"
             viewport={{ once: false, amount: 0.1 }}
             // Changed text size to 13vw and forced flex-nowrap to keep it on one line
-            className="text-[13vw] font-bold tracking-[-0.06em] leading-[0.85] text-[color:var(--text-primary)] pointer-events-none select-none flex flex-nowrap whitespace-nowrap"
+            className="text-[13vw] font-bold tracking-[-0.01em] leading-[0.85] text-[color:var(--text-primary)] pointer-events-none select-none flex flex-nowrap whitespace-nowrap"
           >
             {brandName.split("").map((char, index) => (
               <span

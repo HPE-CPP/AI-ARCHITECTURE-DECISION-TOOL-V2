@@ -19,8 +19,12 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: list[str] = [".pdf", ".docx", ".txt"]
 
-    # Redis
+    # PostgreSQL (Supabase)
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:password@localhost:5432/architecture_db"
+
+    # Redis (Upstash)
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_TOKEN: Optional[str] = None  # Upstash REST token (for SSL auth)
 
     # LLM - OpenAI
     OPENAI_API_KEY: Optional[str] = None
@@ -30,11 +34,17 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.2"
 
-    # Vector DB
-    VECTOR_DB_TYPE: str = "faiss"  # "faiss" or "qdrant"
-    FAISS_INDEX_PATH: str = "./data/faiss_index"
+    # Embeddings
+    EMBEDDING_MODEL: str = "text-embedding-3-small"  # OpenAI embedding model
+    EMBEDDING_DIMENSION: int = 1536
+    EMBEDDING_CHUNK_SIZE: int = 500    # tokens per chunk
+    EMBEDDING_CHUNK_OVERLAP: int = 50  # token overlap between chunks
 
-    # Qdrant (optional)
+    # Vector DB (FAISS)
+    VECTOR_DB_TYPE: str = "faiss"
+    FAISS_INDEX_PATH: str = "./faiss_index"
+
+    # Qdrant (optional future swap)
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "architecture_decisions"
 

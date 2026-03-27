@@ -76,10 +76,12 @@ export interface QuestionnaireOptions {
 
 // --- API Functions ---
 
-export async function uploadDocument(file: File, provider: string = "openai"): Promise<{ analysis_id: string; status: string }> {
+export async function uploadDocument(file: File, provider: string = "openai", projectId?: string): Promise<{ analysis_id: string; status: string }> {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${API_BASE}/api/v1/upload?provider=${provider}`, {
+  const qs = new URLSearchParams({ provider });
+  if (projectId) qs.append("project_id", projectId);
+  const res = await fetch(`${API_BASE}/api/v1/upload?${qs.toString()}`, {
     method: "POST",
     body: formData,
   });
@@ -90,8 +92,10 @@ export async function uploadDocument(file: File, provider: string = "openai"): P
   return res.json();
 }
 
-export async function submitQuestionnaire(answers: Record<string, string | null>, provider: string = "openai"): Promise<AnalysisResult> {
-  const res = await fetch(`${API_BASE}/api/v1/questionnaire?provider=${provider}`, {
+export async function submitQuestionnaire(answers: Record<string, string | null>, provider: string = "openai", projectId?: string): Promise<AnalysisResult> {
+  const qs = new URLSearchParams({ provider });
+  if (projectId) qs.append("project_id", projectId);
+  const res = await fetch(`${API_BASE}/api/v1/questionnaire?${qs.toString()}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(answers),

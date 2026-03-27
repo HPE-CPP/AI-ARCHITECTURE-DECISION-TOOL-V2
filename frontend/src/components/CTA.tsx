@@ -198,7 +198,7 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                     </p>
 
                     <Magnetic>
-                        <Link href="/analyze">
+                        <Link href="/projects">
                             <button className={cn(
                                 "px-8 md:px-10 py-4 md:py-5 text-base md:text-lg font-bold rounded-full transition-all duration-500 flex items-center gap-3 md:gap-4 shadow-xl active:scale-95",
                                 currentTheme === 'dark'

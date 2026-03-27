@@ -41,7 +41,9 @@ export function Navbar() {
     if (!mounted) return;
     const userId = user?.uid ?? null;
 
-    const loadCount = () => setProjectCount(getProjects(userId).length);
+    const loadCount = () => {
+      getProjects(userId).then(projects => setProjectCount(projects.length));
+    };
     loadCount();
 
     window.addEventListener("projects-updated", loadCount);
@@ -58,8 +60,18 @@ export function Navbar() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Expanded-collapse ref so we can cancel on fast re-expand
+  const collapseTimer = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    if (phase === "sphere") setIsExpanded(false);
+    if (phase === "sphere") {
+      // Give nav items time to fade out before the spring contraction fires
+      if (collapseTimer.current) clearTimeout(collapseTimer.current);
+      collapseTimer.current = setTimeout(() => setIsExpanded(false), 220);
+    } else {
+      // Cancel any pending collapse if user scrolls back up quickly
+      if (collapseTimer.current) clearTimeout(collapseTimer.current);
+    }
   }, [phase]);
 
   // Close user menu on outside click
@@ -81,7 +93,6 @@ export function Navbar() {
     { name: "Home", href: "/", id: "home" },
     { name: "Features", href: "/#features", id: "features" },
     { name: "How It Works", href: "/#how-it-works", id: "how-it-works" },
-    { name: "Analyze", href: "/analyze", id: "analyze" },
     { name: "Projects", href: "/projects", id: "projects" },
   ];
 
@@ -173,7 +184,8 @@ export function Navbar() {
       y: 0,
       transition: { delay: customDelay, type: "spring", stiffness: 300, damping: 24 }
     }),
-    exit: { opacity: 0, y: -10, transition: { duration: 0.15 } }
+    // Slow, graceful fade — gives the sphere spring animation time to catch up
+    exit: { opacity: 0, y: 0, filter: "blur(4px)", transition: { duration: 0.22, ease: "easeInOut" } }
   };
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -233,7 +245,9 @@ export function Navbar() {
           variants={variants}
           initial="sphere"
           animate={phase}
-          transition={{ type: "spring", stiffness: 220, damping: 28, mass: 1 }}
+          transition={phase === "sphere"
+            ? { type: "spring", stiffness: 220, damping: 28, mass: 1, delay: 0.18 }
+            : { type: "spring", stiffness: 220, damping: 28, mass: 1 }}
           onAnimationComplete={(variant) => {
             if (variant === "top" || variant === "pill") setIsExpanded(true);
           }}
