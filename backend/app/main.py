@@ -24,6 +24,8 @@ import app.db.models  # noqa: F401 — registers all models with Base
 from app.routers import upload, analysis, questionnaire, projects, users
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

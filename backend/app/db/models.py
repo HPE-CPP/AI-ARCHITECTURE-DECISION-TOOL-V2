@@ -39,7 +39,12 @@ class User(Base):
         DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False
     )
 
-    projects: Mapped[list["Project"]] = relationship("Project", back_populates="user", foreign_keys="Project.user_id")
+    projects: Mapped[list["Project"]] = relationship(
+        "Project", 
+        back_populates="user", 
+        primaryjoin="User.id == Project.user_id",
+        foreign_keys="Project.user_id"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +57,7 @@ class Project(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[str | None] = mapped_column(
-        String(255), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        String(255), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(60), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -66,7 +71,12 @@ class Project(Base):
         DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False
     )
 
-    user: Mapped["User | None"] = relationship("User", back_populates="projects", foreign_keys=[user_id])
+    user: Mapped["User | None"] = relationship(
+        "User", 
+        back_populates="projects", 
+        primaryjoin="Project.user_id == User.id",
+        foreign_keys=[user_id]
+    )
     sessions: Mapped[list["Session"]] = relationship("Session", back_populates="project")
 
 
