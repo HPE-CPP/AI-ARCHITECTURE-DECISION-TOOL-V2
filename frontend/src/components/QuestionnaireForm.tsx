@@ -105,7 +105,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       setSubmitting(true);
       setError(null);
       const provider = localStorage.getItem("llm_provider") || "ollama";
-      const result = await submitQuestionnaire(answers, provider);
+      const result = await submitQuestionnaire(answers, provider, projectId);
 
       // Notify parent of analysis ID for project tracking
       onAnalysisStart?.(result.analysis_id);

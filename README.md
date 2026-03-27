@@ -63,16 +63,46 @@ pip install -r requirements.txt
 
 ---
 
+### Configure Environment Variables
+
+Copy the `.env` file and fill in your credentials:
+
+```
+DATABASE_URL=postgresql+psycopg2://USER:PASSWORD@HOST:PORT/DATABASE
+REDIS_URL=rediss://your-host.upstash.io:6379
+REDIS_TOKEN=your-upstash-redis-token
+OPENAI_API_KEY=your-openai-api-key
+```
+
+Required services:
+- **Supabase** — PostgreSQL database (free tier works)
+- **Upstash** — Redis (free tier works)
+- **OpenAI** — API key for analysis + embeddings
+
+---
+
+### Run Database Migrations
+
+> Tables are auto-created on first startup. For future schema changes:
+
+```bash
+alembic revision --autogenerate -m "describe your change"
+alembic upgrade head
+```
+
+---
+
 ### Run Backend
 
 ```bash
-uvicorn main:app --reload
+uvicorn app.main:app --reload
 ```
 
 Backend will run on:
 
 ```
 http://127.0.0.1:8000
+API Docs: http://127.0.0.1:8000/docs
 ```
 
 ---
@@ -82,6 +112,7 @@ http://127.0.0.1:8000
 * Make sure you are using **Python 3.11**
 * Do NOT use Python 3.13 (causes dependency issues)
 * Always activate `venv` before running backend
+* Entry point changed from `main:app` to `app.main:app`
 
 ---
 
@@ -101,7 +132,7 @@ npm run dev
 ```bash
 cd backend
 venv\Scripts\activate
-uvicorn main:app --reload
+uvicorn app.main:app --reload
 ```
 
 Frontend + Backend should now be running locally.

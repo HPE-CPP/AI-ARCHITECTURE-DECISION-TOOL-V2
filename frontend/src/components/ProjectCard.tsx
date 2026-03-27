@@ -48,10 +48,10 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
   const { label, color, icon } = statusConfig[project.status];
 
   const handleCardClick = () => {
-    if (project.status === "empty") {
-      router.push(`/analyze?projectId=${project.id}`);
+    if (project.status === "completed" && project.analysis_id) {
+      router.push(`/results/${project.analysis_id}?projectId=${project.id}`);
     } else {
-      router.push(`/results/${project.analysisId}`);
+      router.push(`/projects/${project.id}/analyze`);
     }
   };
 
@@ -129,7 +129,7 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
         <div className="flex items-center justify-between mt-5 pt-4 border-t border-[color:var(--border)]">
           <span className="text-[color:var(--text-secondary)] text-xs font-medium flex items-center gap-1.5">
             <Clock size={11} />
-            {formatRelativeTime(project.updatedAt)}
+            {formatRelativeTime(project.updated_at)}
           </span>
           <motion.div
             className="flex items-center gap-1 text-xs font-bold text-[color:var(--text-secondary)] group-hover:text-[color:var(--text-primary)] transition-colors"
