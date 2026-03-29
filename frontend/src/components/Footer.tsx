@@ -10,20 +10,16 @@ export function Footer() {
     {
       title: "Navigation",
       links: [
-        { name: "Download", href: "#" },
-        { name: "Product", href: "#" },
-        { name: "Docs", href: "#" },
-        { name: "Changelog", href: "#" },
-        { name: "Press", href: "#" },
-        { name: "Releases", href: "#" },
+        { name: "Home", href: "/" },
+        { name: "Features", href: "/#features" },
+        { name: "How It Works", href: "/#how-it-works" },
       ],
     },
     {
-      title: "Resources",
+      title: "Product",
       links: [
-        { name: "Blog", href: "#" },
-        { name: "Pricing", href: "#" },
-        { name: "Use Cases", href: "#" },
+        { name: "Projects", href: "/projects" },
+        { name: "Begin Analysis", href: "/projects" },
       ],
     },
   ];
@@ -54,7 +50,7 @@ export function Footer() {
   };
 
   return (
-    <footer className="w-full min-h-screen bg-[color:var(--background)] border-t border-[color:var(--border)] overflow-hidden flex flex-col justify-between">
+    <footer className="w-full bg-[color:var(--background)] border-t border-[color:var(--border)] overflow-hidden flex flex-col justify-between">
       {/* Top Content Section */}
       <div className="w-full px-6 md:px-16 pt-24 md:pt-32">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 md:gap-20 mb-20 md:mb-32">
@@ -123,10 +119,8 @@ export function Footer() {
         </div>
 
         <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-4 text-xs font-medium text-[color:var(--text-secondary)]">
-          <Link href="#" className="hover:text-[color:var(--text-primary)] transition-colors">About ArchGuide</Link>
-          <Link href="#" className="hover:text-[color:var(--text-primary)] transition-colors">ArchGuide Products</Link>
-          <Link href="#" className="hover:text-[color:var(--text-primary)] transition-colors">Privacy</Link>
-          <Link href="#" className="hover:text-[color:var(--text-primary)] transition-colors">Terms</Link>
+          <Link href="/" className="hover:text-[color:var(--text-primary)] transition-colors">About ArchGuide</Link>
+          <Link href="/projects" className="hover:text-[color:var(--text-primary)] transition-colors">Projects</Link>
         </div>
       </div>
     </footer>
