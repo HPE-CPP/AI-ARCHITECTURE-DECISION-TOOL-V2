@@ -142,7 +142,7 @@ export async function exportAnalysis(analysisId: string): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `analysis_${analysisId}.json`;
+  a.download = `ArchGuide_Report_${analysisId}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }

@@ -6,12 +6,13 @@ import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
 from app.db.models import Session as SessionModel
 from app.services import signal_service, recommendation_service, cache_service
+from app.services.pdf_report import generate_pdf
 from app.schemas.session import AnalysisResponse, FollowUpAnswers
 from services.scoring_engine import ARCHITECTURE_DESCRIPTIONS
 from services.signal_extractor import SIGNAL_SCHEMA
@@ -91,7 +92,7 @@ def submit_followup(data: FollowUpAnswers, db: DBSession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 @router.get("/export/{session_id}")
 def export_analysis(session_id: str, db: DBSession = Depends(get_db)):
-    """Export analysis results as a JSON attachment."""
+    """Export analysis results as a PDF attachment."""
     result = None
     cached = cache_service.get_result(session_id)
     if cached:
@@ -107,9 +108,13 @@ def export_analysis(session_id: str, db: DBSession = Depends(get_db)):
     if not result:
         raise HTTPException(404, "Analysis not found")
 
-    return JSONResponse(
-        content=result,
-        headers={"Content-Disposition": f"attachment; filename=analysis_{session_id}.json"},
+    pdf_bytes = generate_pdf(result)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=ArchGuide_Report_{session_id}.pdf",
+        },
     )
 
 
