@@ -131,3 +131,11 @@ dmypy.json
 faiss_index/
 .DS_Store
 *.log
+
+venv/
+backend/venv/
+.env
+.env.*
+.claude/
+__pycache__/
+*.pyc
