@@ -58,7 +58,25 @@ def submit_questionnaire(
     answers = input_data.model_dump()
     signals = extractor.extract_from_questionnaire(answers)
 
-    trace.append({"step": "signal_extraction", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
+    extracted_count = sum(1 for s in signals.values() if s.get("value"))
+    missing_count = sum(1 for s in signals.values() if not s.get("value"))
+
+    trace.append({
+        "step": "signal_extraction",
+        "status": "complete",
+        "timestamp": datetime.utcnow().isoformat(),
+        "details": f"Extracted {extracted_count}/{len(signals)} signals",
+    })
+
+    if missing_count > 0:
+        missing_names = [k.replace("_", " ") for k, s in signals.items() if not s.get("value")]
+        trace.append({
+            "step": "missing_signals",
+            "status": "complete",
+            "timestamp": datetime.utcnow().isoformat(),
+            "details": f"{missing_count} signals missing: {', '.join(missing_names)}",
+        })
+
     trace.append({"step": "validation", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
 
     # Persist signals
