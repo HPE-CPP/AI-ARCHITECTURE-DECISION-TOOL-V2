@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    String, Text, Float, Integer, DateTime, ForeignKey, Index, Enum as SAEnum
+    String, Text, Float, Integer, Boolean, DateTime, ForeignKey, Index, Enum as SAEnum
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -132,6 +132,7 @@ class Signal(Base):
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     source_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     page_number: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     session: Mapped["Session"] = relationship("Session", back_populates="signals")
 
