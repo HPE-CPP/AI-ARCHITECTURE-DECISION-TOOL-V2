@@ -13,6 +13,8 @@ from app.db.session import get_db
 from app.db.models import Session as SessionModel
 from app.services import signal_service, recommendation_service, cache_service
 from app.services.pdf_report import generate_pdf
+from app.services.cost_analysis import generate_cost_analysis
+from app.services.cost_report_pdf import generate_cost_pdf
 from app.schemas.session import AnalysisResponse, FollowUpAnswers
 from services.scoring_engine import ARCHITECTURE_DESCRIPTIONS
 from services.signal_extractor import SIGNAL_SCHEMA
@@ -31,6 +33,9 @@ def get_analysis(session_id: str, db: DBSession = Depends(get_db)):
     # First check Redis
     cached = cache_service.get_result(session_id)
     if cached:
+        # Attach cost analysis on the fly (not stored in cache)
+        if cached.get("status") == "complete" and cached.get("recommended"):
+            cached["cost_analysis"] = generate_cost_analysis(cached)
         return cached
 
     # Check if session exists at all
@@ -55,6 +60,11 @@ def get_analysis(session_id: str, db: DBSession = Depends(get_db)):
     result = recommendation_service.get_result(db, session_id, signals)
     if not result:
         raise HTTPException(404, "Analysis result not found")
+
+    # Attach cost analysis on the fly
+    if result.get("status") == "complete" and result.get("recommended"):
+        result["cost_analysis"] = generate_cost_analysis(result)
+
     return result
 
 
@@ -84,7 +94,44 @@ def submit_followup(data: FollowUpAnswers, db: DBSession = Depends(get_db)):
         session_id=data.analysis_id,
         signals=updated_signals,
     )
+
+    # Attach cost analysis
+    if result.get("status") == "complete" and result.get("recommended"):
+        result["cost_analysis"] = generate_cost_analysis(result)
+
     return result
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/export/{session_id}/cost  (registered before the catch-all)
+# ---------------------------------------------------------------------------
+@router.get("/export/{session_id}/cost")
+def export_cost_analysis(session_id: str, db: DBSession = Depends(get_db)):
+    """Export cost analysis as a PDF attachment."""
+    result = None
+    cached = cache_service.get_result(session_id)
+    if cached:
+        result = cached
+    else:
+        try:
+            session_uuid = uuid.UUID(session_id)
+        except ValueError:
+            raise HTTPException(404, "Analysis not found")
+        signals = signal_service.get_signals(db, session_id)
+        result = recommendation_service.get_result(db, session_id, signals)
+
+    if not result:
+        raise HTTPException(404, "Analysis not found")
+
+    cost_data = generate_cost_analysis(result)
+    pdf_bytes = generate_cost_pdf(cost_data, analysis_id=session_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=ArchGuide_Cost_Analysis_{session_id}.pdf",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
