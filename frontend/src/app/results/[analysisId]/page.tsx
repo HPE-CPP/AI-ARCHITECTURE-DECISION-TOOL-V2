@@ -3,6 +3,7 @@ import React, { useEffect, useState, use, Suspense } from "react";
 import { getAnalysis, submitFollowUp, AnalysisResult } from "@/lib/api";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
+import { DecisionPipeline } from "@/components/DecisionPipeline";
 import { DecisionTrace } from "@/components/DecisionTrace";
 import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText } from "lucide-react";
 import { motion } from "framer-motion";
@@ -334,7 +335,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         </div>
 
         <div className="lg:col-span-4 w-full relative">
-          <div className="sticky top-24 w-full">
+          <div className="sticky top-24 w-full space-y-8">
+            <DecisionPipeline result={result} />
             <DecisionTrace trace={result.decision_trace || []} />
           </div>
         </div>
