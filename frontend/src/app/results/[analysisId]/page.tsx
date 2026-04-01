@@ -2,6 +2,7 @@
 import React, { useEffect, useState, use, Suspense } from "react";
 import { getAnalysis, submitFollowUp, AnalysisResult } from "@/lib/api";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
+import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionTrace } from "@/components/DecisionTrace";
 import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText } from "lucide-react";
 import { motion } from "framer-motion";
@@ -173,6 +174,11 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       </div>
 
       <ResultsDashboard result={result} />
+
+      {/* Cost Analysis Section */}
+      {result.cost_analysis && (
+        <CostAnalysis data={result.cost_analysis} analysisId={resolvedParams.analysisId} />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
         <div className="lg:col-span-8 space-y-10 min-w-0">

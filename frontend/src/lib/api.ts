@@ -33,6 +33,40 @@ export interface AnalysisResult {
   decision_trace?: TraceStep[];
   created_at?: string;
   error?: string;
+  cost_analysis?: CostAnalysisData;
+}
+
+export interface CostBreakdownItem {
+  label: string;
+  monthly: [number, number];
+}
+
+export interface ArchitectureCost {
+  full_name: string;
+  is_recommended: boolean;
+  suitability_score: number;
+  breakdown: Record<string, CostBreakdownItem>;
+  monthly_total: [number, number];
+  setup_cost: [number, number];
+  annual_total: [number, number];
+  cost_per_query: [number, number];
+}
+
+export interface CostAnalysisData {
+  architectures: Record<string, ArchitectureCost>;
+  summary: {
+    recommended: string;
+    recommended_name: string;
+    cheapest: string;
+    cheapest_name: string;
+    most_expensive: string;
+    most_expensive_name: string;
+    best_value: string;
+    best_value_name: string;
+    efficiency_scores: Record<string, number>;
+  };
+  cost_recommendations: string[];
+  parameters_used: Record<string, string>;
 }
 
 export interface FollowUpQuestion {
@@ -143,6 +177,18 @@ export async function exportAnalysis(analysisId: string): Promise<void> {
   const a = document.createElement("a");
   a.href = url;
   a.download = `ArchGuide_Report_${analysisId}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportCostAnalysis(analysisId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/export/${analysisId}/cost`);
+  if (!res.ok) throw new Error("Cost analysis export failed");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ArchGuide_Cost_Analysis_${analysisId}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }
