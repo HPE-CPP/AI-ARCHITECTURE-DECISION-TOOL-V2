@@ -5,7 +5,7 @@ import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionPipeline } from "@/components/DecisionPipeline";
 import { DecisionTrace } from "@/components/DecisionTrace";
-import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText } from "lucide-react";
+import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject } from "@/lib/projects-store";
@@ -189,59 +189,110 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
             animate={{ opacity: 1, y: 0 }}
             className="glass-panel p-6 sm:p-8 rounded-[2rem] overflow-hidden w-full shadow-sm"
           >
-            <h3 className="text-2xl font-bold mb-6 tracking-tight flex items-center gap-3">
+            <h3 className="text-2xl font-bold mb-2 tracking-tight flex items-center gap-3">
               <span className="p-2 rounded-xl bg-[color:var(--text-primary)] text-[color:var(--background)]">
                 <Search size={20} />
               </span>
               Extracted Signals
             </h3>
+            <p className="text-sm text-[color:var(--text-secondary)] mb-6 font-medium">
+              Each signal is traced back to its source in the document to prevent hallucination.
+            </p>
 
-            <div className="w-full overflow-x-auto rounded-xl border border-[color:var(--border)]">
-              <table className="w-full text-left border-collapse min-w-[600px]">
-                <thead className="bg-[color:var(--surface)]">
-                  <tr className="border-b border-[color:var(--border)] text-[color:var(--text-secondary)] text-xs sm:text-sm uppercase tracking-wider">
-                    <th className="py-4 px-4 sm:px-6 font-bold">Signal</th>
-                    <th className="py-4 px-4 sm:px-6 font-bold">Value</th>
-                    <th className="py-4 px-4 sm:px-6 font-bold min-w-[150px]">Confidence</th>
-                    <th className="py-4 px-4 sm:px-6 font-bold">Source Context</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-[color:var(--background)]">
-                  {Object.entries(result.signals || {}).map(([key, sig]) => (
-                    <tr key={key} className={`border-b border-[color:var(--border)]/50 transition-colors group ${!sig.value ? "bg-red-500/5 hover:bg-red-500/10" : "hover:bg-[color:var(--surface)]"}`}>
-                      <td className="py-4 px-4 sm:px-6 font-bold text-xs sm:text-sm uppercase tracking-widest text-[color:var(--text-secondary)]">
+            <div className="space-y-4">
+              {Object.entries(result.signals || {}).map(([key, sig]) => {
+                const isMissing = !sig.value;
+                const isVerified = sig.source_verified === true;
+                const hasSource = !!sig.source_text;
+
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-2xl border transition-colors ${
+                      isMissing
+                        ? "border-red-500/20 bg-red-500/5"
+                        : "border-[color:var(--border)] bg-[color:var(--surface)] hover:border-[color:var(--text-secondary)]/30"
+                    }`}
+                  >
+                    {/* Signal header row */}
+                    <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+                      {/* Signal name */}
+                      <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[color:var(--text-secondary)] min-w-[140px]">
                         {key.replace(/_/g, " ")}
-                      </td>
-                      <td className="py-4 px-4 sm:px-6 font-bold text-sm">
-                        {sig.value ? (
-                          <span className="text-[color:var(--text-primary)]">{sig.value.replace(/_/g, " ")}</span>
-                        ) : (
-                          <span className="text-red-500 flex items-center gap-1 text-xs"><AlertCircle size={14} /> MISSING</span>
-                        )}
-                      </td>
-                      <td className="py-4 px-4 sm:px-6">
-                        {sig.value && (
-                          <div className="flex items-center gap-3">
-                            <div className="text-xs font-bold w-8 text-right">{(sig.confidence * 100).toFixed(0)}%</div>
-                            <div className="flex-1 h-1.5 rounded-full bg-[color:var(--surface)] border border-[color:var(--border)] overflow-hidden">
-                              <div className={`h-full rounded-full ${sig.confidence > 0.7 ? "bg-emerald-500" : sig.confidence > 0.4 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${sig.confidence * 100}%` }} />
+                      </span>
+
+                      {/* Value badge */}
+                      {sig.value ? (
+                        <span className="px-3 py-1 rounded-lg bg-[color:var(--background)] border border-[color:var(--border)] text-sm font-bold text-[color:var(--text-primary)]">
+                          {sig.value.replace(/_/g, " ")}
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-bold text-red-500 flex items-center gap-1">
+                          <AlertCircle size={12} /> MISSING
+                        </span>
+                      )}
+
+                      {/* Confidence bar */}
+                      {sig.value && (
+                        <div className="flex items-center gap-2 ml-auto">
+                          <div className="text-xs font-bold text-[color:var(--text-secondary)]">
+                            {(sig.confidence * 100).toFixed(0)}%
+                          </div>
+                          <div className="w-20 h-1.5 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                sig.confidence > 0.7
+                                  ? "bg-emerald-500"
+                                  : sig.confidence > 0.4
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
+                              }`}
+                              style={{ width: `${sig.confidence * 100}%` }}
+                            />
+                          </div>
+
+                          {/* Verification badge */}
+                          {hasSource && (
+                            isVerified ? (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase" title="Source verified in document">
+                                <ShieldCheck size={10} /> Verified
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase" title="Source could not be exactly matched in document">
+                                <ShieldAlert size={10} /> Unverified
+                              </span>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Source traceability section */}
+                    {hasSource && (
+                      <div className="px-5 pb-4">
+                        <div className="rounded-xl bg-[color:var(--background)] border border-[color:var(--border)] p-4">
+                          <div className="flex items-start gap-3">
+                            <BookOpen size={14} className="text-[color:var(--text-secondary)] shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-[color:var(--text-secondary)] uppercase tracking-wider mb-1.5">
+                                Source
+                                {sig.page_number > 0 && (
+                                  <span className="ml-2 px-1.5 py-0.5 rounded bg-[color:var(--surface)] border border-[color:var(--border)] text-[10px] font-bold normal-case">
+                                    Page {sig.page_number}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-[color:var(--text-primary)] italic leading-relaxed break-words select-text">
+                                &ldquo;{sig.source_text}&rdquo;
+                              </p>
                             </div>
                           </div>
-                        )}
-                      </td>
-                      <td className="py-4 px-4 sm:px-6">
-                        {sig.source_text ? (
-                          <div className="text-xs text-[color:var(--text-secondary)] italic max-w-[200px] xl:max-w-xs truncate cursor-help group-hover:text-[color:var(--text-primary)] transition-colors relative" title={sig.source_text}>
-                            "{sig.source_text}"
-                          </div>
-                        ) : (
-                          <span className="text-xs text-[color:var(--text-muted)]">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
 
