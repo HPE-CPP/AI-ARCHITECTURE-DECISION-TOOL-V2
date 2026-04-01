@@ -28,6 +28,7 @@ def _signals_to_db(db: DBSession, session_id_str: str, signals: dict) -> None:
             confidence=float(data.get("confidence", 0.0)),
             source_text=str(data.get("source_text", ""))[:2000],
             page_number=int(data.get("page_number", 0)),
+            source_verified=bool(data.get("source_verified", False)),
         )
         db.add(row)
     db.commit()
@@ -45,6 +46,7 @@ def _signals_from_db(db: DBSession, session_id_str: str) -> dict:
             "confidence": row.confidence,
             "source_text": row.source_text,
             "page_number": row.page_number,
+            "source_verified": getattr(row, "source_verified", False),
         }
     return signals
 
@@ -140,6 +142,7 @@ def update_signals(db: DBSession, session_id: str, updates: dict[str, str]) -> d
             confidence=1.0,
             source_text="Follow-up answer from user",
             page_number=0,
+            source_verified=True,
         ))
     db.commit()
 

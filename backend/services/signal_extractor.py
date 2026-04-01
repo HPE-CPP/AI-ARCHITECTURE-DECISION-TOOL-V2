@@ -59,20 +59,21 @@ SIGNAL_SCHEMA = {
 EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Analyze the following document text and extract architecture decision signals.
 
 For each signal, provide:
-- value: the extracted value (use the provided options, or null if not found)
+- value: the extracted value (MUST be one of the listed options, or null if not found)
 - confidence: 0.0 to 1.0 (0 if not found, higher if explicitly stated)
-- source_text: the exact quote from the document that supports this value (empty string if not found)
-- page_number: the page number where the signal was found (0 if not found)
+- source_text: a VERBATIM quote copied exactly from the document that supports this value. Do NOT paraphrase, summarize, or rephrase. Copy the exact sentence or phrase as it appears in the document. If not found, use an empty string.
+- page_number: the page number where the source_text appears (0 if not found)
 
 CRITICAL RULES:
 1. DO NOT hallucinate. If a signal is not mentioned in the document, set value to null and confidence to 0.
 2. Only extract what is explicitly stated or strongly implied.
-3. Confidence levels:
+3. source_text MUST be a word-for-word copy from the document. Every word in your source_text must appear consecutively in the document. If you cannot find an exact quote, set source_text to "" and confidence to 0.
+4. Confidence levels:
    - 0.0: Not found at all
    - 0.1-0.3: Weakly implied
    - 0.4-0.6: Moderately implied
    - 0.7-0.8: Strongly implied
-   - 0.9-1.0: Explicitly stated
+   - 0.9-1.0: Explicitly stated with a verbatim source quote
 
 SIGNALS TO EXTRACT:
 1. dataset_size: (small/medium/large/very_large) - Volume of data
@@ -115,7 +116,10 @@ class SignalExtractor:
         truncated_text = full_text[:8000] if len(full_text) > 8000 else full_text
         llm_signals = await self._llm_extraction(truncated_text)
 
-        # Step 3: Merge and validate
+        # Step 3: Verify LLM source_text against the actual document
+        llm_signals = self._verify_sources(llm_signals, full_text, pages)
+
+        # Step 4: Merge and validate
         merged = self._merge_signals(keyword_signals, llm_signals)
 
         return merged
@@ -130,6 +134,7 @@ class SignalExtractor:
                     "confidence": 1.0,
                     "source_text": "User questionnaire response",
                     "page_number": 0,
+                    "source_verified": True,
                 }
             else:
                 signals[key] = {
@@ -137,6 +142,7 @@ class SignalExtractor:
                     "confidence": 0.0,
                     "source_text": "",
                     "page_number": 0,
+                    "source_verified": False,
                 }
         return signals
 
@@ -221,8 +227,95 @@ class SignalExtractor:
             logger.error(f"LLM extraction failed: {e}")
             return self._empty_signals()
 
+    def _verify_sources(
+        self, signals: dict[str, dict], full_text: str, pages: list[dict]
+    ) -> dict[str, dict]:
+        """
+        Verify each LLM-provided source_text actually appears in the document.
+        If not, attempt a fuzzy recovery. If that fails too, penalise confidence
+        and flag the source as unverified.
+        """
+        text_lower = full_text.lower()
+
+        for key, sig in signals.items():
+            src = sig.get("source_text", "").strip()
+            if not src:
+                sig["source_verified"] = False
+                continue
+
+            # Exact substring check (case-insensitive)
+            if src.lower() in text_lower:
+                sig["source_verified"] = True
+                # Fix page_number if it was wrong or 0
+                if not sig.get("page_number"):
+                    sig["page_number"] = self._find_page_for_text(src, pages)
+                continue
+
+            # Fuzzy recovery: try the longest contiguous overlap (≥60% of words)
+            recovered = self._fuzzy_find_source(src, full_text)
+            if recovered:
+                sig["source_text"] = recovered
+                sig["source_verified"] = True
+                sig["page_number"] = self._find_page_for_text(recovered, pages)
+                continue
+
+            # Source text could not be verified — likely hallucinated quote
+            logger.warning(
+                "Source text for signal '%s' could not be verified in document, "
+                "penalising confidence: %.2f -> %.2f",
+                key, sig.get("confidence", 0), sig.get("confidence", 0) * 0.5,
+            )
+            sig["source_verified"] = False
+            sig["confidence"] = round(sig.get("confidence", 0) * 0.5, 2)
+
+        return signals
+
+    @staticmethod
+    def _fuzzy_find_source(claimed: str, full_text: str, min_word_ratio: float = 0.6) -> str | None:
+        """
+        Try to locate a substring in the document that contains at least
+        `min_word_ratio` of the words in the claimed source text, in the
+        same order.  Returns the recovered substring or None.
+        """
+        claimed_words = claimed.lower().split()
+        if len(claimed_words) < 3:
+            return None
+
+        text_lower = full_text.lower()
+
+        # Try progressively shorter leading word sequences
+        for start_len in range(len(claimed_words), max(2, int(len(claimed_words) * min_word_ratio)) - 1, -1):
+            fragment = " ".join(claimed_words[:start_len])
+            idx = text_lower.find(fragment)
+            if idx != -1:
+                # Expand to sentence boundaries
+                sent_start = max(0, full_text.rfind(".", 0, idx) + 1)
+                sent_end = full_text.find(".", idx + len(fragment))
+                if sent_end == -1:
+                    sent_end = min(len(full_text), idx + len(fragment) + 100)
+                else:
+                    sent_end += 1  # include the period
+                return full_text[sent_start:sent_end].strip()
+
+        return None
+
+    @staticmethod
+    def _find_page_for_text(text: str, pages: list[dict]) -> int:
+        """Return the 1-indexed page number that contains `text`."""
+        if not text or not pages:
+            return 0
+        text_lower = text.lower()[:120]  # use first 120 chars for matching
+        for page in pages:
+            if text_lower in page.get("text", "").lower():
+                return page.get("page_number", 0)
+        return 0
+
     def _merge_signals(self, keyword_signals: dict, llm_signals: dict) -> dict[str, dict]:
-        """Merge keyword and LLM signals. LLM takes precedence for values, combined confidence."""
+        """
+        Merge keyword and LLM signals.
+        LLM takes precedence for values; source_text uses the verified source,
+        falling back to keyword source when the LLM source failed verification.
+        """
         merged = {}
         for key in SIGNAL_SCHEMA:
             kw = keyword_signals.get(key, {})
@@ -239,11 +332,28 @@ class SignalExtractor:
             else:
                 combined_conf = max(kw_conf, llm_conf)
 
+            # Source selection: prefer verified LLM source, else keyword source
+            llm_src = llm.get("source_text", "")
+            llm_verified = llm.get("source_verified", False)
+            kw_src = kw.get("source_text", "")
+
+            if llm_src and llm_verified:
+                source_text = llm_src
+                page_number = llm.get("page_number") or kw.get("page_number", 0)
+            elif kw_src:
+                # Keyword source is always from the document, so it's reliable
+                source_text = kw_src
+                page_number = kw.get("page_number", 0)
+            else:
+                source_text = llm_src  # unverified, but better than nothing
+                page_number = llm.get("page_number") or 0
+
             merged[key] = {
                 "value": value,
                 "confidence": round(combined_conf, 2),
-                "source_text": llm.get("source_text") or kw.get("source_text", ""),
-                "page_number": llm.get("page_number") or kw.get("page_number", 0),
+                "source_text": source_text,
+                "source_verified": bool(llm_verified or (kw_src and source_text == kw_src)),
+                "page_number": page_number,
             }
 
             # Anti-hallucination: null out low-confidence values

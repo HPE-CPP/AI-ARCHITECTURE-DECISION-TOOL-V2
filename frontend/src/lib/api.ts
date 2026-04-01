@@ -5,6 +5,7 @@ export interface Signal {
   confidence: number;
   source_text: string;
   page_number: number;
+  source_verified?: boolean;
 }
 
 export interface Signals {
