@@ -320,18 +320,8 @@ def generate_pdf(result: dict) -> bytes:
     # EXTRACTED SIGNALS
     # ===================================================================
     if signals:
-        _section(pdf, "Extracted Signals")
+        _section(pdf, "Extracted Signals — Source Traceability")
 
-        # Table header
-        pdf.set_fill_color(*_CLR_PRIMARY)
-        pdf.set_font("Helvetica", "B", 8.5)
-        pdf.set_text_color(*_CLR_WHITE)
-        pdf.cell(50, 7, "  Signal", border=0, fill=True)
-        pdf.cell(30, 7, "Value", border=0, fill=True, align="C")
-        pdf.cell(22, 7, "Confidence", border=0, fill=True, align="C")
-        pdf.cell(88, 7, "  Source Text", border=0, fill=True, ln=True)
-
-        row_i = 0
         for key, sig in signals.items():
             if not isinstance(sig, dict):
                 continue
@@ -339,20 +329,46 @@ def generate_pdf(result: dict) -> bytes:
             val = _safe(sig.get("value"))
             conf_val = sig.get("confidence", 0)
             conf = f"{conf_val:.0%}"
-            src = _safe(sig.get("source_text", ""))[:70]
+            src = _safe(sig.get("source_text", ""))
+            page_num = sig.get("page_number", 0)
+            verified = sig.get("source_verified", False)
 
-            # Alternating rows
-            if row_i % 2 == 0:
-                pdf.set_fill_color(*_CLR_BG_ROW)
+            y = pdf.get_y()
+            # Check if we need a new page
+            if y > 255:
+                pdf.add_page()
+                y = pdf.get_y()
+
+            # Signal card background
+            card_h = 14 + (6 if src else 0) + (min(3, max(1, len(src) // 90)) * 4 if src else 0)
+            pdf.set_fill_color(*_CLR_BG_LIGHT)
+            pdf.rect(10, y, 190, card_h, 'F')
+
+            # Left accent bar — green if verified, amber if unverified, red if missing
+            if not val or val == "N/A":
+                pdf.set_fill_color(*_CLR_WARN)
+            elif verified:
+                pdf.set_fill_color(*_CLR_ACCENT)
             else:
-                pdf.set_fill_color(*_CLR_WHITE)
+                pdf.set_fill_color(*_CLR_ORANGE)
+            pdf.rect(10, y, 3, card_h, 'F')
 
-            pdf.set_font("Helvetica", "", 8.5)
+            # Signal name
+            pdf.set_xy(16, y + 1)
+            pdf.set_font("Helvetica", "B", 9)
             pdf.set_text_color(*_CLR_DARK)
-            pdf.cell(50, 6, f"  {label[:28]}", border=0, fill=True)
-            pdf.cell(30, 6, val[:18], border=0, fill=True, align="C")
+            pdf.cell(50, 5, label)
 
-            # Colour-code confidence
+            # Value badge
+            pdf.set_font("Helvetica", "B", 9)
+            if val and val != "N/A":
+                pdf.set_text_color(*_CLR_PRIMARY)
+                pdf.cell(30, 5, _s(val.replace("_", " ")))
+            else:
+                pdf.set_text_color(*_CLR_WARN)
+                pdf.cell(30, 5, "MISSING")
+
+            # Confidence
             if conf_val >= 0.8:
                 pdf.set_text_color(*_CLR_ACCENT)
             elif conf_val >= 0.5:
@@ -360,14 +376,37 @@ def generate_pdf(result: dict) -> bytes:
             else:
                 pdf.set_text_color(*_CLR_WARN)
             pdf.set_font("Helvetica", "B", 8.5)
-            pdf.cell(22, 6, conf, border=0, fill=True, align="C")
+            pdf.cell(18, 5, conf, align="C")
 
-            pdf.set_text_color(*_CLR_MID)
-            pdf.set_font("Helvetica", "", 7.5)
-            pdf.cell(88, 6, f"  {src}", border=0, fill=True, ln=True)
-            row_i += 1
+            # Page number
+            if page_num > 0:
+                pdf.set_text_color(*_CLR_LIGHT)
+                pdf.set_font("Helvetica", "", 7.5)
+                pdf.cell(18, 5, f"Page {page_num}", align="C")
+            else:
+                pdf.cell(18, 5, "")
 
-        pdf.ln(4)
+            # Verification status
+            if src:
+                if verified:
+                    pdf.set_text_color(*_CLR_ACCENT)
+                    pdf.set_font("Helvetica", "B", 7)
+                    pdf.cell(30, 5, "VERIFIED", align="R")
+                else:
+                    pdf.set_text_color(*_CLR_ORANGE)
+                    pdf.set_font("Helvetica", "B", 7)
+                    pdf.cell(30, 5, "UNVERIFIED", align="R")
+
+            # Source text on next line
+            if src:
+                pdf.set_xy(16, y + 7)
+                pdf.set_font("Helvetica", "I", 7.5)
+                pdf.set_text_color(*_CLR_MID)
+                pdf.multi_cell(180, 3.5, f'"{src[:250]}"')
+
+            pdf.set_y(y + card_h + 2)
+
+        pdf.ln(2)
 
     # ===================================================================
     # FACTOR BREAKDOWN TABLE
