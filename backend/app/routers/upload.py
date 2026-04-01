@@ -117,8 +117,19 @@ async def upload_document(
             provider=provider,
         )
         extracted_count = sum(1 for s in signals.values() if s.get("value"))
+        missing_count = sum(1 for s in signals.values() if not s.get("value"))
         trace[-1]["status"] = "complete"
         trace[-1]["details"] = f"Extracted {extracted_count}/10 signals"
+
+        # Stage 4b: Report missing signals
+        if missing_count > 0:
+            missing_names = [k.replace("_", " ") for k, s in signals.items() if not s.get("value")]
+            trace.append({
+                "step": "missing_signals",
+                "status": "complete",
+                "timestamp": datetime.utcnow().isoformat(),
+                "details": f"{missing_count} signals missing: {', '.join(missing_names)}",
+            })
 
         # Stage 5: Sensitivity analysis is embedded inside scoring
         trace.append({"step": "scoring", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
