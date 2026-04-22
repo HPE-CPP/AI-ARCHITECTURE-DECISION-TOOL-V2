@@ -1,3 +1,4 @@
+
 """
 Generates an extremely detailed PDF report describing the AI Architecture
 Decision Tool project: tech stack, feature deep-dives, and mentor-worthy doubts.
