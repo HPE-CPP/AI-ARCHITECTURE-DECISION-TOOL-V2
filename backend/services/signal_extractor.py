@@ -1,18 +1,36 @@
 """
 Signal Extraction Service
 Extracts architecture decision signals from document text using LLM + heuristics.
-Outputs strict schema with confidence scores.
+
+Optimizations applied:
+  - Page relevance scoring: only pages containing signal keywords are sent to the LLM.
+  - Smart context selection: relevant pages are selected (not a blind head-truncation).
+  - Parallel chunk extraction: large documents are split into overlapping chunks and
+    analysed concurrently with asyncio.gather; highest-confidence signal per chunk wins.
+  - In-memory extraction cache: SHA-256 keyed, TTL 1 h — skips LLM entirely on re-upload.
+  - Keyword pre-extraction still runs (zero LLM cost) and boosts final confidence.
 """
+import asyncio
 import json
 import logging
 import re
 from typing import Optional, Any
 
 from services.llm_client import LLMClient
+from services.extraction_cache import extraction_cache
+from services.document_parser import (
+    get_relevant_pages,
+    register_signal_keywords,
+)
 
 logger = logging.getLogger(__name__)
 
-# The 10 core signals we extract
+# ── Tunables ─────────────────────────────────────────────────────────────────
+MAX_CONTEXT_CHARS = 8_000   # single-call limit; fits comfortably in 4k-token models
+CHUNK_SIZE        = 5_000   # chars per chunk when splitting large docs
+CHUNK_OVERLAP     = 500     # overlap so signals spanning chunk boundaries are caught
+# ─────────────────────────────────────────────────────────────────────────────
+
 SIGNAL_SCHEMA = {
     "dataset_size": {
         "description": "Volume of data (small/medium/large/very_large)",
@@ -56,6 +74,12 @@ SIGNAL_SCHEMA = {
     },
 }
 
+# Flat keyword set — registered with document_parser so it can score pages
+_ALL_KEYWORDS: frozenset[str] = frozenset(
+    kw for schema in SIGNAL_SCHEMA.values() for kw in schema["keywords"]
+)
+register_signal_keywords(_ALL_KEYWORDS)
+
 EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Analyze the following document text and extract architecture decision signals.
 
 For each signal, provide:
@@ -93,6 +117,19 @@ DOCUMENT TEXT:
 Respond with a JSON object with signal names as keys, each containing: value, confidence, source_text, page_number.
 """
 
+SIGNAL_OPTIONS = {
+    "dataset_size": ["small", "medium", "large", "very_large"],
+    "query_volume": ["low", "medium", "high", "very_high"],
+    "latency_requirement": ["relaxed", "moderate", "strict", "ultra_low"],
+    "data_volatility": ["static", "low", "moderate", "high"],
+    "accuracy_requirement": ["moderate", "high", "very_high", "critical"],
+    "domain_specificity": ["general", "moderate", "specialized", "highly_specialized"],
+    "security_level": ["standard", "elevated", "high", "critical"],
+    "cost_sensitivity": ["low", "moderate", "high", "very_high"],
+    "deployment_preference": ["cloud", "on_premise", "hybrid", "edge"],
+    "user_scale": ["small", "medium", "large", "enterprise"],
+}
+
 
 class SignalExtractor:
     """Extracts architecture decision signals from document text."""
@@ -100,27 +137,49 @@ class SignalExtractor:
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
 
+    # ── Public API ────────────────────────────────────────────────────────────
+
     async def extract_signals(self, document_data: dict) -> dict[str, dict]:
-        """Extract signals from parsed document data."""
+        """Extract signals with page filtering, caching, and parallel chunk analysis."""
         full_text = document_data.get("full_text", "")
         pages = document_data.get("pages", [])
 
         if not full_text.strip():
             return self._empty_signals()
 
-        # Step 1: Keyword-based pre-extraction
+        # ── 1. Cache check ────────────────────────────────────────────────────
+        cached = extraction_cache.get(full_text)
+        if cached is not None:
+            return cached
+
+        # ── 2. Keyword pre-extraction (zero LLM cost) ─────────────────────────
         keyword_signals = self._keyword_extraction(full_text, pages)
 
-        # Step 2: LLM-based extraction
-        # Truncate text if too long (keep first 8000 chars for LLM context)
-        truncated_text = full_text[:8000] if len(full_text) > 8000 else full_text
-        llm_signals = await self._llm_extraction(truncated_text)
+        # ── 3. Page filtering: skip pages with no signal keywords ─────────────
+        relevant_pages = get_relevant_pages(pages, min_score=1)
+        logger.info(
+            "Page filtering: %d/%d pages selected as relevant",
+            len(relevant_pages), len(pages),
+        )
 
-        # Step 3: Verify LLM source_text against the actual document
+        # ── 4. Build context from relevant pages (document order preserved) ────
+        context = self._build_context(relevant_pages)
+
+        # ── 5. LLM extraction — single call or parallel chunks ─────────────────
+        if len(context) <= MAX_CONTEXT_CHARS:
+            llm_signals = await self._llm_extraction(context)
+            logger.info("Single-call extraction (%d chars)", len(context))
+        else:
+            llm_signals = await self._parallel_chunk_extraction(context)
+
+        # ── 6. Source verification ─────────────────────────────────────────────
         llm_signals = self._verify_sources(llm_signals, full_text, pages)
 
-        # Step 4: Merge and validate
+        # ── 7. Merge keyword + LLM results ─────────────────────────────────────
         merged = self._merge_signals(keyword_signals, llm_signals)
+
+        # ── 8. Cache result ────────────────────────────────────────────────────
+        extraction_cache.set(full_text, merged)
 
         return merged
 
@@ -146,64 +205,40 @@ class SignalExtractor:
                 }
         return signals
 
-    def _keyword_extraction(self, text: str, pages: list[dict]) -> dict[str, dict]:
-        """Extract signals using keyword matching."""
-        signals = {}
-        text_lower = text.lower()
+    # ── Context helpers ───────────────────────────────────────────────────────
 
-        for signal_name, schema in SIGNAL_SCHEMA.items():
-            matches = []
-            for keyword in schema["keywords"]:
-                if keyword in text_lower:
-                    # Find the sentence containing the keyword
-                    idx = text_lower.index(keyword)
-                    start = max(0, text.rfind(".", 0, idx) + 1)
-                    end = text.find(".", idx)
-                    if end == -1:
-                        end = min(len(text), idx + 200)
-                    source = text[start:end].strip()
-                    matches.append({
-                        "keyword": keyword,
-                        "source_text": source,
-                    })
+    @staticmethod
+    def _build_context(pages: list[dict]) -> str:
+        """Concatenate relevant page texts with page-number headers."""
+        parts = []
+        for p in pages:
+            text = p.get("text", "").strip()
+            if text:
+                parts.append(f"[Page {p.get('page_number', '?')}]\n{text}")
+        return "\n\n".join(parts)
 
-            if matches:
-                # Find page number
-                page_num = 0
-                for page in pages:
-                    if matches[0]["keyword"] in page.get("text", "").lower():
-                        page_num = page.get("page_number", 0)
-                        break
+    @staticmethod
+    def _make_chunks(text: str) -> list[str]:
+        """Split text into overlapping chunks of CHUNK_SIZE chars."""
+        chunks = []
+        start = 0
+        while start < len(text):
+            chunks.append(text[start : start + CHUNK_SIZE])
+            start += CHUNK_SIZE - CHUNK_OVERLAP
+        return chunks
 
-                signals[signal_name] = {
-                    "value": None,  # Keywords alone can't determine value
-                    "confidence": min(0.3, len(matches) * 0.1),
-                    "source_text": matches[0]["source_text"][:200],
-                    "page_number": page_num,
-                    "keyword_matches": len(matches),
-                }
-            else:
-                signals[signal_name] = {
-                    "value": None,
-                    "confidence": 0.0,
-                    "source_text": "",
-                    "page_number": 0,
-                    "keyword_matches": 0,
-                }
-
-        return signals
+    # ── LLM extraction ────────────────────────────────────────────────────────
 
     async def _llm_extraction(self, text: str) -> dict[str, dict]:
-        """Use LLM to extract signals from text."""
+        """Single LLM call for signal extraction."""
         try:
             prompt = EXTRACTION_PROMPT.format(document_text=text)
             result = await self.llm.generate_json(prompt=prompt)
 
             if "error" in result:
-                logger.warning("LLM extraction returned error, falling back to empty signals")
+                logger.warning("LLM extraction returned error, using empty signals")
                 return self._empty_signals()
 
-            # Validate and normalize each signal
             validated: dict[str, dict] = {}
             for key in SIGNAL_SCHEMA:
                 if key in result and isinstance(result[key], dict):
@@ -224,16 +259,85 @@ class SignalExtractor:
             return validated
 
         except Exception as e:
-            logger.error(f"LLM extraction failed: {e}")
+            logger.error("LLM extraction failed: %s", e)
             return self._empty_signals()
+
+    async def _parallel_chunk_extraction(self, text: str) -> dict[str, dict]:
+        """
+        For large documents: split into overlapping chunks, extract from all chunks
+        concurrently, then keep the highest-confidence signal from any chunk.
+        """
+        chunks = self._make_chunks(text)
+        logger.info("Parallel extraction: %d chunks (~%d chars each)", len(chunks), CHUNK_SIZE)
+
+        results = await asyncio.gather(
+            *[self._llm_extraction(chunk) for chunk in chunks],
+            return_exceptions=False,
+        )
+
+        # Winner-takes-all per signal: highest confidence across chunks
+        merged: dict[str, dict] = self._empty_signals()
+        for chunk_result in results:
+            for key, sig in chunk_result.items():
+                if sig.get("confidence", 0) > merged[key].get("confidence", 0):
+                    merged[key] = sig
+
+        return merged
+
+    # ── Keyword extraction ────────────────────────────────────────────────────
+
+    def _keyword_extraction(self, text: str, pages: list[dict]) -> dict[str, dict]:
+        """Fast keyword scan — no LLM cost, provides fallback source_text."""
+        signals = {}
+        text_lower = text.lower()
+
+        for signal_name, schema in SIGNAL_SCHEMA.items():
+            matches = []
+            for keyword in schema["keywords"]:
+                if keyword in text_lower:
+                    idx = text_lower.index(keyword)
+                    start = max(0, text.rfind(".", 0, idx) + 1)
+                    end = text.find(".", idx)
+                    if end == -1:
+                        end = min(len(text), idx + 200)
+                    matches.append({
+                        "keyword": keyword,
+                        "source_text": text[start:end].strip(),
+                    })
+
+            if matches:
+                page_num = 0
+                for page in pages:
+                    if matches[0]["keyword"] in page.get("text", "").lower():
+                        page_num = page.get("page_number", 0)
+                        break
+
+                signals[signal_name] = {
+                    "value": None,
+                    "confidence": min(0.3, len(matches) * 0.1),
+                    "source_text": matches[0]["source_text"][:200],
+                    "page_number": page_num,
+                    "keyword_matches": len(matches),
+                }
+            else:
+                signals[signal_name] = {
+                    "value": None,
+                    "confidence": 0.0,
+                    "source_text": "",
+                    "page_number": 0,
+                    "keyword_matches": 0,
+                }
+
+        return signals
+
+    # ── Source verification ───────────────────────────────────────────────────
 
     def _verify_sources(
         self, signals: dict[str, dict], full_text: str, pages: list[dict]
     ) -> dict[str, dict]:
         """
         Verify each LLM-provided source_text actually appears in the document.
-        If not, attempt a fuzzy recovery. If that fails too, penalise confidence
-        and flag the source as unverified.
+        Falls back to fuzzy recovery; penalises confidence on failure.
         """
         text_lower = full_text.lower()
 
@@ -243,15 +347,12 @@ class SignalExtractor:
                 sig["source_verified"] = False
                 continue
 
-            # Exact substring check (case-insensitive)
             if src.lower() in text_lower:
                 sig["source_verified"] = True
-                # Fix page_number if it was wrong or 0
                 if not sig.get("page_number"):
                     sig["page_number"] = self._find_page_for_text(src, pages)
                 continue
 
-            # Fuzzy recovery: try the longest contiguous overlap (≥60% of words)
             recovered = self._fuzzy_find_source(src, full_text)
             if recovered:
                 sig["source_text"] = recovered
@@ -259,10 +360,8 @@ class SignalExtractor:
                 sig["page_number"] = self._find_page_for_text(recovered, pages)
                 continue
 
-            # Source text could not be verified — likely hallucinated quote
             logger.warning(
-                "Source text for signal '%s' could not be verified in document, "
-                "penalising confidence: %.2f -> %.2f",
+                "Source for '%s' not verified — penalising confidence %.2f → %.2f",
                 key, sig.get("confidence", 0), sig.get("confidence", 0) * 0.5,
             )
             sig["source_verified"] = False
@@ -272,67 +371,55 @@ class SignalExtractor:
 
     @staticmethod
     def _fuzzy_find_source(claimed: str, full_text: str, min_word_ratio: float = 0.6) -> str | None:
-        """
-        Try to locate a substring in the document that contains at least
-        `min_word_ratio` of the words in the claimed source text, in the
-        same order.  Returns the recovered substring or None.
-        """
         claimed_words = claimed.lower().split()
         if len(claimed_words) < 3:
             return None
-
         text_lower = full_text.lower()
-
-        # Try progressively shorter leading word sequences
         for start_len in range(len(claimed_words), max(2, int(len(claimed_words) * min_word_ratio)) - 1, -1):
             fragment = " ".join(claimed_words[:start_len])
             idx = text_lower.find(fragment)
             if idx != -1:
-                # Expand to sentence boundaries
                 sent_start = max(0, full_text.rfind(".", 0, idx) + 1)
                 sent_end = full_text.find(".", idx + len(fragment))
                 if sent_end == -1:
                     sent_end = min(len(full_text), idx + len(fragment) + 100)
                 else:
-                    sent_end += 1  # include the period
+                    sent_end += 1
                 return full_text[sent_start:sent_end].strip()
-
         return None
 
     @staticmethod
     def _find_page_for_text(text: str, pages: list[dict]) -> int:
-        """Return the 1-indexed page number that contains `text`."""
         if not text or not pages:
             return 0
-        text_lower = text.lower()[:120]  # use first 120 chars for matching
+        text_lower = text.lower()[:120]
         for page in pages:
             if text_lower in page.get("text", "").lower():
                 return page.get("page_number", 0)
         return 0
 
+    # ── Signal merging ────────────────────────────────────────────────────────
+
     def _merge_signals(self, keyword_signals: dict, llm_signals: dict) -> dict[str, dict]:
         """
         Merge keyword and LLM signals.
-        LLM takes precedence for values; source_text uses the verified source,
-        falling back to keyword source when the LLM source failed verification.
+        LLM value takes precedence; confidence is boosted when both agree.
+        Source falls back to keyword when LLM source fails verification.
         """
         merged = {}
         for key in SIGNAL_SCHEMA:
             kw = keyword_signals.get(key, {})
             llm = llm_signals.get(key, {})
 
-            # LLM value takes precedence
             value = llm.get("value") if llm.get("value") else kw.get("value")
 
-            # Boost confidence if both agree
             kw_conf = kw.get("confidence", 0)
             llm_conf = llm.get("confidence", 0)
             if kw_conf > 0 and llm_conf > 0:
-                combined_conf = min(1.0, llm_conf + (kw_conf * 0.3))
+                combined_conf = min(1.0, llm_conf + kw_conf * 0.3)
             else:
                 combined_conf = max(kw_conf, llm_conf)
 
-            # Source selection: prefer verified LLM source, else keyword source
             llm_src = llm.get("source_text", "")
             llm_verified = llm.get("source_verified", False)
             kw_src = kw.get("source_text", "")
@@ -341,11 +428,10 @@ class SignalExtractor:
                 source_text = llm_src
                 page_number = llm.get("page_number") or kw.get("page_number", 0)
             elif kw_src:
-                # Keyword source is always from the document, so it's reliable
                 source_text = kw_src
                 page_number = kw.get("page_number", 0)
             else:
-                source_text = llm_src  # unverified, but better than nothing
+                source_text = llm_src
                 page_number = llm.get("page_number") or 0
 
             merged[key] = {
@@ -356,24 +442,22 @@ class SignalExtractor:
                 "page_number": page_number,
             }
 
-            # Anti-hallucination: null out low-confidence values
             if merged[key]["confidence"] < 0.1:
                 merged[key]["value"] = None
 
         return merged
 
+    # ── Utilities ─────────────────────────────────────────────────────────────
+
     def _empty_signals(self) -> dict[str, dict]:
-        """Return all signals with null values and zero confidence."""
         return {
             key: {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0}
             for key in SIGNAL_SCHEMA
         }
 
     def get_missing_signals(self, signals: dict) -> list[str]:
-        """Return list of signal names that are missing or low confidence."""
-        missing = []
-        for key in SIGNAL_SCHEMA:
-            sig = signals.get(key, {})
-            if not sig.get("value") or sig.get("confidence", 0) < 0.3:
-                missing.append(key)
-        return missing
+        return [
+            key for key in SIGNAL_SCHEMA
+            if not signals.get(key, {}).get("value")
+            or signals[key].get("confidence", 0) < 0.3
+        ]

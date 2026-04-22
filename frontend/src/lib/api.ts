@@ -170,26 +170,34 @@ export async function getQuestionnaireOptions(): Promise<QuestionnaireOptions> {
   return res.json();
 }
 
-export async function exportAnalysis(analysisId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/export/${analysisId}`);
-  if (!res.ok) throw new Error("Export failed");
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
+function _triggerDownload(url: string, filename: string): void {
   const a = document.createElement("a");
   a.href = url;
-  a.download = `ArchGuide_Report_${analysisId}.pdf`;
+  a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
-export async function exportCostAnalysis(analysisId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/export/${analysisId}/cost`);
+export async function exportAnalysis(result: AnalysisResult): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/export/pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(result),
+  });
+  if (!res.ok) throw new Error("Export failed");
+  const url = URL.createObjectURL(await res.blob());
+  _triggerDownload(url, `ArchGuide_Report_${result.analysis_id}.pdf`);
+}
+
+export async function exportCostAnalysis(result: AnalysisResult): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/export/pdf/cost`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(result),
+  });
   if (!res.ok) throw new Error("Cost analysis export failed");
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `ArchGuide_Cost_Analysis_${analysisId}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const url = URL.createObjectURL(await res.blob());
+  _triggerDownload(url, `ArchGuide_Cost_Analysis_${result.analysis_id}.pdf`);
 }

@@ -26,6 +26,7 @@ from services.llm_client import LLMClient, get_llm_client
 from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
 from services.scoring_engine import ScoringEngine, ARCHITECTURE_DESCRIPTIONS
 from services.followup_generator import generate_followup_questions, SIGNAL_OPTIONS
+from services.extraction_cache import extraction_cache
 
 # Load environment variables
 load_dotenv()
@@ -41,18 +42,23 @@ try:
 except Exception as e:
     print(f"Failed to connect: {e}")
 
-# --- Redis connection check ---
-redis_client = redis.Redis.from_url(
-    os.getenv("REDIS_URL"),
-    password=os.getenv("REDIS_TOKEN"),
-    decode_responses=True
-)
-
-try:
-    redis_client.set("test", "hello")
-    print(f"Redis test key: {redis_client.get('test')}")
-except Exception as e:
-    print(f"Redis error: {e}")
+# --- Redis connection check (optional) ---
+_redis_url = os.getenv("REDIS_URL")
+if _redis_url:
+    try:
+        redis_client = redis.Redis.from_url(
+            _redis_url,
+            password=os.getenv("REDIS_TOKEN"),
+            decode_responses=True
+        )
+        redis_client.set("test", "hello")
+        print(f"Redis test key: {redis_client.get('test')}")
+    except Exception as e:
+        redis_client = None
+        print(f"Redis error: {e}")
+else:
+    redis_client = None
+    print("REDIS_URL not set — Redis disabled")
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -68,7 +74,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -230,7 +236,11 @@ async def process_document_task(
 
 @app.get("/api/v1/health")
 async def health():
-    return {"status": "ok", "version": settings.APP_VERSION}
+    return {
+        "status": "ok",
+        "version": settings.APP_VERSION,
+        "extraction_cache_entries": extraction_cache.size,
+    }
 
 
 @app.post("/api/v1/upload")

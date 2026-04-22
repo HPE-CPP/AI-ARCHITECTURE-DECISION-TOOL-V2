@@ -8,6 +8,36 @@ from typing import Optional
 import fitz  # PyMuPDF
 from docx import Document
 
+# Flat set of all signal keywords used for page relevance scoring.
+# Populated by signal_extractor at import time to avoid circular deps.
+_SIGNAL_KEYWORDS: frozenset[str] = frozenset()
+
+
+def register_signal_keywords(keywords: frozenset[str]) -> None:
+    global _SIGNAL_KEYWORDS
+    _SIGNAL_KEYWORDS = keywords
+
+
+def score_page_relevance(text: str) -> int:
+    """Count unique signal keywords found on a single page."""
+    text_lower = text.lower()
+    return sum(1 for kw in _SIGNAL_KEYWORDS if kw in text_lower)
+
+
+def get_relevant_pages(pages: list[dict], min_score: int = 1) -> list[dict]:
+    """
+    Return pages that contain at least `min_score` signal keywords,
+    sorted descending by relevance score then restored to original page order.
+    Falls back to all pages if none pass the threshold.
+    """
+    scored = [(page, score_page_relevance(page.get("text", ""))) for page in pages]
+    relevant = [p for p, s in scored if s >= min_score]
+    if not relevant:
+        return pages  # nothing matched — keep everything
+    # Restore document order so LLM sees coherent narrative
+    relevant_set = {id(p) for p in relevant}
+    return [p for p in pages if id(p) in relevant_set]
+
 
 class DocumentParser:
     """Multi-format document parser with page-level extraction."""
