@@ -61,7 +61,7 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
             {topArch?.description}
           </p>
           <button
-            onClick={() => exportAnalysis(result.analysis_id)}
+            onClick={() => exportAnalysis(result)}
             className="mt-10 flex items-center gap-3 px-8 py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn"
           >
             <Download size={20} className="group-hover/btn:text-[var(--background)] text-[var(--text-primary)] transition-colors" /> Download PDF Report

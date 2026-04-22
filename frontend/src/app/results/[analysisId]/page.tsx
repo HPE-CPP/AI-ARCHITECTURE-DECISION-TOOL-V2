@@ -178,7 +178,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
       {/* Cost Analysis Section */}
       {result.cost_analysis && (
-        <CostAnalysis data={result.cost_analysis} analysisId={resolvedParams.analysisId} />
+        <CostAnalysis data={result.cost_analysis} result={result} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
