@@ -135,16 +135,30 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
           <h3 className="text-2xl font-bold mb-8 tracking-tight flex items-center gap-3">
             <DollarSign size={20} /> Monthly Cost Comparison
           </h3>
-          <div className="h-[280px] w-full">
+          <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={comparisonData} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
-                <XAxis type="number" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
-                <YAxis dataKey="name" type="category" width={80} axisLine={false} tickLine={false} tick={{ fill: 'var(--text-primary)', fontWeight: 'bold', fontSize: 11 }} />
+              <BarChart data={comparisonData} layout="vertical" margin={{ top: 4, right: 60, left: 0, bottom: 4 }}>
+                <XAxis
+                  type="number"
+                  tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
+                  tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  width={160}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: 'var(--text-primary)', fontWeight: 600, fontSize: 11 }}
+                  tickFormatter={(v: string) => v.length > 20 ? v.slice(0, 18) + '…' : v}
+                />
                 <Tooltip
                   formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Avg Monthly']}
                   contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '16px', color: 'var(--text-primary)', fontWeight: 'bold' }}
                 />
-                <Bar dataKey="monthly_avg" radius={[0, 8, 8, 0]} barSize={28}>
+                <Bar dataKey="monthly_avg" radius={[0, 8, 8, 0]} barSize={26} label={{ position: 'right', formatter: (v: number) => `$${v.toLocaleString()}`, fill: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
                   {comparisonData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}

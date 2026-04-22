@@ -106,23 +106,27 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
           className="glass-panel p-8"
         >
           <h3 className="text-2xl font-bold mb-8 tracking-tight">Factor Breakdown</h3>
-          <div className="h-[350px] w-full">
+          <div className="h-[380px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+              <RadarChart cx="50%" cy="48%" outerRadius="60%" data={radarData}>
                 <PolarGrid stroke="var(--border)" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-secondary)', fontSize: 12, fontWeight: 600 }} />
+                <PolarAngleAxis
+                  dataKey="subject"
+                  tick={{ fill: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}
+                  tickLine={false}
+                />
                 <PolarRadiusAxis angle={30} domain={[0, 1]} tick={false} axisLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '16px', color: 'var(--text-primary)', fontWeight: 'bold' }} />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Legend wrapperStyle={{ paddingTop: '16px', fontSize: '12px' }} />
                 {ranking?.slice(0, 3).map((arch, i) => (
-                  <Radar 
-                    key={arch} 
-                    name={arch} 
-                    dataKey={arch} 
-                    stroke={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"} 
-                    fill={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"} 
-                    fillOpacity={i === 0 ? 0.3 : 0.1} 
-                    strokeWidth={i === 0 ? 3 : 2} 
+                  <Radar
+                    key={arch}
+                    name={arch}
+                    dataKey={arch}
+                    stroke={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"}
+                    fill={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"}
+                    fillOpacity={i === 0 ? 0.3 : 0.1}
+                    strokeWidth={i === 0 ? 3 : 2}
                   />
                 ))}
               </RadarChart>
@@ -140,12 +144,24 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
         >
           <div className="glass-panel p-8">
             <h3 className="text-2xl font-bold mb-8 tracking-tight">Suitability Comparison</h3>
-            <div className="h-[200px] w-full">
+            <div className="h-[220px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={scoresData} layout="vertical" margin={{ top: 0, right: 20, left: 30, bottom: 0 }}>
+                <BarChart data={scoresData} layout="vertical" margin={{ top: 4, right: 56, left: 0, bottom: 4 }}>
                   <XAxis type="number" domain={[0, 100]} hide />
-                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-primary)', fontWeight: 'bold' }} />
-                  <Bar dataKey="score" radius={[0, 8, 8, 0]} barSize={24}>
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    width={120}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--text-primary)', fontWeight: 600, fontSize: 11 }}
+                    tickFormatter={(v: string) => v.length > 16 ? v.slice(0, 14) + '…' : v}
+                  />
+                  <Tooltip
+                    formatter={(value) => [`${Number(value).toFixed(1)}`, 'Score']}
+                    contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '16px', color: 'var(--text-primary)', fontWeight: 'bold' }}
+                  />
+                  <Bar dataKey="score" radius={[0, 8, 8, 0]} barSize={24} label={{ position: 'right', formatter: (v: number) => v.toFixed(1), fill: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
                     {scoresData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={index === 0 ? "var(--primary)" : index === 1 ? "var(--accent)" : "var(--text-secondary)"} />
                     ))}
