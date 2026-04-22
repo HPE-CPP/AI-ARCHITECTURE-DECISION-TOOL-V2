@@ -103,64 +103,46 @@ def submit_followup(data: FollowUpAnswers, db: DBSession = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/export/{session_id}/cost  (registered before the catch-all)
+# POST /api/v1/export/pdf  — accepts full result from frontend, no DB needed
 # ---------------------------------------------------------------------------
-@router.get("/export/{session_id}/cost")
-def export_cost_analysis(session_id: str, db: DBSession = Depends(get_db)):
-    """Export cost analysis as a PDF attachment."""
-    result = None
-    cached = cache_service.get_result(session_id)
-    if cached:
-        result = cached
-    else:
-        try:
-            session_uuid = uuid.UUID(session_id)
-        except ValueError:
-            raise HTTPException(404, "Analysis not found")
-        signals = signal_service.get_signals(db, session_id)
-        result = recommendation_service.get_result(db, session_id, signals)
-
-    if not result:
-        raise HTTPException(404, "Analysis not found")
-
-    cost_data = generate_cost_analysis(result)
-    pdf_bytes = generate_cost_pdf(cost_data, analysis_id=session_id)
+@router.post("/export/pdf")
+def export_pdf(result: dict):
+    """Generate and return a PDF report from the provided analysis result."""
+    analysis_id = result.get("analysis_id", "report")
+    try:
+        pdf_bytes = generate_pdf(result)
+    except Exception as e:
+        import traceback
+        logger.error(f"PDF generation failed for {analysis_id}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename=ArchGuide_Cost_Analysis_{session_id}.pdf",
+            "Content-Disposition": f"attachment; filename=ArchGuide_Report_{analysis_id}.pdf",
         },
     )
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/export/{session_id}
+# POST /api/v1/export/pdf/cost  — same pattern for cost report
 # ---------------------------------------------------------------------------
-@router.get("/export/{session_id}")
-def export_analysis(session_id: str, db: DBSession = Depends(get_db)):
-    """Export analysis results as a PDF attachment."""
-    result = None
-    cached = cache_service.get_result(session_id)
-    if cached:
-        result = cached
-    else:
-        try:
-            session_uuid = uuid.UUID(session_id)
-        except ValueError:
-            raise HTTPException(404, "Analysis not found")
-        signals = signal_service.get_signals(db, session_id)
-        result = recommendation_service.get_result(db, session_id, signals)
-
-    if not result:
-        raise HTTPException(404, "Analysis not found")
-
-    pdf_bytes = generate_pdf(result)
+@router.post("/export/pdf/cost")
+def export_cost_pdf_route(result: dict):
+    """Generate and return a cost analysis PDF from the provided analysis result."""
+    analysis_id = result.get("analysis_id", "report")
+    try:
+        cost_data = generate_cost_analysis(result)
+        pdf_bytes = generate_cost_pdf(cost_data, analysis_id=analysis_id)
+    except Exception as e:
+        import traceback
+        logger.error(f"Cost PDF generation failed for {analysis_id}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Cost PDF generation failed: {e}")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename=ArchGuide_Report_{session_id}.pdf",
+            "Content-Disposition": f"attachment; filename=ArchGuide_Cost_Analysis_{analysis_id}.pdf",
         },
     )
 

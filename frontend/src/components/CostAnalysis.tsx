@@ -1,6 +1,6 @@
 "use client";
 import React, { useMemo } from "react";
-import { CostAnalysisData, exportCostAnalysis } from "@/lib/api";
+import { AnalysisResult, CostAnalysisData, exportCostAnalysis } from "@/lib/api";
 import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
@@ -18,7 +18,7 @@ function fmtAvg(r: [number, number]): number {
 
 const COLORS = ["var(--primary)", "var(--accent)", "var(--text-secondary)", "#f59e0b"];
 
-export function CostAnalysis({ data, analysisId }: { data: CostAnalysisData; analysisId: string }) {
+export function CostAnalysis({ data, result }: { data: CostAnalysisData; result: AnalysisResult }) {
   const { architectures, summary, cost_recommendations } = data;
 
   const comparisonData = useMemo(() => {
@@ -92,7 +92,7 @@ export function CostAnalysis({ data, analysisId }: { data: CostAnalysisData; ana
               Annual estimate (incl. setup): {fmtRange(recArch.annual_total)}
             </p>
             <button
-              onClick={() => exportCostAnalysis(analysisId)}
+              onClick={() => exportCostAnalysis(result)}
               className="mt-8 flex items-center gap-3 px-8 py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn"
             >
               <Download size={20} className="group-hover/btn:text-[var(--background)] text-[var(--text-primary)] transition-colors" />
