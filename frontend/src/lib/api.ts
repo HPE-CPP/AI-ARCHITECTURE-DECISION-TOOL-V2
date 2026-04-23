@@ -111,7 +111,7 @@ export interface QuestionnaireOptions {
 
 // --- API Functions ---
 
-export async function uploadDocument(file: File, provider: string = "openai", projectId?: string): Promise<{ analysis_id: string; status: string }> {
+export async function uploadDocument(file: File, provider: string = "ollama", projectId?: string): Promise<{ analysis_id: string; status: string }> {
   const formData = new FormData();
   formData.append("file", file);
   const qs = new URLSearchParams({ provider });
@@ -127,7 +127,7 @@ export async function uploadDocument(file: File, provider: string = "openai", pr
   return res.json();
 }
 
-export async function submitQuestionnaire(answers: Record<string, string | null>, provider: string = "openai", projectId?: string): Promise<AnalysisResult> {
+export async function submitQuestionnaire(answers: Record<string, string | null>, provider: string = "ollama", projectId?: string): Promise<AnalysisResult> {
   const qs = new URLSearchParams({ provider });
   if (projectId) qs.append("project_id", projectId);
   const res = await fetch(`${API_BASE}/api/v1/questionnaire?${qs.toString()}`, {

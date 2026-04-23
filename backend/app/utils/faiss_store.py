@@ -16,7 +16,8 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-_DIM = settings.EMBEDDING_DIMENSION
+provider = getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama").lower()
+_DIM = getattr(settings, "OLLAMA_EMBEDDING_DIMENSION", 768) if provider == "ollama" else settings.EMBEDDING_DIMENSION
 
 
 def _session_dir(session_id: str) -> Path:

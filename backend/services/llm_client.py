@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 class LLMClient:
     """Unified LLM client supporting OpenAI and Ollama with async calls."""
 
-    def __init__(self, provider: str = "openai"):
-        self.provider = provider.lower()
+    def __init__(self, provider: str = None):
+        self.provider = (provider or settings.DEFAULT_LLM_PROVIDER).lower()
         self._openai_client: Optional[AsyncOpenAI] = None
 
         if self.provider == "openai" and settings.OPENAI_API_KEY:
@@ -135,6 +135,6 @@ class LLMClient:
             self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-def get_llm_client(provider: str = "openai") -> LLMClient:
+def get_llm_client(provider: str = None) -> LLMClient:
     """Factory function to create LLM client."""
     return LLMClient(provider=provider)

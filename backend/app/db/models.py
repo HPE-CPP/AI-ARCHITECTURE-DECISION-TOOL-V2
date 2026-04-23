@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from config import settings
 
 
 def now_utc() -> datetime:
@@ -97,7 +98,7 @@ class Session(Base):
         nullable=False,
         default="draft",
     )
-    provider: Mapped[str] = mapped_column(String(20), nullable=False, default="openai")
+    provider: Mapped[str] = mapped_column(String(20), nullable=False, default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"))
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, nullable=False

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_TOKEN: Optional[str] = None  # Upstash REST token (for SSL auth)
 
+    # Default Provider Switch
+    DEFAULT_LLM_PROVIDER: str = "ollama"
+
     # LLM - OpenAI
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
@@ -33,6 +36,8 @@ class Settings(BaseSettings):
     # LLM - Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.2"
+    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
+    OLLAMA_EMBEDDING_DIMENSION: int = 768
 
     # Embeddings
     EMBEDDING_MODEL: str = "text-embedding-3-small"  # OpenAI embedding model
