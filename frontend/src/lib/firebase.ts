@@ -11,13 +11,13 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDppGFKIq33u6CWyohik7Q07w10O0jmY0U",
-  authDomain: "hpe-project-73adc.firebaseapp.com",
-  projectId: "hpe-project-73adc",
-  storageBucket: "hpe-project-73adc..appspot.com",
-  messagingSenderId: "527313395755",
-  appId: "1:527313395755:web:42525fd7a4207d782c0a6e",
-  measurementId: "G-PBVT0QB05H"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 // Prevent duplicate app initialization in dev (hot reload)

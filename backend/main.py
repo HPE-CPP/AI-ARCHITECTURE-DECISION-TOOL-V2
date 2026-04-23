@@ -247,7 +247,7 @@ async def health():
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    provider: str = Query(default="ollama", regex="^(openai|ollama)$"),
+    provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), regex="^(openai|ollama)$"),
 ):
     """Upload a document for analysis."""
     # Validate file
@@ -298,7 +298,7 @@ async def upload_document(
 @app.post("/api/v1/questionnaire")
 async def submit_questionnaire(
     input_data: QuestionnaireInput,
-    provider: str = Query(default="ollama", regex="^(openai|ollama)$"),
+    provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), regex="^(openai|ollama)$"),
 ):
     """Process questionnaire input and return architecture recommendation."""
     analysis_id = str(uuid.uuid4())

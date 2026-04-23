@@ -26,7 +26,7 @@ doc_parser = DocumentParser()
 @router.post("/upload", response_model=AnalysisResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    provider: str = Query(default="openai", regex="^(openai|ollama)$"),
+    provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), regex="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
     db: DBSession = Depends(get_db),
 ):
@@ -50,6 +50,10 @@ async def upload_document(
     if project_id:
         try:
             p_uuid = uuid.UUID(project_id)
+            from app.db.models import Project
+            project_exists = db.query(Project).filter(Project.id == p_uuid).first()
+            if not project_exists:
+                raise HTTPException(404, "Project not found. It may have been deleted.")
         except ValueError:
             pass
 

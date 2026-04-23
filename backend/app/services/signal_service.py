@@ -55,7 +55,7 @@ async def extract_and_persist(
     db: DBSession,
     session_id: str,
     document_data: dict,
-    provider: str = "openai",
+    provider: str = None,
 ) -> dict:
     """
     Extract signals from a parsed document, persist to DB, and cache.
