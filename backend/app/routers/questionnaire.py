@@ -15,6 +15,7 @@ from app.services import recommendation_service, cache_service
 from app.schemas.session import QuestionnaireInput, AnalysisResponse
 from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
 from services.llm_client import get_llm_client
+from config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

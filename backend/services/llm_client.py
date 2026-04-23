@@ -81,8 +81,8 @@ class LLMClient:
                 "num_predict": max_tokens,
             }
 
-            # Use httpx for async call to Ollama
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            # Use httpx for async call to Ollama (increased timeout for slower machines/CPUs)
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 payload = {
                     "model": settings.OLLAMA_MODEL,
                     "messages": messages,
@@ -99,9 +99,14 @@ class LLMClient:
                 response.raise_for_status()
                 data = response.json()
                 return data.get("message", {}).get("content", "")
+        except httpx.HTTPError as he:
+            err_text = getattr(he, "response", None)
+            err_msg = err_text.text if err_text else str(he)
+            logger.error(f"Ollama HTTP error: {he!r} - {err_msg}")
+            raise RuntimeError(f"Ollama API call failed: {he!r} {err_msg}")
         except Exception as e:
-            logger.error(f"Ollama API error: {e}")
-            raise RuntimeError(f"Ollama API call failed: {str(e)}")
+            logger.error(f"Ollama API error: {e!r}")
+            raise RuntimeError(f"Ollama API call failed: {e!r}")
 
     async def generate_json(
         self,
