@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 
 # ── Tunables ─────────────────────────────────────────────────────────────────
 MAX_CONTEXT_CHARS = 8_000   # single-call limit; fits comfortably in 4k-token models
-CHUNK_SIZE        = 5_000   # chars per chunk when splitting large docs
-CHUNK_OVERLAP     = 500     # overlap so signals spanning chunk boundaries are caught
+CHUNK_SIZE        = 2_000   # chars per chunk when splitting large docs
+CHUNK_OVERLAP     = 200    # overlap so signals spanning chunk boundaries are caught
 # ─────────────────────────────────────────────────────────────────────────────
 
 SIGNAL_SCHEMA = {
@@ -71,6 +71,18 @@ SIGNAL_SCHEMA = {
     "user_scale": {
         "description": "Number of end users (small/medium/large/enterprise)",
         "keywords": ["users", "user base", "scale", "organization", "team", "enterprise", "consumer", "public"],
+    },
+    "uses_external_retrieval": {
+    "description": "Whether system retrieves data from external DB/vector store",
+    "keywords": ["retrieval", "vector database", "embedding search", "semantic search", "knowledge base", "fetch documents"],
+    },
+    "uses_runtime_context": {
+    "description": "Whether context is directly injected into prompt at runtime",
+    "keywords": ["prompt context", "user input context", "session context", "input context", "provided context"],
+    },
+    "updates_model_weights": {
+    "description": "Whether model is fine-tuned or retrained",
+    "keywords": ["fine-tune", "training", "retraining", "model update", "weights update"],
     },
 }
 
@@ -128,6 +140,9 @@ SIGNAL_OPTIONS = {
     "cost_sensitivity": ["low", "moderate", "high", "very_high"],
     "deployment_preference": ["cloud", "on_premise", "hybrid", "edge"],
     "user_scale": ["small", "medium", "large", "enterprise"],
+    "uses_external_retrieval": [True, False],
+    "uses_runtime_context": [True, False],
+    "updates_model_weights": [True, False],
 }
 
 
@@ -156,7 +171,7 @@ class SignalExtractor:
         keyword_signals = self._keyword_extraction(full_text, pages)
 
         # ── 3. Page filtering: skip pages with no signal keywords ─────────────
-        relevant_pages = get_relevant_pages(pages, min_score=1)
+        relevant_pages = get_relevant_pages(pages, min_score=2)
         logger.info(
             "Page filtering: %d/%d pages selected as relevant",
             len(relevant_pages), len(pages),
@@ -382,7 +397,7 @@ class SignalExtractor:
                 sent_start = max(0, full_text.rfind(".", 0, idx) + 1)
                 sent_end = full_text.find(".", idx + len(fragment))
                 if sent_end == -1:
-                    sent_end = min(len(full_text), idx + len(fragment) + 100)
+                    sent_end = min(len(full_text), idx + len(fragment) + 100)``
                 else:
                     sent_end += 1
                 return full_text[sent_start:sent_end].strip()

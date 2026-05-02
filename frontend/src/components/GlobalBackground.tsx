@@ -69,25 +69,28 @@ export function GlobalBackground() {
     // =========================
     // 🔥 FORCE MATERIAL COLORS
     // =========================
-    if (effect.scene) {
-      effect.scene.traverse((obj: any) => {
-        if (obj.material) {
-          // ✅ FIX: Ensure blending is valid (prevents console error)
-          if (obj.material.blending === null || obj.material.blending === undefined) {
-            obj.material.blending = THREE.NormalBlending;
-          }
+  effect.scene.traverse((obj: any) => {
+  if (obj.material) {
 
-          obj.material.transparent = true;
-          obj.material.opacity = isDark ? 0.2 : 0.2;
-
-          if (obj.material.color) {
-            obj.material.color.set(isDark ? 0xffffff : 0x000000);
-          }
-
-          obj.material.needsUpdate = true;
-        }
-      });
+    // ✅ ADD THIS FIX
+    if (obj.material.vertexColors === undefined) {
+      obj.material.vertexColors = false;
     }
+
+    if (obj.material.blending === null || obj.material.blending === undefined) {
+      obj.material.blending = THREE.NormalBlending;
+    }
+
+    obj.material.transparent = true;
+    obj.material.opacity = isDark ? 0.2 : 0.2;
+
+    if (obj.material.color) {
+      obj.material.color.set(isDark ? 0xffffff : 0x000000);
+    }
+
+    obj.material.needsUpdate = true;
+  }
+});
 
     return () => {
       if (vantaEffect.current) {
