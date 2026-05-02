@@ -150,7 +150,7 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
             className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-[color:var(--surface)]/95 backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <Trash2 size={28} className="text-red-400 mb-3" />
+            <Trash2 size={28} className="text-red-400 mb-3 opacity-1" />
             <p className="font-bold text-sm text-[color:var(--text-primary)] mb-1">Delete this project?</p>
             <p className="text-xs text-[color:var(--text-secondary)] mb-5">This cannot be undone.</p>
             <div className="flex gap-2 w-full">

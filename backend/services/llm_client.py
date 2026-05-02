@@ -28,7 +28,7 @@ class LLMClient:
         self,
         prompt: str,
         system_prompt: str = "You are an expert AI systems architect.",
-        temperature: float = 0.1,
+        temperature: float = 0.0,
         max_tokens: int = 4096,
         json_mode: bool = False,
     ) -> str:
@@ -107,11 +107,64 @@ class LLMClient:
         except Exception as e:
             logger.error(f"Ollama API error: {e!r}")
             raise RuntimeError(f"Ollama API call failed: {e!r}")
+        
+    ARCHITECTURE_SYSTEM_PROMPT = """
+You are an expert AI architecture decision system.
+
+Your task is to SELECT the best architecture from:
+- RAG (Retrieval-Augmented Generation)
+- Fine-Tuning
+- CAG (Context-Augmented Generation)
+- Hybrid
+
+You MUST follow these strict rules:
+
+1. Use RAG if:
+   - External or frequently updated data is required
+   - Real-time or dynamic data is needed
+
+2. Use Fine-Tuning if:
+   - Task is domain-specific
+   - Data is static and does not change often
+
+3. Use Hybrid if:
+   - Both retrieval + deep reasoning are required
+
+4. Use CAG if:
+   - Lightweight context injection is enough
+   - No heavy retrieval or training needed
+
+You MUST evaluate ALL options and assign scores (1–10) based on:
+- scalability
+- cost
+- latency
+- data freshness
+
+Then SELECT the best architecture.
+
+STRICT OUTPUT FORMAT (JSON ONLY):
+
+{
+  "scores": {
+    "RAG": number,
+    "Fine-Tuning": number,
+    "CAG": number,
+    "Hybrid": number
+  },
+  "selected_architecture": "...",
+  "confidence": "High | Medium | Low",
+  "reason": "...",
+  "tradeoffs": ["...", "..."]
+}
+
+DO NOT return text outside JSON.
+DO NOT return multiple architectures.
+"""
 
     async def generate_json(
         self,
         prompt: str,
-        system_prompt: str = "You are an expert AI systems architect. Always respond with valid JSON.",
+        system_prompt: str = ARCHITECTURE_SYSTEM_PROMPT,
         temperature: float = 0.0,
     ) -> dict:
         """Generate structured JSON output from LLM."""
