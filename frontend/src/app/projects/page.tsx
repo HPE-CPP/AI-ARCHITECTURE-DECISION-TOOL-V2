@@ -20,7 +20,8 @@ import { AuthModal } from "@/components/AuthModal";
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { user, signIn, signOut } = useAuth();
+  const { user, signInWithGoogle, signOut } = useAuth();
+  const signIn = signInWithGoogle;
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");

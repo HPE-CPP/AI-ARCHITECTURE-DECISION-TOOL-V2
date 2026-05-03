@@ -1,67 +1,121 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { auth, onAuthStateChanged, signInWithGoogle, signOutUser, User } from "@/lib/firebase";
+import { User, onFirebaseAuthChange, googleSignIn, googleSignOut, isFirebaseConfigured } from "@/lib/firebase";
+import { LocalUser, localSignIn, localSignUp, localSignOut, getSession } from "@/lib/auth-local";
+
+// Unified user type that works for both Firebase and local auth
+export type AppUser = {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  provider: "google" | "local";
+};
 
 interface AuthContextValue {
-  user: User | null;
+  user: AppUser | null;
   loading: boolean;
-  signIn: () => Promise<User>;
+  firebaseConfigured: boolean;
+  // Email/password auth
+  signUpWithEmail: (email: string, password: string, name?: string) => Promise<AppUser>;
+  signInWithEmail: (email: string, password: string) => Promise<AppUser>;
+  // Google auth (optional - only works if Firebase configured)
+  signInWithGoogle: () => Promise<AppUser>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
-  loading: true,
-  signIn: async () => { throw new Error("AuthProvider not mounted"); },
+  loading: false,
+  firebaseConfigured: false,
+  signUpWithEmail: async () => { throw new Error("not mounted"); },
+  signInWithEmail: async () => { throw new Error("not mounted"); },
+  signInWithGoogle: async () => { throw new Error("not mounted"); },
   signOut: async () => {},
 });
 
+function toAppUser(u: User | LocalUser): AppUser {
+  if ("provider" in u && u.provider === "local") {
+    return { uid: u.uid, email: u.email, displayName: u.displayName, photoURL: u.photoURL, provider: "local" };
+  }
+  const fu = u as User;
+  return { uid: fu.uid, email: fu.email, displayName: fu.displayName, photoURL: fu.photoURL, provider: "google" };
+}
+
+async function syncToBackend(user: AppUser) {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    await fetch(`${apiUrl}/api/v1/users/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL }),
+    });
+  } catch {}
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    // 1. Restore local session first (synchronous)
+    const session = getSession();
+    if (session) {
+      setUser(toAppUser(session));
+      setLoading(false);
+    }
+
+    // 2. Also listen for Firebase Google auth state (if configured)
+    const unsub = onFirebaseAuthChange((firebaseUser) => {
+      if (firebaseUser) {
+        const appUser = toAppUser(firebaseUser);
+        setUser(appUser);
+        syncToBackend(appUser);
+      } else if (!getSession()) {
+        // Only clear if no local session either
+        setUser(null);
+      }
       setLoading(false);
     });
-    return unsubscribe;
+
+    return unsub;
   }, []);
 
-  const signIn = async () => {
-    const u = await signInWithGoogle();
-    setUser(u);
-    
-    // Sync user to backend
-    if (u) {
-      try {
-        const payload = {
-          uid: u.uid,
-          email: u.email,
-          displayName: u.displayName,
-          photoURL: u.photoURL,
-        };
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        fetch(`${apiUrl}/api/v1/users/sync`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }).catch(err => console.error("Failed to sync user to backend", err));
-      } catch (e) {
-        console.error("Error in sync flow", e);
-      }
-    }
-    
-    return u;
+  const signUpWithEmail = async (email: string, password: string, name?: string): Promise<AppUser> => {
+    const { user: localUser } = await localSignUp(email, password, name);
+    const appUser = toAppUser(localUser);
+    setUser(appUser);
+    syncToBackend(appUser);
+    return appUser;
+  };
+
+  const signInWithEmail = async (email: string, password: string): Promise<AppUser> => {
+    const { user: localUser } = await localSignIn(email, password);
+    const appUser = toAppUser(localUser);
+    setUser(appUser);
+    syncToBackend(appUser);
+    return appUser;
+  };
+
+  const signInWithGoogle = async (): Promise<AppUser> => {
+    const googleUser = await googleSignIn();
+    const appUser = toAppUser(googleUser);
+    setUser(appUser);
+    syncToBackend(appUser);
+    return appUser;
   };
 
   const signOut = async () => {
-    await signOutUser();
+    localSignOut();
+    await googleSignOut();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{
+      user, loading, firebaseConfigured: isFirebaseConfigured,
+      signUpWithEmail, signInWithEmail, signInWithGoogle, signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   );
