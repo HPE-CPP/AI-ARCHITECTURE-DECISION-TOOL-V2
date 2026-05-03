@@ -34,7 +34,8 @@ export function Navbar() {
   const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
 
-  const { user, signIn, signOut } = useAuth();
+  const { user, signInWithEmail, signInWithGoogle, signOut } = useAuth();
+  const signIn = signInWithGoogle; // for backward compat with AuthModal prop
 
   // Load project count for badge
   useEffect(() => {
@@ -235,7 +236,7 @@ export function Navbar() {
           setWelcomeVisible(true);
         }}
         onSkip={() => setAuthModalOpen(false)}
-        signIn={signIn}
+        signIn={signInWithGoogle}
         signOut={signOut}
       />
 

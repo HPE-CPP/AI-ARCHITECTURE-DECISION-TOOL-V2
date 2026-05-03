@@ -1,20 +1,23 @@
 "use client";
-import React, { useEffect, useState, use, Suspense } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { getAnalysis, submitFollowUp, AnalysisResult } from "@/lib/api";
+import { SmartChatPanel } from "@/components/SmartChatPanel";
+import { useAuth } from "@/lib/auth-context";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionPipeline } from "@/components/DecisionPipeline";
 import { DecisionTrace } from "@/components/DecisionTrace";
 import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { updateProject } from "@/lib/projects-store";
 
-function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> }) {
-  const resolvedParams = use(params);
+function ResultsPageInner({ analysisId }: { analysisId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId");
+  const { user } = useAuth();
+  const [showChat, setShowChat] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +30,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
     const fetchResult = async () => {
       try {
-        const data = await getAnalysis(resolvedParams.analysisId);
+        const data = await getAnalysis(analysisId);
         setResult(data);
 
         if (data.status === "complete" || data.status === "error") {
@@ -45,7 +48,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     interval = setInterval(fetchResult, 1500);
 
     return () => clearInterval(interval);
-  }, [resolvedParams.analysisId]);
+  }, [analysisId]);
 
   // 2. Scroll to top + mark project completed when results arrive
   useEffect(() => {
@@ -55,11 +58,11 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       if (projectId) {
         updateProject(projectId, {
           status: "completed",
-          analysisId: resolvedParams.analysisId,
+          analysisId: analysisId,
         });
       }
     }
-  }, [loading, result?.status, projectId, resolvedParams.analysisId]);
+  }, [loading, result?.status, projectId, analysisId]);
 
   const handleFollowUpChange = (signal: string, val: string) => {
     setFollowUpAnswers(prev => ({ ...prev, [signal]: val }));
@@ -68,7 +71,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const handleFollowUpSubmit = async () => {
     try {
       setSubmittingFollowUp(true);
-      const data = await submitFollowUp(resolvedParams.analysisId, followUpAnswers);
+      const data = await submitFollowUp(analysisId, followUpAnswers);
       setResult(data);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
@@ -175,6 +178,43 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       </div>
 
       <ResultsDashboard result={result} />
+
+      {/* ── LIVE AI CHAT PANEL ── */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+        className="glass-panel overflow-hidden w-full" style={{ borderRadius: "2rem" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h3 style={{ fontFamily: "Space Grotesk,sans-serif", fontWeight: 800, fontSize: "1.2rem", marginBottom: 4 }}>
+              🤖 Live AI Architecture Assistant
+            </h3>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+              Powered by real LLM thinking — ask anything about your recommendation, implementation, costs, or trade-offs
+            </p>
+          </div>
+          <button onClick={() => setShowChat(c => !c)}
+            style={{ padding: "8px 18px", borderRadius: 100, border: "1px solid var(--border)", background: showChat ? "var(--primary2)" : "rgba(255,255,255,0.04)", color: showChat ? "var(--primary)" : "var(--text-secondary)", cursor: "pointer", fontWeight: 600, fontSize: "0.82rem", transition: "all 0.2s" }}>
+            {showChat ? "Hide Chat" : "Open Chat ↓"}
+          </button>
+        </div>
+        {showChat && (
+          <SmartChatPanel
+            uid={user?.uid}
+            analysisId={analysisId}
+            analysisResult={result}
+            sessionId={analysisId}
+          />
+        )}
+        {!showChat && (
+          <div style={{ padding: "20px 24px", display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {["Why was this recommended?", "What are the implementation steps?", "How much will it cost?", "What are the main risks?"].map(q => (
+              <button key={q} onClick={() => setShowChat(true)}
+                style={{ padding: "7px 14px", borderRadius: 100, background: "rgba(1,169,130,0.07)", border: "1px solid rgba(1,169,130,0.2)", color: "var(--primary)", fontSize: "0.78rem", cursor: "pointer", fontFamily: "Plus Jakarta Sans,sans-serif" }}>
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+      </motion.div>
 
       {/* Cost Analysis Section */}
       {result.cost_analysis && (
@@ -397,14 +437,16 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   );
 }
 
-export default function ResultsPage({ params }: { params: Promise<{ analysisId: string }> }) {
+export default function ResultsPage() {
+  const params = useParams();
+  const analysisId = typeof params?.analysisId === "string" ? params.analysisId : Array.isArray(params?.analysisId) ? params.analysisId[0] : "";
   return (
     <Suspense fallback={
       <div className="w-full min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-t-[color:var(--text-primary)] border-[color:var(--border)] animate-spin" />
       </div>
     }>
-      <ResultsPageInner params={params} />
+      <ResultsPageInner analysisId={analysisId} />
     </Suspense>
   );
 }

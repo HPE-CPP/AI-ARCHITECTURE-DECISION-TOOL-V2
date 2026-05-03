@@ -18,6 +18,7 @@ from typing import Optional, Any
 
 from services.llm_client import LLMClient
 from services.extraction_cache import extraction_cache
+from services.fast_extractor import heuristic_extract, signals_need_llm, make_targeted_prompt
 from services.document_parser import (
     get_relevant_pages,
     register_signal_keywords,
@@ -140,47 +141,74 @@ class SignalExtractor:
     # ── Public API ────────────────────────────────────────────────────────────
 
     async def extract_signals(self, document_data: dict) -> dict[str, dict]:
-        """Extract signals with page filtering, caching, and parallel chunk analysis."""
+        """
+        FAST heuristic-first extraction pipeline:
+        1. Cache check (instant)
+        2. Heuristic regex extraction (<100ms, no LLM)
+        3. If ≥7 signals found with high confidence → return immediately (no LLM!)
+        4. Otherwise → targeted LLM call for ONLY missing signals
+        5. Merge + cache
+        """
         full_text = document_data.get("full_text", "")
         pages = document_data.get("pages", [])
 
         if not full_text.strip():
             return self._empty_signals()
 
-        # ── 1. Cache check ────────────────────────────────────────────────────
+        # ── 1. Cache check (instant) ──────────────────────────────────────────
         cached = extraction_cache.get(full_text)
         if cached is not None:
+            logger.info("Cache hit — returning instantly")
             return cached
 
-        # ── 2. Keyword pre-extraction (zero LLM cost) ─────────────────────────
+        # ── 2. Heuristic extraction (<100ms, zero LLM cost) ───────────────────
+        heuristic_signals = heuristic_extract(full_text)
         keyword_signals = self._keyword_extraction(full_text, pages)
+        # Merge keyword into heuristic (heuristic wins on conflicts)
+        for sig, data in keyword_signals.items():
+            if sig not in heuristic_signals and data.get("value"):
+                heuristic_signals[sig] = data
 
-        # ── 3. Page filtering: skip pages with no signal keywords ─────────────
+        # ── 3. Check if we need LLM at all ────────────────────────────────────
+        missing = signals_need_llm(heuristic_signals, min_confidence=0.70)
+        high_conf = sum(1 for s in heuristic_signals.values() if s.get("confidence", 0) >= 0.70)
+
+        if high_conf >= 7 or not missing:
+            logger.info("Heuristic-only path: %d high-confidence signals, skipping LLM", high_conf)
+            extraction_cache.set(full_text, heuristic_signals)
+            return heuristic_signals
+
+        logger.info("LLM needed for %d signals: %s", len(missing), missing)
+
+        # ── 4. Page filtering for LLM context ────────────────────────────────
         relevant_pages = get_relevant_pages(pages, min_score=1)
-        logger.info(
-            "Page filtering: %d/%d pages selected as relevant",
-            len(relevant_pages), len(pages),
-        )
-
-        # ── 4. Build context from relevant pages (document order preserved) ────
         context = self._build_context(relevant_pages)
 
-        # ── 5. LLM extraction — single call or parallel chunks ─────────────────
-        if len(context) <= MAX_CONTEXT_CHARS:
-            llm_signals = await self._llm_extraction(context)
-            logger.info("Single-call extraction (%d chars)", len(context))
-        else:
-            llm_signals = await self._parallel_chunk_extraction(context)
+        # ── 5. Targeted LLM call — only for missing signals ───────────────────
+        targeted_prompt = make_targeted_prompt(context, missing)
+        try:
+            llm_signals = await asyncio.wait_for(
+                self._llm_extraction_with_prompt(targeted_prompt),
+                timeout=20.0  # hard timeout — never wait more than 20s
+            )
+        except asyncio.TimeoutError:
+            logger.warning("LLM extraction timed out — using heuristics only")
+            llm_signals = {}
+        except Exception as e:
+            logger.warning("LLM extraction failed (%s) — using heuristics only", e)
+            llm_signals = {}
 
-        # ── 6. Source verification ─────────────────────────────────────────────
+        # ── 6. Source verification ────────────────────────────────────────────
         llm_signals = self._verify_sources(llm_signals, full_text, pages)
 
-        # ── 7. Merge keyword + LLM results ─────────────────────────────────────
-        merged = self._merge_signals(keyword_signals, llm_signals)
+        # ── 7. Merge: heuristic wins on high confidence, LLM fills gaps ───────
+        merged = dict(heuristic_signals)
+        for sig, llm_data in llm_signals.items():
+            if sig not in merged or (merged[sig].get("confidence", 0) < llm_data.get("confidence", 0)):
+                merged[sig] = llm_data
 
-        # ── 8. Cache result ────────────────────────────────────────────────────
+        # ── 8. Cache ──────────────────────────────────────────────────────────
         extraction_cache.set(full_text, merged)
-
         return merged
 
     def extract_from_questionnaire(self, answers: dict) -> dict[str, dict]:
@@ -228,6 +256,39 @@ class SignalExtractor:
         return chunks
 
     # ── LLM extraction ────────────────────────────────────────────────────────
+
+    def _normalize_signals(self, result: dict) -> dict[str, dict]:
+        """Normalize LLM result dict to standard signal format."""
+        from services.fast_extractor import VALID_VALUES
+        normalized: dict[str, dict] = {}
+        for key, sig in result.items():
+            if key not in VALID_VALUES:
+                continue
+            if not isinstance(sig, dict):
+                continue
+            value = sig.get("value")
+            # Validate value is in allowed set
+            if value and value not in VALID_VALUES.get(key, []):
+                value = None
+            normalized[key] = {
+                "value": value,
+                "confidence": min(1.0, max(0.0, float(sig.get("confidence", 0)))),
+                "source_text": str(sig.get("source_text", ""))[:300],
+                "page_number": int(sig.get("page_number", 0)),
+                "method": "llm_targeted",
+            }
+        return normalized
+
+    async def _llm_extraction_with_prompt(self, prompt: str) -> dict[str, dict]:
+        """LLM extraction with a pre-built targeted prompt."""
+        try:
+            result = await self.llm.generate_json(prompt=prompt)
+            if isinstance(result, dict) and "error" not in result:
+                return self._normalize_signals(result)
+            return {}
+        except Exception as e:
+            logger.error("Targeted LLM extraction failed: %s", e)
+            return {}
 
     async def _llm_extraction(self, text: str) -> dict[str, dict]:
         """Single LLM call for signal extraction."""
