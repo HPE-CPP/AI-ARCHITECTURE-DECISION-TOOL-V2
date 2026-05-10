@@ -8,13 +8,31 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    String, Text, Float, Integer, Boolean, DateTime, ForeignKey, Index, Enum as SAEnum
+    String, Text, Float, Integer, Boolean, DateTime, ForeignKey, Index,
+    Enum as SAEnum, JSON, types
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from config import settings
+
+
+class PortableJSON(types.TypeDecorator):
+    """
+    A dialect-agnostic JSON column type.
+    - PostgreSQL: delegates to JSONB for indexability and performance.
+    - All other dialects (e.g. SQLite for tests): uses standard JSON.
+    This allows the same model to work in both production and test environments.
+    """
+    impl = types.JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect: Dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
 
 
 def now_utc() -> datetime:
@@ -159,15 +177,15 @@ class Result(Base):
     )
     recommended_architecture: Mapped[str] = mapped_column(String(60), nullable=False)
     confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    ranking: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)
-    scores: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    decision_breakdown: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    why_not: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    suitability: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    followup_questions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    sensitivity: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    decision_trace: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    architecture_details: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    ranking: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=list)
+    scores: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=dict)
+    decision_breakdown: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=dict)
+    why_not: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=dict)
+    suitability: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=dict)
+    followup_questions: Mapped[list] = mapped_column(PortableJSON, nullable=False, default=list)
+    sensitivity: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=dict)
+    decision_trace: Mapped[list] = mapped_column(PortableJSON, nullable=False, default=list)
+    architecture_details: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, nullable=False
     )
