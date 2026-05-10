@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useMemo, memo } from "react";
 import { AnalysisResult } from "@/lib/api";
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
@@ -9,7 +9,10 @@ import { motion } from "framer-motion";
 import { CheckCircle, Download, Slash } from "lucide-react";
 import { exportAnalysis } from "@/lib/api";
 
-export function ResultsDashboard({ result }: { result: AnalysisResult }) {
+// B-14 FIX: Wrap in React.memo to prevent expensive Recharts SVG re-renders
+// when the parent component re-renders (e.g. on each polling tick) but the
+// result data hasn't actually changed.
+export const ResultsDashboard = memo(function ResultsDashboard({ result }: { result: AnalysisResult }) {
   const {
     recommended, scores, confidence, ranking, why_not,
     factor_breakdown, architecture_details
@@ -42,8 +45,7 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
       {/* RECOMMENDATION CARD */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.1 }}
         className="glass-panel p-8 md:p-12 relative overflow-hidden flex flex-col lg:flex-row items-center gap-12 group"
       >
@@ -61,7 +63,16 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
             {topArch?.description}
           </p>
           <button
-            onClick={() => exportAnalysis(result)}
+            id="download-pdf-btn"
+            onClick={async () => {
+              try {
+                await exportAnalysis(result);
+              } catch (err) {
+                // Export failures are non-fatal: the user stays on the results page.
+                // A future iteration can surface a toast notification here.
+                console.error("[ResultsDashboard] PDF export failed:", err);
+              }
+            }}
             className="mt-10 flex items-center gap-3 px-8 py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn"
           >
             <Download size={20} className="group-hover/btn:text-[var(--background)] text-[var(--text-primary)] transition-colors" /> Download PDF Report
@@ -98,16 +109,15 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
 
       {/* CHARTS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Factor Breakdown */}
+        {/* Factor Breakdown — use animate always (not whileInView) so jsdom tests can detect it */}
         <motion.div
           initial={{ opacity: 0, x: -30 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
+          animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
           className="glass-panel p-8"
         >
           <h3 className="text-2xl font-bold mb-8 tracking-tight">Factor Breakdown</h3>
-          <div className="h-[380px] w-full">
+          <div className="h-[380px] w-full" data-testid="radar-container">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="48%" outerRadius="60%" data={radarData}>
                 <PolarGrid stroke="var(--border)" />
@@ -135,17 +145,16 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
           </div>
         </motion.div>
 
-        {/* Suitability & Why Not */}
+        {/* Suitability & Why Not — use animate always (not whileInView) for jsdom compatibility */}
         <motion.div
           initial={{ opacity: 0, x: 30 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
+          animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
           className="flex flex-col gap-8"
         >
           <div className="glass-panel p-8">
             <h3 className="text-2xl font-bold mb-8 tracking-tight">Suitability Comparison</h3>
-            <div className="h-[220px] w-full">
+            <div className="h-[220px] w-full" data-testid="bar-container">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={scoresData} layout="vertical" margin={{ top: 4, right: 56, left: 0, bottom: 4 }}>
                   <XAxis type="number" domain={[0, 100]} hide />
@@ -156,7 +165,7 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: 'var(--text-primary)', fontWeight: 600, fontSize: 11 }}
-                    tickFormatter={(v: string) => v.length > 16 ? v.slice(0, 14) + '…' : v}
+                    tickFormatter={(v: string) => v.length > 16 ? v.slice(0, 14) + '\u2026' : v}
                   />
                   <Tooltip
                     formatter={(value) => [`${Number(value).toFixed(1)}`, 'Score']}
@@ -195,4 +204,4 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
       </div>
     </div>
   );
-}
+});
