@@ -301,22 +301,41 @@ class SignalExtractor:
 
     def _keyword_extraction(self, text: str, pages: list[dict]) -> dict[str, dict]:
         """Fast keyword scan — no LLM cost, provides fallback source_text."""
+        import re
         signals = {}
         text_lower = text.lower()
 
+        # B-08 FIX: Compile regex patterns once to avoid O(n) text scan per keyword.
+        if not hasattr(self, "_keyword_patterns"):
+            self._keyword_patterns = {}
+            for signal_name, schema in SIGNAL_SCHEMA.items():
+                if schema.get("keywords"):
+                    # Use \b for word boundaries to avoid partial matches if desired,
+                    # but original just used substring match. We keep substring logic 
+                    # but combine them into one regex automaton.
+                    pattern = "|".join(re.escape(k.lower()) for k in schema["keywords"])
+                    self._keyword_patterns[signal_name] = re.compile(pattern)
+
         for signal_name, schema in SIGNAL_SCHEMA.items():
             matches = []
-            for keyword in schema["keywords"]:
-                if keyword in text_lower:
-                    idx = text_lower.index(keyword)
-                    start = max(0, text.rfind(".", 0, idx) + 1)
-                    end = text.find(".", idx)
-                    if end == -1:
-                        end = min(len(text), idx + 200)
-                    matches.append({
-                        "keyword": keyword,
-                        "source_text": text[start:end].strip(),
-                    })
+            pattern = getattr(self, "_keyword_patterns", {}).get(signal_name)
+            
+            if pattern:
+                # Find all unique keywords matched
+                found_keywords = set()
+                for m in pattern.finditer(text_lower):
+                    kw = m.group(0)
+                    if kw not in found_keywords:
+                        found_keywords.add(kw)
+                        idx = m.start()
+                        start = max(0, text.rfind(".", 0, idx) + 1)
+                        end = text.find(".", idx)
+                        if end == -1:
+                            end = min(len(text), idx + 200)
+                        matches.append({
+                            "keyword": kw,
+                            "source_text": text[start:end].strip(),
+                        })
 
             if matches:
                 page_num = 0
