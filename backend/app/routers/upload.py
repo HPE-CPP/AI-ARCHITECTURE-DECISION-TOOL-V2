@@ -16,6 +16,7 @@ from app.db.session import get_db
 from app.db.models import Session as SessionModel
 from app.services import vector_service, signal_service, recommendation_service
 from app.schemas.session import AnalysisResponse
+from app.core.security import verify_firebase_token
 from services.document_parser import DocumentParser, detect_sections
 from config import settings
 
@@ -30,6 +31,7 @@ async def upload_document(
     provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), regex="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
     db: DBSession = Depends(get_db),
+    uid: str = Depends(verify_firebase_token),
 ):
     """Upload a document for architecture analysis."""
 
@@ -60,6 +62,9 @@ async def upload_document(
             project_exists = db.query(Project).filter(Project.id == p_uuid).first()
             if not project_exists:
                 raise HTTPException(404, "Project not found. It may have been deleted.")
+            # SEC-002 FIX: Ensure the user owns the project they are uploading to
+            if project_exists.user_id != uid:
+                raise HTTPException(403, "You do not have permission to upload to this project.")
         except ValueError:
             pass
 

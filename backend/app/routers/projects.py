@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.db.session import get_db
 from app.db.models import Project
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
+from app.core.security import verify_firebase_token
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,11 +38,18 @@ def _to_response(project: Project) -> dict:
 # POST /api/v1/projects  — create
 # ---------------------------------------------------------------------------
 @router.post("/projects", status_code=201)
-def create_project(data: ProjectCreate, db: DBSession = Depends(get_db)):
+def create_project(
+    data: ProjectCreate,
+    db: DBSession = Depends(get_db),
+    uid: str = Depends(verify_firebase_token)
+):
     """Create a new project."""
+    # SEC-001 FIX: Extract user_id from verified JWT instead of trusting payload
+    user_id = uid
+
     # Enforce unique name per user_id
     existing = db.query(Project).filter(
-        Project.user_id == data.user_id,
+        Project.user_id == user_id,
         Project.name == data.name.strip(),
     ).first()
     if existing:
@@ -50,7 +58,7 @@ def create_project(data: ProjectCreate, db: DBSession = Depends(get_db)):
     now = datetime.utcnow()
     project = Project(
         id=uuid.uuid4(),
-        user_id=data.user_id,
+        user_id=user_id,
         name=data.name.strip(),
         description=(data.description or "").strip(),
         status="empty",
@@ -70,11 +78,11 @@ def create_project(data: ProjectCreate, db: DBSession = Depends(get_db)):
 def list_projects(
     user_id: Optional[str] = Query(default=None),
     db: DBSession = Depends(get_db),
+    uid: str = Depends(verify_firebase_token)
 ):
-    """List all projects, optionally filtered by user_id."""
-    q = db.query(Project)
-    if user_id is not None:
-        q = q.filter(Project.user_id == user_id)
+    """List all projects for the authenticated user."""
+    # SEC-001 FIX: Ignore query param and force user_id to the verified JWT uid
+    q = db.query(Project).filter(Project.user_id == uid)
     projects = q.order_by(Project.updated_at.desc()).all()
     return {"projects": [_to_response(p) for p in projects]}
 
@@ -83,14 +91,18 @@ def list_projects(
 # GET /api/v1/projects/{project_id}
 # ---------------------------------------------------------------------------
 @router.get("/projects/{project_id}")
-def get_project(project_id: str, db: DBSession = Depends(get_db)):
+def get_project(
+    project_id: str,
+    db: DBSession = Depends(get_db),
+    uid: str = Depends(verify_firebase_token)
+):
     """Get a single project by ID."""
     try:
         pid = uuid.UUID(project_id)
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    project = db.query(Project).filter(Project.id == pid).first()
+    project = db.query(Project).filter(Project.id == pid, Project.user_id == uid).first()
     if not project:
         raise HTTPException(404, "Project not found")
     return _to_response(project)
@@ -100,14 +112,19 @@ def get_project(project_id: str, db: DBSession = Depends(get_db)):
 # PUT /api/v1/projects/{project_id}
 # ---------------------------------------------------------------------------
 @router.put("/projects/{project_id}")
-def update_project(project_id: str, data: ProjectUpdate, db: DBSession = Depends(get_db)):
+def update_project(
+    project_id: str,
+    data: ProjectUpdate,
+    db: DBSession = Depends(get_db),
+    uid: str = Depends(verify_firebase_token)
+):
     """Update a project's metadata."""
     try:
         pid = uuid.UUID(project_id)
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    project = db.query(Project).filter(Project.id == pid).first()
+    project = db.query(Project).filter(Project.id == pid, Project.user_id == uid).first()
     if not project:
         raise HTTPException(404, "Project not found")
 
@@ -143,14 +160,18 @@ def update_project(project_id: str, data: ProjectUpdate, db: DBSession = Depends
 # DELETE /api/v1/projects/{project_id}
 # ---------------------------------------------------------------------------
 @router.delete("/projects/{project_id}", status_code=204)
-def delete_project(project_id: str, db: DBSession = Depends(get_db)):
+def delete_project(
+    project_id: str,
+    db: DBSession = Depends(get_db),
+    uid: str = Depends(verify_firebase_token)
+):
     """Delete a project."""
     try:
         pid = uuid.UUID(project_id)
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    project = db.query(Project).filter(Project.id == pid).first()
+    project = db.query(Project).filter(Project.id == pid, Project.user_id == uid).first()
     if not project:
         raise HTTPException(404, "Project not found")
     db.delete(project)
