@@ -124,7 +124,11 @@ def generate_followup_questions(
         sig = signals.get(signal_name, {})
         source = sig.get("source_text", "")
         if source:
-            context = f"From your document: \"{source[:150]}...\""
+            # AI-5.4 FIX: Only append ellipsis when the source is actually truncated.
+            # Previously "..." was always appended even for texts shorter than 150 chars.
+            truncated = source[:150]
+            suffix = "..." if len(source) > 150 else ""
+            context = f'From your document: "{truncated}{suffix}"'
 
         questions.append({
             "signal": signal_name,
