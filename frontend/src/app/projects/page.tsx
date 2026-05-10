@@ -88,16 +88,31 @@ export default function ProjectsPage() {
       throw new Error("Project already exists. Please choose a different name.");
     }
 
-    await updateProject(editTarget.id, { name, description });
+    const previousProjects = [...projects];
+    // Optimistic update
+    setProjects(projects.map(p => p.id === editTarget.id ? { ...p, name, description } : p));
     setEditTarget(null);
+
+    try {
+      await updateProject(editTarget.id, { name, description });
+    } catch (e) {
+      // Rollback on failure
+      setProjects(previousProjects);
+      console.error("Failed to update project", e);
+    }
   }, [editTarget, projects]);
 
   const handleDelete = useCallback((id: string) => {
-    deleteProject(id).then(() => {
-      const userId = user?.uid ?? null;
-      getProjects(userId).then(setProjects);
+    const previousProjects = [...projects];
+    // Optimistic update
+    setProjects(projects.filter(p => p.id !== id));
+    
+    deleteProject(id).catch((e) => {
+      // Rollback on failure
+      setProjects(previousProjects);
+      console.error("Failed to delete project", e);
     });
-  }, [user]);
+  }, [projects]);
 
   const handleDuplicate = useCallback((id: string) => {
     duplicateProject(id).then(() => {
