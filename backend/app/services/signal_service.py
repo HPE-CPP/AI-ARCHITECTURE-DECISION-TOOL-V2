@@ -91,9 +91,7 @@ async def extract_and_persist(
     signals = await extractor.extract_signals(document_data)
 
     # Anti-hallucination pass
-    for key, sig in signals.items():
-        if sig.get("confidence", 0) < 0.4:
-            sig["value"] = None
+    signals = _apply_anti_hallucination(signals)
 
     # 4. Persist to PostgreSQL
     try:
@@ -104,6 +102,18 @@ async def extract_and_persist(
     # 5. Cache
     cache_service.set_signals(session_id, signals)
 
+    return signals
+
+
+def _apply_anti_hallucination(signals: dict, threshold: float = 0.4) -> dict:
+    """Null out signal values below the confidence threshold.
+
+    This prevents low-confidence LLM guesses from influencing the scoring
+    engine.  The threshold (default 0.4) was tuned during Phase 5 testing.
+    """
+    for key, sig in signals.items():
+        if sig.get("confidence", 0) < threshold:
+            sig["value"] = None
     return signals
 
 
