@@ -1,5 +1,19 @@
 import { v4 as uuidv4 } from "uuid";
+import { auth } from "./firebase";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (auth.currentUser) {
+    try {
+      const token = await auth.currentUser.getIdToken();
+      headers["Authorization"] = `Bearer ${token}`;
+    } catch (e) {
+      console.warn("Failed to get Firebase token", e);
+    }
+  }
+  return headers;
+}
 
 export type ProjectStatus = "empty" | "in_progress" | "completed";
 
@@ -28,7 +42,9 @@ export function getGuestId(): string {
 export async function getProjects(userId?: string | null): Promise<Project[]> {
   const uid = userId || getGuestId();
   try {
-    const res = await fetch(`${API_BASE}/api/v1/projects?user_id=${uid}`);
+    const res = await fetch(`${API_BASE}/api/v1/projects?user_id=${uid}`, {
+      headers: await getAuthHeaders()
+    });
     if (!res.ok) return [];
     const data = await res.json();
     return data.projects || [];
@@ -39,7 +55,9 @@ export async function getProjects(userId?: string | null): Promise<Project[]> {
 
 export async function getProject(id: string): Promise<Project | undefined> {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/projects/${id}`);
+    const res = await fetch(`${API_BASE}/api/v1/projects/${id}`, {
+      headers: await getAuthHeaders()
+    });
     if (!res.ok) return undefined;
     return await res.json();
   } catch {
@@ -53,7 +71,7 @@ export async function createProject(
   const uid = data.userId || getGuestId();
   const res = await fetch(`${API_BASE}/api/v1/projects`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await getAuthHeaders(),
     body: JSON.stringify({
       user_id: uid,
       name: data.name.trim(),
@@ -89,7 +107,7 @@ export async function updateProject(id: string, patch: Partial<Project> & { user
 
   const res = await fetch(`${API_BASE}/api/v1/projects/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: await getAuthHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) return null;
@@ -101,6 +119,7 @@ export async function updateProject(id: string, patch: Partial<Project> & { user
 export async function deleteProject(id: string): Promise<void> {
   await fetch(`${API_BASE}/api/v1/projects/${id}`, {
     method: "DELETE",
+    headers: await getAuthHeaders()
   });
   notify();
 }

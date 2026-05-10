@@ -41,11 +41,14 @@ def _to_response(project: Project) -> dict:
 def create_project(
     data: ProjectCreate,
     db: DBSession = Depends(get_db),
-    uid: str = Depends(verify_firebase_token)
+    uid: Optional[str] = Depends(verify_firebase_token)
 ):
     """Create a new project."""
-    # SEC-001 FIX: Extract user_id from verified JWT instead of trusting payload
-    user_id = uid
+    user_id = uid if uid else data.user_id
+    if not user_id:
+        raise HTTPException(401, "Authentication required: Must provide a valid token or guest user_id")
+    if not uid and not user_id.startswith("guest_"):
+        raise HTTPException(401, "Authentication required for non-guest users")
 
     # Enforce unique name per user_id
     existing = db.query(Project).filter(
@@ -78,11 +81,16 @@ def create_project(
 def list_projects(
     user_id: Optional[str] = Query(default=None),
     db: DBSession = Depends(get_db),
-    uid: str = Depends(verify_firebase_token)
+    uid: Optional[str] = Depends(verify_firebase_token)
 ):
     """List all projects for the authenticated user."""
-    # SEC-001 FIX: Ignore query param and force user_id to the verified JWT uid
-    q = db.query(Project).filter(Project.user_id == uid)
+    actual_user_id = uid if uid else user_id
+    if not actual_user_id:
+        raise HTTPException(401, "Authentication required")
+    if not uid and not actual_user_id.startswith("guest_"):
+        raise HTTPException(401, "Authentication required for non-guest users")
+
+    q = db.query(Project).filter(Project.user_id == actual_user_id)
     projects = q.order_by(Project.updated_at.desc()).all()
     return {"projects": [_to_response(p) for p in projects]}
 
@@ -94,7 +102,7 @@ def list_projects(
 def get_project(
     project_id: str,
     db: DBSession = Depends(get_db),
-    uid: str = Depends(verify_firebase_token)
+    uid: Optional[str] = Depends(verify_firebase_token)
 ):
     """Get a single project by ID."""
     try:
@@ -102,7 +110,17 @@ def get_project(
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    project = db.query(Project).filter(Project.id == pid, Project.user_id == uid).first()
+    q = db.query(Project).filter(Project.id == pid)
+    if uid:
+        q = q.filter(Project.user_id == uid)
+    
+    project = q.first()
+    
+    if not project:
+        raise HTTPException(404, "Project not found")
+        
+    if not uid and not project.user_id.startswith("guest_"):
+        raise HTTPException(401, "Authentication required for non-guest users")
     if not project:
         raise HTTPException(404, "Project not found")
     return _to_response(project)
@@ -116,7 +134,7 @@ def update_project(
     project_id: str,
     data: ProjectUpdate,
     db: DBSession = Depends(get_db),
-    uid: str = Depends(verify_firebase_token)
+    uid: Optional[str] = Depends(verify_firebase_token)
 ):
     """Update a project's metadata."""
     try:
@@ -124,7 +142,16 @@ def update_project(
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    project = db.query(Project).filter(Project.id == pid, Project.user_id == uid).first()
+    q = db.query(Project).filter(Project.id == pid)
+    if uid:
+        q = q.filter(Project.user_id == uid)
+        
+    project = q.first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+        
+    if not uid and not project.user_id.startswith("guest_"):
+        raise HTTPException(401, "Authentication required for non-guest users")
     if not project:
         raise HTTPException(404, "Project not found")
 
@@ -163,7 +190,7 @@ def update_project(
 def delete_project(
     project_id: str,
     db: DBSession = Depends(get_db),
-    uid: str = Depends(verify_firebase_token)
+    uid: Optional[str] = Depends(verify_firebase_token)
 ):
     """Delete a project."""
     try:
@@ -171,7 +198,16 @@ def delete_project(
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    project = db.query(Project).filter(Project.id == pid, Project.user_id == uid).first()
+    q = db.query(Project).filter(Project.id == pid)
+    if uid:
+        q = q.filter(Project.user_id == uid)
+        
+    project = q.first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+        
+    if not uid and not project.user_id.startswith("guest_"):
+        raise HTTPException(401, "Authentication required for non-guest users")
     if not project:
         raise HTTPException(404, "Project not found")
     db.delete(project)

@@ -1,4 +1,16 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { auth } from "./firebase";
+
+async function getAuthToken(): Promise<string | null> {
+  if (auth.currentUser) {
+    try {
+      return await auth.currentUser.getIdToken();
+    } catch (e) {
+      console.warn("Failed to get Firebase token", e);
+    }
+  }
+  return null;
+}
 
 export interface Signal {
   value: string | null;
@@ -116,8 +128,14 @@ export async function uploadDocument(file: File, provider: string = "ollama", pr
   formData.append("file", file);
   const qs = new URLSearchParams({ provider });
   if (projectId) qs.append("project_id", projectId);
+  
+  const headers: Record<string, string> = {};
+  const token = await getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${API_BASE}/api/v1/upload?${qs.toString()}`, {
     method: "POST",
+    headers,
     body: formData,
   });
   if (!res.ok) {
@@ -130,9 +148,14 @@ export async function uploadDocument(file: File, provider: string = "ollama", pr
 export async function submitQuestionnaire(answers: Record<string, string | null>, provider: string = "ollama", projectId?: string): Promise<AnalysisResult> {
   const qs = new URLSearchParams({ provider });
   if (projectId) qs.append("project_id", projectId);
+  
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${API_BASE}/api/v1/questionnaire?${qs.toString()}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     // FIX FE-005: Backend expects { answers: {...} } not raw answers dict
     body: JSON.stringify({ answers }),
   });
@@ -144,7 +167,11 @@ export async function submitQuestionnaire(answers: Record<string, string | null>
 }
 
 export async function getAnalysis(analysisId: string): Promise<AnalysisResult> {
-  const res = await fetch(`${API_BASE}/api/v1/analysis/${analysisId}`);
+  const headers: Record<string, string> = {};
+  const token = await getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}/api/v1/analysis/${analysisId}`, { headers });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "Failed to fetch analysis");
@@ -153,9 +180,13 @@ export async function getAnalysis(analysisId: string): Promise<AnalysisResult> {
 }
 
 export async function submitFollowUp(analysisId: string, answers: Record<string, string>): Promise<AnalysisResult> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${API_BASE}/api/v1/followup`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ analysis_id: analysisId, answers }),
   });
   if (!res.ok) {
