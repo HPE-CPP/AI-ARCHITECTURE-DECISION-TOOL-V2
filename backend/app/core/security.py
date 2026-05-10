@@ -56,17 +56,15 @@ def _get_firebase_app():
 security = HTTPBearer(auto_error=False)
 
 
-def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+from typing import Optional
+
+def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> Optional[str]:
     """
     Verify the Firebase JWT token and return the user's UID.
-    Returns 401 if no token or invalid token is provided.
+    Returns None if no token is provided.
     """
     if credentials is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        return None
 
     # For local development/testing without firebase credentials
     if os.getenv("ENVIRONMENT") == "development" and credentials.credentials == "dev-token":

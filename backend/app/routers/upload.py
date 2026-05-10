@@ -31,7 +31,7 @@ async def upload_document(
     provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), regex="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
     db: DBSession = Depends(get_db),
-    uid: str = Depends(verify_firebase_token),
+    uid: Optional[str] = Depends(verify_firebase_token),
 ):
     """Upload a document for architecture analysis."""
 
@@ -63,8 +63,12 @@ async def upload_document(
             if not project_exists:
                 raise HTTPException(404, "Project not found. It may have been deleted.")
             # SEC-002 FIX: Ensure the user owns the project they are uploading to
-            if project_exists.user_id != uid:
-                raise HTTPException(403, "You do not have permission to upload to this project.")
+            if uid:
+                if project_exists.user_id != uid:
+                    raise HTTPException(403, "You do not have permission to upload to this project.")
+            else:
+                if not project_exists.user_id.startswith("guest_"):
+                    raise HTTPException(401, "Authentication required to upload to this project.")
         except ValueError:
             pass
 
