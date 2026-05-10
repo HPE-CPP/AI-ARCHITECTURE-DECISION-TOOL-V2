@@ -2,6 +2,7 @@
 Architecture Scoring Engine
 Deterministic rule-based scoring for RAG, Fine-Tuning, CAG, and Hybrid architectures.
 """
+import copy
 import logging
 from typing import Optional
 from services.signal_extractor import SIGNAL_SCHEMA
@@ -182,6 +183,10 @@ class ScoringEngine:
             else:
                 suitability[arch] = "Not Recommended"
 
+        # AI-5.2 FIX: Detect zero-signal state and flag it so callers can warn users.
+        # When all signals are missing, scores are all 0.0 and ranking is arbitrary.
+        data_sufficient = evaluated_factors > 0
+
         return {
             "scores": scores,
             "ranking": ranked,
@@ -193,6 +198,8 @@ class ScoringEngine:
             "total_factors": len(SIGNAL_SCHEMA) if hasattr(self, 'rules') else 10,
             "architecture_details": ARCHITECTURE_DESCRIPTIONS,
             "why_not": self._generate_why_not(ranked, scores, factor_breakdown),
+            # AI-5.2: False when no signals were evaluated — frontend should show a warning.
+            "data_sufficient": data_sufficient,
         }
 
     def _compute_overall_confidence(self, signals: dict) -> float:
@@ -245,7 +252,11 @@ class ScoringEngine:
                 if alt_value == original.get("value"):
                     continue
 
-                perturbed = dict(signals)
+                # AI-5.3 FIX: Use copy.deepcopy() instead of dict() shallow copy.
+                # dict(signals) only copies the top-level keys; nested signal dicts
+                # are still references. A mutation inside score() would corrupt the
+                # caller's original signal dict, causing subtle scoring bugs.
+                perturbed = copy.deepcopy(signals)
                 perturbed[signal_name] = {
                     **original,
                     "value": alt_value,
