@@ -175,12 +175,16 @@ class LLMClient:
         temperature: float = 0.0,
     ) -> dict:
         """Generate structured JSON output from LLM."""
-        raw = await self.generate(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=temperature,
-            json_mode=True,
-        )
+        try:
+            raw = await self.generate(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                json_mode=True,
+            )
+        except Exception as e:
+            logger.error(f"LLM generate() failed in generate_json: {e}")
+            return {"error": f"LLM call failed: {str(e)}"}
         try:
             # Try to extract JSON from the response
             raw = raw.strip()
