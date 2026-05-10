@@ -72,12 +72,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# SEC-3.5 FIX: CORS wildcard + allow_credentials=True violates the CORS spec and will be
+# rejected by browsers. Only send credentials headers if the origin is explicitly listed.
+_allow_credentials = bool(settings.CORS_ORIGINS) and "*" not in settings.CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 # --- In memory store (replace with Redis/DB in production) ---
@@ -135,6 +138,8 @@ async def process_document_task(
     provider: str,
 ):
     """Background task to process uploaded document."""
+    # SEC-3.9 FIX: derive temp_dir from file_path so we can clean up the entire directory.
+    temp_dir = os.path.dirname(file_path)
     trace: list[dict] = []
     try:
         # Stage 1: Parse
@@ -173,9 +178,10 @@ async def process_document_task(
         # Stage 4: Validation
         analysis_store[analysis_id]["status"] = "validating"
         trace.append({"step": "validation", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
-        # Anti-hallucination: check all confidences
+        # AI-5.1 FIX: Raise hallucination threshold from 0.1 → 0.4 to filter low-confidence values.
+        # At 0.1, the LLM can pass near-random guesses; 0.4 requires at least weak corroboration.
         for key, sig in signals.items():
-            if sig.get("confidence", 0) < 0.1:
+            if sig.get("confidence", 0) < 0.4:
                 sig["value"] = None
         trace[-1]["status"] = "complete"
 
@@ -224,12 +230,8 @@ async def process_document_task(
         trace.append({"step": "error", "status": "failed", "details": str(e), "timestamp": datetime.utcnow().isoformat()})
         analysis_store[analysis_id]["decision_trace"] = trace
     finally:
-        # Cleanup temp file
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception:
-            pass
+        # SEC-3.9 FIX: Remove the entire temp directory (not just the file) to prevent orphaned dirs.
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # === API ROUTES ===
@@ -254,14 +256,20 @@ async def upload_document(
     if not file.filename:
         raise HTTPException(400, "No filename provided")
 
-    valid, msg = doc_parser.validate_file(file.filename, file.size or 0)
+    # SEC-3.1 FIX: Sanitize filename to prevent path traversal.
+    # Strip directory separators and reject suspicious patterns.
+    safe_filename = os.path.basename(file.filename.replace("\\", "/"))
+    if not safe_filename or "\x00" in safe_filename or ".." in safe_filename:
+        raise HTTPException(400, "Invalid filename. The filename contains forbidden characters.")
+
+    valid, msg = doc_parser.validate_file(safe_filename, file.size or 0)
     if not valid:
         raise HTTPException(400, msg)
 
     # Save to temp file
     analysis_id = str(uuid.uuid4())
     temp_dir = tempfile.mkdtemp()
-    file_path = os.path.join(temp_dir, file.filename)
+    file_path = os.path.join(temp_dir, safe_filename)  # safe_filename has no directory components
 
     try:
         with open(file_path, "wb") as f:
@@ -270,8 +278,10 @@ async def upload_document(
                 raise HTTPException(400, f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit")
             f.write(content)
     except HTTPException:
+        shutil.rmtree(temp_dir, ignore_errors=True)  # SEC-3.9 FIX: clean up temp dir on early exit
         raise
     except Exception as e:
+        shutil.rmtree(temp_dir, ignore_errors=True)  # SEC-3.9 FIX: clean up temp dir on early exit
         raise HTTPException(500, f"Failed to save file: {str(e)}")
 
     # Initialize analysis record
@@ -280,7 +290,7 @@ async def upload_document(
         "status": "queued",
         "created_at": datetime.utcnow().isoformat(),
         "provider": provider,
-        "filename": file.filename,
+        "filename": safe_filename,
     }
 
     # Start background processing
@@ -288,7 +298,7 @@ async def upload_document(
         process_document_task,
         analysis_id,
         file_path,
-        file.filename,
+        safe_filename,
         provider,
     )
 
