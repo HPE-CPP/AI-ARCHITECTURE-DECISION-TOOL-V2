@@ -265,19 +265,32 @@ class SignalExtractor:
     async def _parallel_chunk_extraction(self, text: str) -> dict[str, dict]:
         """
         For large documents: split into overlapping chunks, extract from all chunks
-        concurrently, then keep the highest-confidence signal from any chunk.
+        concurrently (bounded by a semaphore), then keep the highest-confidence
+        signal from any chunk.
         """
         chunks = self._make_chunks(text)
         logger.info("Parallel extraction: %d chunks (~%d chars each)", len(chunks), CHUNK_SIZE)
 
+        # B-07 FIX: Limit concurrent LLM calls to 5 to prevent OOM / rate-limit crashes.
+        # return_exceptions=True ensures a single failed chunk doesn't discard all results.
+        semaphore = asyncio.Semaphore(5)
+
+        async def _bounded_extraction(chunk: str) -> dict:
+            async with semaphore:
+                return await self._llm_extraction(chunk)
+
         results = await asyncio.gather(
-            *[self._llm_extraction(chunk) for chunk in chunks],
-            return_exceptions=False,
+            *[_bounded_extraction(chunk) for chunk in chunks],
+            return_exceptions=True,
         )
 
         # Winner-takes-all per signal: highest confidence across chunks
         merged: dict[str, dict] = self._empty_signals()
         for chunk_result in results:
+            # Skip chunks that raised exceptions
+            if isinstance(chunk_result, Exception):
+                logger.warning("Chunk extraction failed (skipped): %s", chunk_result)
+                continue
             for key, sig in chunk_result.items():
                 if sig.get("confidence", 0) > merged[key].get("confidence", 0):
                     merged[key] = sig
