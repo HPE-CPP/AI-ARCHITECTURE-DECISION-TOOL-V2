@@ -24,3 +24,4 @@ asyncpg==0.30.0
 alembic==1.14.0
 python-dotenv==1.0.1
 fpdf2==2.8.1
+firebase-admin==6.5.0
