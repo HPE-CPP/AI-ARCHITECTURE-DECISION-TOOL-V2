@@ -2,16 +2,33 @@
 LLM Client - Unified interface for OpenAI and Ollama.
 Supports dynamic provider switching and structured output.
 """
+import asyncio
 import json
 import logging
 from typing import Optional, Any
 from openai import AsyncOpenAI
-import ollama as ollama_client
 import httpx
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# B-02 FIX: Use a single module-level shared AsyncClient instead of creating a new one
+# per LLM call. This enables TCP connection pooling and saves 10-50ms per request.
+# Timeout set to 90s (down from 300s) — see B-03 FIX below.
+_OLLAMA_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
+_ollama_http_client: Optional[httpx.AsyncClient] = None
+
+
+def get_ollama_http_client() -> httpx.AsyncClient:
+    """Return (or lazily create) the shared Ollama HTTP client."""
+    global _ollama_http_client
+    if _ollama_http_client is None or _ollama_http_client.is_closed:
+        _ollama_http_client = httpx.AsyncClient(
+            timeout=_OLLAMA_TIMEOUT,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _ollama_http_client
 
 
 class LLMClient:
@@ -70,7 +87,12 @@ class LLMClient:
     async def _ollama_generate(
         self, prompt: str, system_prompt: str, temperature: float, max_tokens: int, json_mode: bool
     ) -> str:
-        """Call Ollama local API."""
+        """Call Ollama local API using the shared HTTP client with a guarded timeout.
+
+        B-02 FIX: Reuse module-level _ollama_http_client for connection pooling.
+        B-03 FIX: Wrap in asyncio.wait_for(timeout=90) so a slow GPU/CPU machine
+                  cannot starve the entire event loop for up to 5 minutes.
+        """
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -81,17 +103,20 @@ class LLMClient:
                 "num_predict": max_tokens,
             }
 
-            # Use httpx for async call to Ollama (increased timeout for slower machines/CPUs)
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                payload = {
-                    "model": settings.OLLAMA_MODEL,
-                    "messages": messages,
-                    "stream": False,
-                    "options": options,
-                }
-                if json_mode:
-                    payload["format"] = "json"
+            payload: dict[str, Any] = {
+                "model": settings.OLLAMA_MODEL,
+                "messages": messages,
+                "stream": False,
+                "options": options,
+            }
+            if json_mode:
+                payload["format"] = "json"
 
+            client = get_ollama_http_client()
+
+            # B-03 FIX: asyncio.wait_for enforces a hard timeout at the event-loop level,
+            # preventing a stalled Ollama from blocking all concurrent requests.
+            async def _do_request() -> str:
                 response = await client.post(
                     f"{settings.OLLAMA_BASE_URL}/api/chat",
                     json=payload,
@@ -99,6 +124,12 @@ class LLMClient:
                 response.raise_for_status()
                 data = response.json()
                 return data.get("message", {}).get("content", "")
+
+            return await asyncio.wait_for(_do_request(), timeout=90.0)
+
+        except asyncio.TimeoutError:
+            logger.error("Ollama request timed out after 90s")
+            raise RuntimeError("Ollama API call timed out after 90 seconds. Is the model loaded?")
         except httpx.HTTPError as he:
             err_text = getattr(he, "response", None)
             err_msg = err_text.text if err_text else str(he)
