@@ -173,6 +173,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
 
             <div className="flex gap-4">
               <button
+                id="cancel-upload-btn"
                 onClick={() => { setFile(null); setError(null); }}
                 disabled={uploading}
                 className="flex-1 py-4 px-6 rounded-full font-semibold border border-[color:var(--border)] hover:bg-[color:var(--background)] transition-all disabled:opacity-50 text-[color:var(--text-primary)]"

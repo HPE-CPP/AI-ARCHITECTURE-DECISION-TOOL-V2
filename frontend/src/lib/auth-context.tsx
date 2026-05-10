@@ -32,23 +32,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await signInWithGoogle();
     setUser(u);
     
-    // Sync user to backend
+    // FIX FE-004: Backend sync with retry — do NOT fire-and-forget silently
+    // If all retries fail, the user is warned. Projects will fail with FK errors otherwise.
     if (u) {
-      try {
-        const payload = {
-          uid: u.uid,
-          email: u.email,
-          displayName: u.displayName,
-          photoURL: u.photoURL,
-        };
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        fetch(`${apiUrl}/api/v1/users/sync`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }).catch(err => console.error("Failed to sync user to backend", err));
-      } catch (e) {
-        console.error("Error in sync flow", e);
+      const payload = {
+        uid: u.uid,
+        email: u.email,
+        displayName: u.displayName,
+        photoURL: u.photoURL,
+      };
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const MAX_RETRIES = 3;
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const res = await fetch(`${apiUrl}/api/v1/users/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) break; // success
+          lastError = new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          lastError = err;
+        }
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
+      }
+      if (lastError) {
+        console.warn(
+          "[AuthContext] Failed to sync user to backend after all retries.",
+          "Projects created by this user may fail due to missing DB record.",
+          lastError,
+        );
       }
     }
     

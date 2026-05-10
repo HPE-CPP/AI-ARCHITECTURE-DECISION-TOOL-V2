@@ -133,7 +133,8 @@ export async function submitQuestionnaire(answers: Record<string, string | null>
   const res = await fetch(`${API_BASE}/api/v1/questionnaire?${qs.toString()}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(answers),
+    // FIX FE-005: Backend expects { answers: {...} } not raw answers dict
+    body: JSON.stringify({ answers }),
   });
   if (!res.ok) {
     const err = await res.json();

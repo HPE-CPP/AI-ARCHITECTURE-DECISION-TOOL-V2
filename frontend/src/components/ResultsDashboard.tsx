@@ -73,12 +73,13 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
           <div className="flex-1 lg:w-48 p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-3">Confidence</span>
             <div className="text-5xl font-black text-[var(--primary)]">
-              {(confidence! * 100).toFixed(0)}<span className="text-2xl text-[var(--text-secondary)]">%</span>
+              {/* FIX FE-003: Use (confidence ?? 0) instead of confidence! to prevent crash */}
+              {(((confidence ?? 0) * 100).toFixed(0))}<span className="text-2xl text-[var(--text-secondary)]">%</span>
             </div>
             <div className="w-full h-px border border-[var(--border)] bg-[var(--background)] relative mt-6 overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }} 
-                animate={{ width: `${confidence! * 100}%` }} 
+                animate={{ width: `${(confidence ?? 0) * 100}%` }} 
                 transition={{ duration: 1, delay: 0.8 }} 
                 className="absolute top-0 left-0 h-full bg-[var(--text-primary)]" 
               />
@@ -171,22 +172,25 @@ export function ResultsDashboard({ result }: { result: AnalysisResult }) {
             </div>
           </div>
 
-          <div className="glass-panel p-8 flex-1 bg-[var(--surface)]">
-            <h4 className="font-bold text-xl mb-6 flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full bg-[var(--background)] border border-red-500/20 text-red-500 flex items-center justify-center">
-                <Slash size={14} className="-rotate-135" />
-              </span>
-              Why not others?
-            </h4>
-            <div className="space-y-5">
-              {Object.entries(why_not || {}).slice(0, 3).map(([arch, reason]) => (
-                <div key={arch} className="flex flex-col border-b border-[var(--border)] pb-4 last:border-0 last:pb-0">
-                  <span className="text-sm font-bold text-[var(--primary)] mb-1">{arch}</span>
-                  <span className="text-sm text-[var(--text-secondary)] leading-relaxed select-text">{reason}</span>
-                </div>
-              ))}
+          {/* FIX FE-010: Only render why_not section if there are entries to show */}
+          {why_not && Object.keys(why_not).length > 0 && (
+            <div className="glass-panel p-8 flex-1 bg-[var(--surface)]">
+              <h4 className="font-bold text-xl mb-6 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-full bg-[var(--background)] border border-red-500/20 text-red-500 flex items-center justify-center">
+                  <Slash size={14} className="-rotate-135" />
+                </span>
+                Why not others?
+              </h4>
+              <div className="space-y-5">
+                {Object.entries(why_not).slice(0, 3).map(([arch, reason]) => (
+                  <div key={arch} className="flex flex-col border-b border-[var(--border)] pb-4 last:border-0 last:pb-0">
+                    <span className="text-sm font-bold text-[var(--primary)] mb-1">{arch}</span>
+                    <span className="text-sm text-[var(--text-secondary)] leading-relaxed select-text">{reason}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </motion.div>
       </div>
     </div>
