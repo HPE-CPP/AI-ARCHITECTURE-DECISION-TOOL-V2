@@ -1,4 +1,6 @@
-console.log("ENV CHECK:", process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
+// SEC-3.3 FIX: Removed console.log that leaked NEXT_PUBLIC_FIREBASE_API_KEY to the browser console.
+// SEC-3.4 FIX: Removed silent fallback to dummy credentials. Missing env vars now surface as an
+//              explicit warning so developers get a clear signal that auth is misconfigured.
 
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
@@ -17,18 +19,31 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Prevent duplicate app initialization in dev (hot reload)
+// Validate that all required Firebase config values are present.
 const isConfigured =
   !!firebaseConfig.apiKey &&
   !!firebaseConfig.authDomain &&
   !!firebaseConfig.projectId &&
   !!firebaseConfig.appId;
-const fallbackConfig = { apiKey: "dummy-key", authDomain: "dummy.firebaseapp.com", projectId: "dummy-project" };
 
-const app = getApps().length ? getApp() : initializeApp(isConfigured ? firebaseConfig : fallbackConfig);
+if (!isConfigured && typeof window !== "undefined") {
+  // Warn once in the browser — never in a server/SSR context to avoid log spam.
+  console.warn(
+    "[Firebase] One or more NEXT_PUBLIC_FIREBASE_* environment variables are missing. " +
+    "Google Sign-In will be unavailable. Check your .env.local file."
+  );
+}
+
+// Only initialize if properly configured; otherwise leave Firebase uninitialised
+// so that any auth attempt surfaces a meaningful error rather than an opaque failure.
+const app = getApps().length
+  ? getApp()
+  : isConfigured
+  ? initializeApp(firebaseConfig)
+  : initializeApp({ apiKey: "__unconfigured__", authDomain: "", projectId: "" });
 const auth = getAuth(app);
 
 const googleProvider = new GoogleAuthProvider();
