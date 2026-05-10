@@ -6,6 +6,7 @@ import os
 import uuid
 import tempfile
 import logging
+import shutil
 from datetime import datetime
 
 from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException
@@ -36,10 +37,15 @@ async def upload_document(
     if not file.filename:
         raise HTTPException(400, "No filename provided")
 
+    # SEC-3.1 FIX: Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename.replace("\\", "/"))
+    if not safe_filename or "\x00" in safe_filename or ".." in safe_filename:
+        raise HTTPException(400, "Invalid filename")
+
     content = await file.read()
     file_size = len(content)
 
-    valid, msg = doc_parser.validate_file(file.filename, file_size)
+    valid, msg = doc_parser.validate_file(safe_filename, file_size)
     if not valid:
         raise HTTPException(400, msg)
 
@@ -64,7 +70,7 @@ async def upload_document(
         status="processing",
         provider=provider,
         project_id=p_uuid,
-        filename=file.filename,
+        filename=safe_filename,
     )
     db.add(session_row)
     db.commit()
@@ -75,14 +81,14 @@ async def upload_document(
 
     # --- Save to temp file ---
     temp_dir = tempfile.mkdtemp()
-    file_path = os.path.join(temp_dir, file.filename)
+    file_path = os.path.join(temp_dir, safe_filename)
     try:
         with open(file_path, "wb") as f:
             f.write(content)
 
         # Stage 1: Parse
         trace.append({"step": "parse", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
-        doc_data = await doc_parser.parse(file_path, file.filename)
+        doc_data = await doc_parser.parse(file_path, safe_filename)
         trace[-1]["status"] = "complete"
         trace[-1]["details"] = f"Extracted {doc_data['word_count']} words from {doc_data['total_pages']} pages"
 
@@ -154,7 +160,7 @@ async def upload_document(
 
         # Attach document info
         result_response["document_info"] = {
-            "filename": file.filename,
+            "filename": safe_filename,
             "pages": doc_data["total_pages"],
             "words": doc_data["word_count"],
         }
@@ -167,12 +173,8 @@ async def upload_document(
         _mark_session_error(db, session_row, str(exc))
         raise HTTPException(500, f"Processing failed: {str(exc)}")
     finally:
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            os.rmdir(temp_dir)
-        except Exception:
-            pass
+        # SEC-3.9 FIX: use shutil.rmtree to ensure complete cleanup even if parser created subfiles
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def _mark_session_error(db: DBSession, session_row: SessionModel, error: str) -> None:
