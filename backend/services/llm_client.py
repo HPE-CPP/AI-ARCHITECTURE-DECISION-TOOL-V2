@@ -186,16 +186,45 @@ class LLMClient:
             logger.error(f"LLM generate() failed in generate_json: {e}")
             return {"error": f"LLM call failed: {str(e)}"}
         try:
-            # Try to extract JSON from the response
-            raw = raw.strip()
-            if raw.startswith("```"):
-                # Remove markdown code fences
-                lines = raw.split("\n")
-                raw = "\n".join(lines[1:-1])
-            return json.loads(raw)
+            # Try to extract JSON from the response using robust sanitization
+            sanitized = sanitize_json_string(raw)
+            return json.loads(sanitized)
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse JSON from LLM response: {raw[:200]}")
             return {"error": "Failed to parse LLM response as JSON", "raw": raw}
+
+
+def sanitize_json_string(raw: str) -> str:
+    """Robustly extract JSON from noisy LLM output.
+    
+    Handles prepended text, markdown formatting, and trailing text.
+    """
+    if not raw:
+        return ""
+        
+    raw = raw.strip()
+    
+    # Check for markdown code block markers
+    if "```" in raw:
+        # Extract the content between the first and last ```
+        parts = raw.split("```")
+        if len(parts) >= 3:
+            # The JSON should be in the second part (index 1)
+            # Remove "json" language identifier if present
+            content = parts[1].strip()
+            if content.startswith("json\n"):
+                content = content[5:]
+            elif content.startswith("json"):
+                content = content[4:]
+            return content.strip()
+            
+    # If no markdown blocks, try to find the first { and last }
+    start_idx = raw.find('{')
+    end_idx = raw.rfind('}')
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        return raw[start_idx:end_idx + 1]
+        
+    return raw
 
     def switch_provider(self, provider: str):
         """Switch LLM provider at runtime."""
