@@ -123,6 +123,16 @@ class ScoringEngine:
         self.rules = SCORING_RULES
         self.weights = SIGNAL_WEIGHTS
         self.architectures = ["RAG", "FineTuning", "CAG", "Hybrid"]
+        # B-12 FIX: Cache sensitivity results to avoid 30+ score() calls on every re-score.
+        self._sensitivity_cache: dict[str, dict] = {}
+
+    def _hash_signals(self, signals: dict) -> str:
+        """Create a deterministic hash of the signals dictionary for caching."""
+        import hashlib
+        import json
+        # Sort keys to ensure deterministic serialization
+        serialized = json.dumps(signals, sort_keys=True)
+        return hashlib.md5(serialized.encode("utf-8")).hexdigest()
 
     def score(self, signals: dict[str, dict]) -> dict:
         """Compute architecture scores from extracted signals."""
@@ -239,6 +249,12 @@ class ScoringEngine:
 
     def sensitivity_analysis(self, signals: dict, perturbation_steps: int = 3) -> dict:
         """Perturb each signal and check if recommendation changes."""
+        
+        # B-12 FIX: Check cache first
+        sig_hash = self._hash_signals(signals)
+        if sig_hash in self._sensitivity_cache:
+            return self._sensitivity_cache[sig_hash]
+            
         base_result = self.score(signals)
         base_recommended = base_result["recommended"]
         instabilities = []
@@ -279,9 +295,16 @@ class ScoringEngine:
 
         stability_score = max(0, 1.0 - (len(instabilities) / (len(SIGNAL_SCHEMA) * 3)))
 
-        return {
+        result = {
             "is_stable": stability_score > 0.7,
             "stability_score": round(stability_score, 2),
             "instabilities": instabilities,
             "warning": "Recommendation may change with different input values" if stability_score <= 0.7 else None,
         }
+        
+        # Prevent cache from growing unbounded
+        if len(self._sensitivity_cache) > 1000:
+            self._sensitivity_cache.clear()
+            
+        self._sensitivity_cache[sig_hash] = result
+        return result

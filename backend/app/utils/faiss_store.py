@@ -16,6 +16,11 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# B-05 FIX: In-memory cache to prevent reloading the entire FAISS index
+# and metadata from disk on every search query.
+_index_cache: dict[str, faiss.IndexFlatL2] = {}
+_meta_cache: dict[str, list[dict]] = {}
+
 
 def _session_dir(session_id: str) -> Path:
     path = Path(settings.FAISS_INDEX_PATH) / session_id
@@ -60,7 +65,9 @@ def _load_or_create(session_id: str, dim: int) -> faiss.IndexFlatL2:
     if ip.exists() and dp.exists():
         stored_dim = int(dp.read_text().strip())
         if stored_dim == dim:
-            return faiss.read_index(str(ip))
+            if session_id not in _index_cache:
+                _index_cache[session_id] = faiss.read_index(str(ip))
+            return _index_cache[session_id]
         else:
             logger.warning(
                 "FAISS dimension mismatch for session %s: stored=%d, requested=%d. "
@@ -70,21 +77,28 @@ def _load_or_create(session_id: str, dim: int) -> faiss.IndexFlatL2:
             ip.unlink(missing_ok=True)
             dp.unlink(missing_ok=True)
             _save_meta(session_id, [])  # clear stale metadata
+            _index_cache.pop(session_id, None)
 
     # Write the dimension so future calls can validate it
     dp.write_text(str(dim))
-    return faiss.IndexFlatL2(dim)
+    idx = faiss.IndexFlatL2(dim)
+    _index_cache[session_id] = idx
+    return idx
 
 
 def _load_meta(session_id: str) -> list[dict]:
+    if session_id in _meta_cache:
+        return _meta_cache[session_id]
+    
     mp = _meta_path(session_id)
     if mp.exists():
         with open(mp, "r", encoding="utf-8") as f:
-            return json.load(f)
+            _meta_cache[session_id] = json.load(f)
+            return _meta_cache[session_id]
     return []
 
-
 def _save_meta(session_id: str, meta: list[dict]) -> None:
+    _meta_cache[session_id] = meta
     mp = _meta_path(session_id)
     with open(mp, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False)
@@ -149,7 +163,10 @@ def search(
         logger.warning(f"FAISS index not found for session {session_id}")
         return []
 
-    index = faiss.read_index(str(ip))
+    # B-05 FIX: Use _load_or_create to utilize the in-memory cache instead of faiss.read_index
+    # We must pass the correct dim (from settings via _get_dim()) for validation.
+    dim = _get_dim()
+    index = _load_or_create(session_id, dim)
     meta = _load_meta(session_id)
 
     vec = query_embedding.astype(np.float32).reshape(1, -1)
@@ -174,4 +191,6 @@ def delete_session_index(session_id: str) -> None:
     session_dir = _session_dir(session_id)
     if session_dir.exists():
         shutil.rmtree(session_dir)
+        _index_cache.pop(session_id, None)
+        _meta_cache.pop(session_id, None)
         logger.info(f"FAISS: deleted index for session {session_id}")
