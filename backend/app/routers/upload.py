@@ -176,6 +176,8 @@ async def upload_document(
     except Exception as exc:
         logger.error(f"Document processing failed: {exc}")
         _mark_session_error(db, session_row, str(exc))
+        if "Failed to parse" in str(exc) or "Unsupported" in str(exc):
+            raise HTTPException(422, f"Invalid or unreadable document: {str(exc)}")
         raise HTTPException(500, f"Processing failed: {str(exc)}")
     finally:
         # SEC-3.9 FIX: use shutil.rmtree to ensure complete cleanup even if parser created subfiles

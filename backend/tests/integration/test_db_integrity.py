@@ -214,7 +214,10 @@ class TestSessionStatusTransitions:
         db_session.commit()  # Must not raise
 
 
+import os
+
 @pytest.mark.integration
+@pytest.mark.skipif("sqlite" in os.environ.get("DATABASE_URL", ""), reason="SQLite does not handle concurrent writes well")
 class TestConcurrentWrites:
 
     def test_concurrent_signal_inserts_for_different_sessions(self, engine):

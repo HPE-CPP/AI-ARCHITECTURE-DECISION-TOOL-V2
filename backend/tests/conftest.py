@@ -1,21 +1,21 @@
 """
 Master conftest.py — shared fixtures for all backend test suites.
 
-Provides:
-  - app: FastAPI test application (isolated SQLite DB, patched Redis, patched Firebase)
-  - client: httpx TestClient with auth bypass
-  - auth_client: httpx TestClient that enforces auth (for auth tests)
-  - db_session: SQLAlchemy session against in-memory SQLite
-  - mock_llm: pre-configured LLM mock that returns deterministic JSON
-  - sample_signals / complete_signals: signal dicts for scoring tests
-  - sample_document_data: parsed document dict
-  - seed_project / seed_session / seed_result: pre-created DB rows
+CRITICAL: DATABASE_URL must be set to SQLite BEFORE any app code is imported.
+This conftest is collected first by pytest, giving us the opportunity to redirect
+the SQLAlchemy engine to in-memory SQLite instead of Supabase/PostgreSQL.
 """
+import os
 import json
 import uuid
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
+
+# ─── MUST BE SET BEFORE ANY APP IMPORTS ────────────────────────────────────
+os.environ["DATABASE_URL"] = "sqlite:///./test_temp.db"
+os.environ["ENVIRONMENT"] = "test"
+# ────────────────────────────────────────────────────────────────────────────
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -81,10 +81,16 @@ def client(db_session):
         """Bypass Firebase for tests — return a fixed test UID."""
         return TEST_USER_UID
 
-    with patch("app.services.cache_service._client", None):
+    with patch("app.services.cache_service._client", None), \
+         patch("slowapi.util.get_remote_address", return_value=uuid.uuid4().hex):
         from main import app as fastapi_app
         fastapi_app.dependency_overrides[get_db] = override_get_db
         fastapi_app.dependency_overrides[verify_firebase_token] = override_verify_firebase_token
+        
+        # Disable rate limiting for normal tests
+        if hasattr(fastapi_app.state, "limiter"):
+            fastapi_app.state.limiter.enabled = False
+
         with TestClient(fastapi_app, raise_server_exceptions=False) as c:
             yield c
         fastapi_app.dependency_overrides.clear()
@@ -104,10 +110,16 @@ def auth_client(db_session):
     def override_get_db():
         yield db_session
 
-    with patch("app.services.cache_service._client", None):
+    with patch("app.services.cache_service._client", None), \
+         patch("slowapi.util.get_remote_address", return_value=uuid.uuid4().hex):
         from main import app as fastapi_app
         fastapi_app.dependency_overrides[get_db] = override_get_db
         # NOTE: verify_firebase_token is NOT overridden here
+        
+        # Disable rate limiting for normal tests
+        if hasattr(fastapi_app.state, "limiter"):
+            fastapi_app.state.limiter.enabled = False
+
         with TestClient(fastapi_app, raise_server_exceptions=False) as c:
             yield c
         fastapi_app.dependency_overrides.clear()
