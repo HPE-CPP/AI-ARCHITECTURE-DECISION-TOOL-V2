@@ -27,6 +27,8 @@ export default function ProjectsPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Project | null>(null);
   const [mounted, setMounted] = useState(false);
+  // FIX FE-012: separate loading state so we can show skeletons during fetch
+  const [loadingProjects, setLoadingProjects] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   // Load projects on mount
@@ -35,8 +37,10 @@ export default function ProjectsPage() {
     const userId = user?.uid ?? null;
 
     const loadProjects = async () => {
+      setLoadingProjects(true);
       const data = await getProjects(userId);
       setProjects(data);
+      setLoadingProjects(false);
     };
     loadProjects();
 
@@ -108,6 +112,47 @@ export default function ProjectsPage() {
   }, []);
 
   if (!mounted) return null;
+
+  // FIX FE-012: Show skeleton cards while loading instead of blank/premature empty state
+  if (loadingProjects) {
+    return (
+      <div className="w-full min-h-screen pt-32 pb-20 px-4 sm:px-6 max-w-6xl mx-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <div className="h-4 w-32 rounded-full bg-[color:var(--surface)] mb-6 animate-pulse" />
+            <div className="h-10 w-48 rounded-2xl bg-[color:var(--surface)] mb-4 animate-pulse" />
+          </div>
+          <div className="h-10 w-36 rounded-full bg-[color:var(--surface)] animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--surface)] p-6 animate-pulse"
+              style={{ animationDelay: `${i * 100}ms` }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="h-5 w-20 rounded-full bg-[color:var(--background)]" />
+                <div className="flex gap-1">
+                  <div className="w-7 h-7 rounded-full bg-[color:var(--background)]" />
+                  <div className="w-7 h-7 rounded-full bg-[color:var(--background)]" />
+                  <div className="w-7 h-7 rounded-full bg-[color:var(--background)]" />
+                </div>
+              </div>
+              <div className="h-6 w-3/4 rounded-full bg-[color:var(--background)] mb-2" />
+              <div className="h-4 w-full rounded-full bg-[color:var(--background)] mb-1" />
+              <div className="h-4 w-2/3 rounded-full bg-[color:var(--background)] mb-5" />
+              <div className="h-px bg-[color:var(--border)] mb-4" />
+              <div className="flex justify-between">
+                <div className="h-3 w-16 rounded-full bg-[color:var(--background)]" />
+                <div className="h-3 w-10 rounded-full bg-[color:var(--background)]" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const handleNewProjectClick = () => {
     if (!user && projects.length >= 1) {

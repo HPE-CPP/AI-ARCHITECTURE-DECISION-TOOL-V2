@@ -39,7 +39,17 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
         console.error("Failed to parse saved answers", e);
       }
     }
-  }, [answersKey]);
+
+    // FIX FE-013: Clear the opposite-scope key to prevent cross-contamination.
+    // If we are in a project context, the global key's stale data must not
+    // bleed in if the user later opens the global form. Likewise in reverse.
+    // We only wipe the key that is NOT being used by this form instance.
+    if (projectId) {
+      // Project-scoped: invalidate stale global answers (they belong to no project)
+      localStorage.removeItem("questionnaire_answers");
+    }
+    // (If no projectId, leave project-scoped keys alone — other projects are unaffected)
+  }, [answersKey, projectId]);
 
   // Sort signals: Required first, then Optional
   const sortedSignals = useMemo(() => {

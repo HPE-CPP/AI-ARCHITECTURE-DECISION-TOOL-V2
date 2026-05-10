@@ -60,8 +60,10 @@ export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
               whileInView="visible"
               exit="hidden"
               viewport={{
-                once: false,
-                amount: 0.1, // Trigger earlier on mobile
+                // FIX FE-011: once: true stops the animation from replaying on every
+                // scroll in/out, which was expensive and visually jarring for return visits
+                once: true,
+                amount: 0.1,
                 margin: "0px 0px -5% 0px"
               }}
               className="relative"

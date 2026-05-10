@@ -75,15 +75,17 @@ function notify() {
   }
 }
 
-export async function updateProject(id: string, patch: any): Promise<Project | null> {
-  const payload: any = {};
-  if (patch.name) payload.name = patch.name;
-  if (patch.description) payload.description = patch.description;
-  if (patch.status) payload.status = patch.status;
-  if (patch.userId) payload.user_id = patch.userId;
-  if (patch.user_id) payload.user_id = patch.user_id;
-  if (patch.analysisId) payload.analysis_id = patch.analysisId;
-  if (patch.mode) payload.mode = patch.mode;
+export async function updateProject(id: string, patch: Partial<Project> & { userId?: string; analysisId?: string }): Promise<Project | null> {
+  const payload: Record<string, unknown> = {};
+  // FIX FE-002: use !== undefined so empty strings / false-y values are still sent
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.description !== undefined) payload.description = patch.description;
+  if (patch.status !== undefined) payload.status = patch.status;
+  // FIX FE-SEC-001: only accept the typed camelCase alias, never the raw snake_case
+  // (prevents callers from accidentally trusting an untrusted user_id string)
+  if (patch.userId !== undefined) payload.user_id = patch.userId;
+  if (patch.analysisId !== undefined) payload.analysis_id = patch.analysisId;
+  if (patch.mode !== undefined) payload.mode = patch.mode;
 
   const res = await fetch(`${API_BASE}/api/v1/projects/${id}`, {
     method: "PUT",

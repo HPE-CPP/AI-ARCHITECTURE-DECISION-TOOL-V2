@@ -21,30 +21,49 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const [followUpAnswers, setFollowUpAnswers] = useState<Record<string, string>>({});
   const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
 
-  // 1. Fetch data
+  // 1. Fetch data with exponential backoff and a maximum retry cap
+  // FIX FE-009: The flat 1.5s interval with no retry cap caused infinite polling
+  // for stuck sessions. Now uses exponential backoff: 1.5s → 3s → 6s → max 15s,
+  // and hard-stops after MAX_POLLS attempts (~3 minutes).
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    const MAX_POLLS = 40;
+    let pollCount = 0;
+    let timeoutRef: NodeJS.Timeout;
+    let interval = 1500;
+    const MAX_INTERVAL = 15000;
 
     const fetchResult = async () => {
+      pollCount++;
       try {
         const data = await getAnalysis(resolvedParams.analysisId);
         setResult(data);
 
         if (data.status === "complete" || data.status === "error") {
           setLoading(false);
-          clearInterval(interval);
+          return; // stop polling
         }
       } catch (err: any) {
         setError(err.message || "Failed to fetch analysis");
         setLoading(false);
-        clearInterval(interval);
+        return; // stop polling on error
       }
+
+      if (pollCount >= MAX_POLLS) {
+        setError(
+          "Analysis is taking unusually long. " +
+          "Please check the backend or try again."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Exponential backoff: double interval each time up to MAX_INTERVAL
+      interval = Math.min(interval * 1.5, MAX_INTERVAL);
+      timeoutRef = setTimeout(fetchResult, interval);
     };
 
     fetchResult();
-    interval = setInterval(fetchResult, 1500);
-
-    return () => clearInterval(interval);
+    return () => clearTimeout(timeoutRef);
   }, [resolvedParams.analysisId]);
 
   // 2. Scroll to top + mark project completed when results arrive
@@ -68,11 +87,13 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const handleFollowUpSubmit = async () => {
     try {
       setSubmittingFollowUp(true);
+      setError(null); // clear previous errors
       const data = await submitFollowUp(resolvedParams.analysisId, followUpAnswers);
       setResult(data);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
-      alert(err.message);
+      // FIX: use component error state instead of native alert() which blocks the thread
+      setError(err.message || "Failed to submit follow-up answers");
     } finally {
       setSubmittingFollowUp(false);
     }

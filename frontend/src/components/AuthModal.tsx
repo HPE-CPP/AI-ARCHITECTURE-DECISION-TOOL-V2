@@ -144,7 +144,9 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                   <div className="relative z-10 p-8 sm:p-10">
                     {/* Close button */}
                     <button
+                      id="auth-modal-close-btn"
                       onClick={onClose}
+                      aria-label="Close sign-in dialog"
                       className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full border border-[color:var(--border)] text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)]/5 transition-all"
                     >
                       <X size={14} />
@@ -183,6 +185,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
 
                     {/* Google Sign-In */}
                     <button
+                      id="google-signin-btn"
                       onClick={handleGoogleSignIn}
                       disabled={loading}
                       className="w-full flex items-center justify-center gap-3 py-3.5 px-6 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg mb-3"

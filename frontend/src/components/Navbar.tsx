@@ -36,9 +36,10 @@ export function Navbar() {
 
   const { user, signIn, signOut } = useAuth();
 
-  // Load project count for badge
+  // FIX FE-006: Load project count on mount, user change, or route change.
+  // Removed the `mounted` guard — it was delaying the first count load by
+  // one extra render cycle, causing a 1-2s flash where the badge shows 0.
   useEffect(() => {
-    if (!mounted) return;
     const userId = user?.uid ?? null;
 
     const loadCount = async () => {
@@ -49,7 +50,7 @@ export function Navbar() {
 
     window.addEventListener("projects-updated", loadCount);
     return () => window.removeEventListener("projects-updated", loadCount);
-  }, [mounted, user, pathname]);
+  }, [user, pathname]);
 
   useEffect(() => {
     setMounted(true);
@@ -60,6 +61,11 @@ export function Navbar() {
     }, 400);
     return () => clearTimeout(timer);
   }, []);
+
+  // FIX FE-008: Close mobile menu on route change (covers browser back/forward)
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   // Ensure user dropdown and expansion safely close when shrinking to sphere
   useEffect(() => {
