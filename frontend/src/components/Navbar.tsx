@@ -430,11 +430,31 @@ export function Navbar() {
                       exit="exit"
                       className="flex md:hidden items-center gap-2"
                     >
+                      {mounted ? (
+                        user ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(true); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-black text-[11px] active:scale-95 transition-transform"
+                          >
+                            {userInitial}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setAuthModalOpen(true); setIsMobileMenuOpen(false); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] active:scale-95 transition-transform"
+                          >
+                            <User size={14} />
+                          </button>
+                        )
+                      ) : (
+                        <div className="w-8 h-8" />
+                      )}
+
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
-                        className="w-9 h-9 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all"
+                        className="w-8 h-8 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all"
                       >
-                        {mounted ? (resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />) : <div className="w-4 h-4" />}
+                        {mounted ? (resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />) : <div className="w-4 h-4" />}
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(!isMobileMenuOpen); }}
@@ -510,30 +530,39 @@ export function Navbar() {
             </div>
 
             {/* Mobile: User actions */}
-            {user && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.35 }}
-                className="flex flex-col gap-2"
-              >
-                <div className="flex items-center gap-3 px-6 py-3 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]">
-                  <div className="w-8 h-8 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] flex items-center justify-center text-sm font-black">
-                    {userInitial}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.35 }}
+              className="flex flex-col gap-2 mt-auto pb-8"
+            >
+              {user ? (
+                <>
+                  <div className="flex items-center gap-3 px-6 py-3 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]">
+                    <div className="w-8 h-8 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] flex items-center justify-center text-sm font-black">
+                      {userInitial}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-base font-bold truncate">{user.displayName}</p>
+                      <p className="text-sm text-[color:var(--text-secondary)] truncate">{user.email}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-base font-bold truncate">{user.displayName}</p>
-                    <p className="text-sm text-[color:var(--text-secondary)] truncate">{user.email}</p>
-                  </div>
-                </div>
+                  <button
+                    onClick={handleSignOut}
+                    className="flex items-center justify-center gap-2 w-full py-4 rounded-full border border-red-500/30 text-red-400 font-bold text-base"
+                  >
+                    <LogOut size={18} /> Sign Out
+                  </button>
+                </>
+              ) : (
                 <button
-                  onClick={handleSignOut}
-                  className="flex items-center justify-center gap-2 w-full py-4 rounded-full border border-red-500/30 text-red-400 font-bold text-base"
+                  onClick={() => { setAuthModalOpen(true); setIsMobileMenuOpen(false); }}
+                  className="flex items-center justify-center gap-2 w-full py-4 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold text-base"
                 >
-                  <LogOut size={18} /> Sign Out
+                  <User size={18} /> Sign In
                 </button>
-              </motion.div>
-            )}
+              )}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
