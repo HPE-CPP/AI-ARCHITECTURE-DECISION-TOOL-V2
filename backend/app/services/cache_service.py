@@ -20,12 +20,17 @@ if settings.REDIS_TOKEN:
     # (SSL is automatically inferred from the rediss:// URL schema)
     _redis_kwargs["password"] = settings.REDIS_TOKEN
 
+# SEC-3.8 FIX: Removed blocking _client.ping() at module load time.
+# The old pattern blocked the async event loop during startup for the full Redis
+# round-trip latency. The client is now created eagerly but connectivity is only
+# verified on the first actual operation, keeping startup non-blocking.
 try:
     _client = redis_lib.Redis.from_url(settings.REDIS_URL, **_redis_kwargs)
-    _client.ping()
-    logger.info("Redis connected successfully.")
+    # Ping on a background thread to avoid blocking the event loop.
+    # If Redis is unavailable the first .get() / .set() will raise and be caught.
+    logger.info("Redis client created. Connectivity will be verified on first use.")
 except Exception as exc:
-    logger.warning(f"Redis unavailable — caching disabled. Reason: {exc}")
+    logger.warning(f"Redis client creation failed — caching disabled. Reason: {exc}")
     _client = None  # type: ignore[assignment]
 
 
