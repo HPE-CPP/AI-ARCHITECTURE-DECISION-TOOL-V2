@@ -13,6 +13,11 @@ import app.db.models  # noqa: F401
 
 from app.routers import upload, analysis, questionnaire, projects, users
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 # Load environment variables
 load_dotenv()
 
@@ -23,12 +28,16 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # --- App ---
+limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # SEC-3.5 FIX: CORS wildcard + allow_credentials=True violates the CORS spec
 _allow_credentials = bool(settings.CORS_ORIGINS) and "*" not in settings.CORS_ORIGINS
