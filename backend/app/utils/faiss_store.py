@@ -16,9 +16,6 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-provider = getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama").lower()
-_DIM = getattr(settings, "OLLAMA_EMBEDDING_DIMENSION", 768) if provider == "ollama" else settings.EMBEDDING_DIMENSION
-
 
 def _session_dir(session_id: str) -> Path:
     path = Path(settings.FAISS_INDEX_PATH) / session_id
@@ -34,15 +31,49 @@ def _meta_path(session_id: str) -> Path:
     return _session_dir(session_id) / "meta.json"
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
+def _get_dim() -> int:
+    """Return the embedding dimension for the current provider.
 
-def _load_or_create(session_id: str) -> faiss.IndexFlatL2:
+    B-06 FIX: Resolve the dimension at call-time rather than at module import,
+    so provider switches (ollama<->openai) pick up the correct dimensionality.
+    """
+    provider = getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama").lower()
+    if provider == "ollama":
+        return getattr(settings, "OLLAMA_EMBEDDING_DIMENSION", 768)
+    return settings.EMBEDDING_DIMENSION
+
+
+def _dim_path(session_id: str) -> Path:
+    """Path to the file that records the FAISS index dimension for this session."""
+    return _session_dir(session_id) / "dim.txt"
+
+
+def _load_or_create(session_id: str, dim: int) -> faiss.IndexFlatL2:
+    """Load an existing FAISS index if the stored dimension matches `dim`.
+
+    B-06 FIX: If the stored dimension doesn't match (e.g. after a provider
+    switch), discard the old index and start fresh to avoid a FAISS crash.
+    """
     ip = _index_path(session_id)
-    if ip.exists():
-        return faiss.read_index(str(ip))
-    return faiss.IndexFlatL2(_DIM)
+    dp = _dim_path(session_id)
+
+    if ip.exists() and dp.exists():
+        stored_dim = int(dp.read_text().strip())
+        if stored_dim == dim:
+            return faiss.read_index(str(ip))
+        else:
+            logger.warning(
+                "FAISS dimension mismatch for session %s: stored=%d, requested=%d. "
+                "Discarding old index.",
+                session_id, stored_dim, dim,
+            )
+            ip.unlink(missing_ok=True)
+            dp.unlink(missing_ok=True)
+            _save_meta(session_id, [])  # clear stale metadata
+
+    # Write the dimension so future calls can validate it
+    dp.write_text(str(dim))
+    return faiss.IndexFlatL2(dim)
 
 
 def _load_meta(session_id: str) -> list[dict]:
@@ -81,8 +112,9 @@ def add_embeddings(
     if not embeddings:
         return
 
+    dim = embeddings[0].shape[0]
     pages = pages or [0] * len(chunks)
-    index = _load_or_create(session_id)
+    index = _load_or_create(session_id, dim)  # B-06: pass dim for validation
     meta = _load_meta(session_id)
 
     vectors = np.stack(embeddings).astype(np.float32)
