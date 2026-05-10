@@ -122,6 +122,13 @@ class Session(Base):
 class Signal(Base):
     __tablename__ = "signals"
 
+    # B-11 FIX: Add composite index on (session_id, signal_name).
+    # update_signals() queries both columns together; without this index,
+    # PostgreSQL falls back to a full scan on the single-column session_id index.
+    __table_args__ = (
+        Index("ix_signals_session_name", "session_id", "signal_name"),
+    )
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
