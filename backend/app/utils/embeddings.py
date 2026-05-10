@@ -67,12 +67,15 @@ async def embed_texts(texts: list[str]) -> list[np.ndarray]:
         return results
 
     elif provider == "ollama":
-        import httpx
-        results = []
-        dim = getattr(settings, "OLLAMA_EMBEDDING_DIMENSION", 768)
+        import asyncio
+        from services.llm_client import get_ollama_http_client
         
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            for text in texts:
+        dim = getattr(settings, "OLLAMA_EMBEDDING_DIMENSION", 768)
+        client = get_ollama_http_client()
+        semaphore = asyncio.Semaphore(10)  # B-04 FIX: limit parallel embedding requests to 10
+
+        async def _embed_single(text: str) -> np.ndarray:
+            async with semaphore:
                 try:
                     resp = await client.post(
                         f"{settings.OLLAMA_BASE_URL}/api/embeddings",
@@ -83,15 +86,15 @@ async def embed_texts(texts: list[str]) -> list[np.ndarray]:
                     )
                     resp.raise_for_status()
                     data = resp.json()
-                    
                     if "embedding" in data:
-                        results.append(np.array(data["embedding"], dtype=np.float32))
-                    else:
-                        results.append(np.zeros(dim, dtype=np.float32))
+                        return np.array(data["embedding"], dtype=np.float32)
                 except Exception as e:
                     logger.error(f"Ollama embedding error: {e}")
-                    results.append(np.zeros(dim, dtype=np.float32))
-        return results
+                return np.zeros(dim, dtype=np.float32)
+
+        # B-04 FIX: Parallelize embedding requests instead of serial loop
+        results_list = await asyncio.gather(*[_embed_single(t) for t in texts])
+        return list(results_list)
         
     else:
         logger.warning(f"Unsupported provider: {provider} — returning zero-vectors.")
