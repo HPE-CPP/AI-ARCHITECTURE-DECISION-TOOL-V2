@@ -50,6 +50,35 @@ class LLMClient:
         json_mode: bool = False,
     ) -> str:
         """Generate completion from the configured LLM provider."""
+        import tiktoken
+        from fastapi import HTTPException
+        
+        # AI-002 FIX: Context Window Protection
+        # Count tokens and truncate the prompt if it exceeds the model's safe limit.
+        try:
+            encoding = tiktoken.get_encoding("cl100k_base")
+            sys_tokens = len(encoding.encode(system_prompt))
+            prompt_tokens = len(encoding.encode(prompt))
+            total_tokens = sys_tokens + prompt_tokens
+            
+            # Using 16000 as a safe limit for current typical deployments.
+            # If it exceeds, we truncate the prompt text.
+            limit = 16000
+            if total_tokens > limit:
+                allowed_prompt_tokens = limit - sys_tokens - 100 # buffer
+                if allowed_prompt_tokens <= 0:
+                    raise HTTPException(status_code=413, detail="System prompt alone exceeds token limit.")
+                
+                # Truncate prompt tokens and decode back to string
+                encoded_prompt = encoding.encode(prompt)
+                truncated_prompt = encoding.decode(encoded_prompt[:allowed_prompt_tokens])
+                prompt = truncated_prompt + "\n\n...[TRUNCATED FOR LENGTH]"
+                logger.warning(f"Prompt truncated from {prompt_tokens} to {allowed_prompt_tokens} tokens.")
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            logger.warning(f"Failed to count tokens: {e}")
+
         if self.provider == "openai":
             return await self._openai_generate(prompt, system_prompt, temperature, max_tokens, json_mode)
         elif self.provider == "ollama":
