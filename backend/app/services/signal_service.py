@@ -92,7 +92,7 @@ async def extract_and_persist(
 
     # Anti-hallucination pass
     for key, sig in signals.items():
-        if sig.get("confidence", 0) < 0.1:
+        if sig.get("confidence", 0) < 0.4:
             sig["value"] = None
 
     # 4. Persist to PostgreSQL
