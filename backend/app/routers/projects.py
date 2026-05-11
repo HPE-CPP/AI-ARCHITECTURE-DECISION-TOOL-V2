@@ -110,19 +110,13 @@ def get_project(
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    q = db.query(Project).filter(Project.id == pid)
-    if uid:
-        q = q.filter(Project.user_id == uid)
-    
     project = q.first()
-    
     if not project:
         raise HTTPException(404, "Project not found")
-        
+
     if not uid and not project.user_id.startswith("guest_"):
         raise HTTPException(401, "Authentication required for non-guest users")
-    if not project:
-        raise HTTPException(404, "Project not found")
+
     return _to_response(project)
 
 
@@ -145,15 +139,13 @@ def update_project(
     q = db.query(Project).filter(Project.id == pid)
     if uid:
         q = q.filter(Project.user_id == uid)
-        
+
     project = q.first()
     if not project:
         raise HTTPException(404, "Project not found")
-        
+
     if not uid and not project.user_id.startswith("guest_"):
         raise HTTPException(401, "Authentication required for non-guest users")
-    if not project:
-        raise HTTPException(404, "Project not found")
 
     if data.name is not None:
         # Check name uniqueness (skip if same project)
@@ -170,8 +162,7 @@ def update_project(
         project.description = data.description.strip()
     if data.status is not None:
         project.status = data.status
-    if data.user_id is not None:
-        project.user_id = data.user_id
+    # SEC-002 FIX: data.user_id removed from schema — ownership is immutable
     if data.analysis_id is not None:
         project.analysis_id = data.analysis_id
     if data.mode is not None:
@@ -201,15 +192,14 @@ def delete_project(
     q = db.query(Project).filter(Project.id == pid)
     if uid:
         q = q.filter(Project.user_id == uid)
-        
+
     project = q.first()
     if not project:
         raise HTTPException(404, "Project not found")
-        
+
     if not uid and not project.user_id.startswith("guest_"):
         raise HTTPException(401, "Authentication required for non-guest users")
-    if not project:
-        raise HTTPException(404, "Project not found")
+
     db.delete(project)
     db.commit()
     return None
