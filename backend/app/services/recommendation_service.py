@@ -4,7 +4,7 @@ row to PostgreSQL, and caches it in Redis.
 """
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session as DBSession
 
@@ -78,7 +78,7 @@ def score_and_persist(
         sensitivity=sensitivity,
         decision_trace=decision_trace,
         architecture_details=scoring_result["architecture_details"],
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(result_row)
     db.commit()

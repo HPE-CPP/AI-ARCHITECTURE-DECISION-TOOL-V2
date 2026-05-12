@@ -4,7 +4,7 @@ Response shapes are identical to the original in-memory implementation.
 """
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -58,7 +58,7 @@ def create_project(
     if existing:
         raise HTTPException(409, f"A project named '{data.name.strip()}' already exists.")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     project = Project(
         id=uuid.uuid4(),
         user_id=user_id,
@@ -192,7 +192,7 @@ def update_project(
     if data.mode is not None:
         project.mode = data.mode
 
-    project.updated_at = datetime.utcnow()
+    project.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(project)
     return _to_response(project)

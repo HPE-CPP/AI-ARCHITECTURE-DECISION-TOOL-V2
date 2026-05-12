@@ -5,7 +5,7 @@ Mirrors the API contract of the original in-memory implementation exactly.
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ---------- Request bodies ----------
@@ -39,7 +39,7 @@ class ProjectResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
     @classmethod
     def from_orm_model(cls, project) -> "ProjectResponse":
