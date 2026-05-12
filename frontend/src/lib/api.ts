@@ -213,9 +213,13 @@ function _triggerDownload(url: string, filename: string): void {
 }
 
 export async function exportAnalysis(result: AnalysisResult): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${API_BASE}/api/v1/export/pdf`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(result),
   });
   if (!res.ok) throw new Error("Export failed");
@@ -224,12 +228,17 @@ export async function exportAnalysis(result: AnalysisResult): Promise<void> {
 }
 
 export async function exportCostAnalysis(result: AnalysisResult): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${API_BASE}/api/v1/export/pdf/cost`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(result),
   });
   if (!res.ok) throw new Error("Cost analysis export failed");
   const url = URL.createObjectURL(await res.blob());
   _triggerDownload(url, `ArchGuide_Cost_Analysis_${result.analysis_id}.pdf`);
 }
+

@@ -137,6 +137,18 @@ class ExtractionCache:
             except Exception as exc:
                 logger.warning("ExtractionCache Redis DELETE failed: %s", exc)
 
+    def clear(self) -> None:
+        """Clear all entries from both L1 and L2 (Redis) tiers."""
+        self._store.clear()
+        if self._redis is not None:
+            try:
+                # Flush all keys with our prefix
+                keys = self._redis.keys(f"{_REDIS_KEY_PREFIX}:*")
+                if keys:
+                    self._redis.delete(*keys)
+            except Exception as exc:
+                logger.warning("ExtractionCache Redis clear failed: %s", exc)
+
     @property
     def size(self) -> int:
         return len(self._store)

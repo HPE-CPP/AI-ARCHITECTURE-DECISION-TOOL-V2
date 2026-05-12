@@ -106,14 +106,30 @@ async def extract_and_persist(
 
 
 def _apply_anti_hallucination(signals: dict, threshold: float = 0.4) -> dict:
-    """Null out signal values below the confidence threshold.
+    """Null out signal values below the confidence threshold OR with invalid values.
 
-    This prevents low-confidence LLM guesses from influencing the scoring
-    engine.  The threshold (default 0.4) was tuned during Phase 5 testing.
+    H-004 FIX: In addition to the confidence check, validate that each signal's
+    value is one of the allowed options in SCORING_RULES.  This prevents LLM
+    hallucinated values (e.g. "INVENTED_VALUE") from passing through to the
+    scoring engine even when confidence is high.
     """
+    from services.scoring_engine import SCORING_RULES
+
     for key, sig in signals.items():
         if sig.get("confidence", 0) < threshold:
             sig["value"] = None
+            continue
+        # Validate value against allowed options
+        value = sig.get("value")
+        if value and key in SCORING_RULES:
+            allowed = set(SCORING_RULES[key].keys())
+            if value not in allowed:
+                logger.warning(
+                    "Anti-hallucination: signal %s has invalid value '%s' "
+                    "(allowed: %s). Nulling.",
+                    key, value, allowed,
+                )
+                sig["value"] = None
     return signals
 
 

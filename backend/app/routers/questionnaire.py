@@ -4,15 +4,17 @@ Converts user answers to signals, scores, persists, caches.
 """
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
 from app.db.models import Session as SessionModel, Signal
 from app.services import recommendation_service, cache_service
 from app.schemas.session import QuestionnaireInput, AnalysisResponse
+from app.core.security import verify_firebase_token
 from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
 from services.llm_client import get_llm_client
 from config import settings
@@ -27,8 +29,12 @@ def submit_questionnaire(
     provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), pattern="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
     db: DBSession = Depends(get_db),
+    uid: Optional[str] = Depends(verify_firebase_token),
 ):
     """Process questionnaire input and return architecture recommendation."""
+    # H-005 FIX: Require authentication to prevent anonymous abuse
+    if not uid:
+        raise HTTPException(401, "Authentication required to submit questionnaire.")
     session_id = str(uuid.uuid4())
     session_uuid = uuid.UUID(session_id)
     trace: list[dict] = []
@@ -52,7 +58,7 @@ def submit_questionnaire(
     db.add(session_row)
     db.commit()
 
-    trace.append({"step": "questionnaire_input", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
+    trace.append({"step": "questionnaire_input", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()})
 
     # Convert answers to signals using existing extractor
     extractor = SignalExtractor(get_llm_client(provider))
@@ -65,7 +71,7 @@ def submit_questionnaire(
     trace.append({
         "step": "signal_extraction",
         "status": "complete",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "details": f"Extracted {extracted_count}/{len(signals)} signals",
     })
 
@@ -74,11 +80,11 @@ def submit_questionnaire(
         trace.append({
             "step": "missing_signals",
             "status": "complete",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "details": f"{missing_count} signals missing: {', '.join(missing_names)}",
         })
 
-    trace.append({"step": "validation", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
+    trace.append({"step": "validation", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()})
 
     # Persist signals
     for signal_name, data in signals.items():
@@ -92,9 +98,9 @@ def submit_questionnaire(
         ))
     db.commit()
 
-    trace.append({"step": "scoring", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
-    trace.append({"step": "sensitivity_analysis", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
-    trace.append({"step": "recommend", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
+    trace.append({"step": "scoring", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()})
+    trace.append({"step": "sensitivity_analysis", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()})
+    trace.append({"step": "recommend", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()})
 
     # Score + persist result
     result = recommendation_service.score_and_persist(

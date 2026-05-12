@@ -2,6 +2,7 @@
 AI Architecture Decision Platform - Main FastAPI Application
 """
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -50,6 +51,45 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# ---------------------------------------------------------------------------
+# M-001 FIX: Lifespan context manager (replaces deprecated @app.on_event)
+# ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown logic for the FastAPI application."""
+    # --- STARTUP ---
+    logger.info("Verifying database connection...")
+    try:
+        with engine.connect() as connection:
+            logger.info("PostgreSQL connection successful!")
+    except Exception as e:
+        logger.error(f"PostgreSQL connection failed: {e}")
+
+    logger.info("Verifying Redis connection...")
+    try:
+        from app.services import cache_service
+        if cache_service._client:
+            cache_service._client.set("test_startup", "ok", ex=10)
+            logger.info("Redis connection successful!")
+        else:
+            logger.warning("Redis client not initialized.")
+    except Exception as e:
+        logger.error(f"Redis connection failed: {e}")
+
+    logger.info("Creating database tables (if not exist)...")
+    from pathlib import Path
+    Base.metadata.create_all(bind=engine)
+    faiss_path = Path(settings.FAISS_INDEX_PATH)
+    faiss_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"FAISS index directory ready at: {faiss_path.resolve()}")
+    logger.info("Startup complete.")
+
+    yield  # Application runs here
+
+    # --- SHUTDOWN ---
+    logger.info("Shutting down...")
+
+
 # --- App ---
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
 app = FastAPI(
@@ -57,6 +97,7 @@ app = FastAPI(
     version=settings.APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -84,34 +125,6 @@ app.include_router(questionnaire.router, prefix=prefix, tags=["Questionnaire"])
 app.include_router(projects.router, prefix=prefix, tags=["Projects"])
 app.include_router(users.router, prefix=prefix, tags=["Users"])
 
-@app.on_event("startup")
-def on_startup():
-    logger.info("Verifying database connection...")
-    try:
-        with engine.connect() as connection:
-            logger.info("PostgreSQL connection successful!")
-    except Exception as e:
-        logger.error(f"PostgreSQL connection failed: {e}")
-
-    logger.info("Verifying Redis connection...")
-    try:
-        from app.services import cache_service
-        if cache_service._client:
-            cache_service._client.set("test_startup", "ok", ex=10)
-            logger.info("Redis connection successful!")
-        else:
-            logger.warning("Redis client not initialized.")
-    except Exception as e:
-        logger.error(f"Redis connection failed: {e}")
-
-    logger.info("Creating database tables (if not exist)...")
-    from pathlib import Path
-    Base.metadata.create_all(bind=engine)
-    faiss_path = Path(settings.FAISS_INDEX_PATH)
-    faiss_path.mkdir(parents=True, exist_ok=True)
-    logger.info(f"FAISS index directory ready at: {faiss_path.resolve()}")
-    logger.info("Startup complete.")
-
 @app.get("/api/v1/health", tags=["Health"])
 def health():
     return {"status": "ok", "version": settings.APP_VERSION}
@@ -119,3 +132,4 @@ def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

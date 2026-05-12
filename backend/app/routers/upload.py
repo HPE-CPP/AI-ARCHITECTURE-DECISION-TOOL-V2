@@ -7,7 +7,7 @@ import uuid
 import tempfile
 import logging
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException
@@ -88,7 +88,7 @@ async def upload_document(
     db.commit()
 
     trace: list[dict] = [
-        {"step": "upload", "status": "complete", "timestamp": datetime.utcnow().isoformat()}
+        {"step": "upload", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()}
     ]
 
     # --- Save to temp file ---
@@ -99,7 +99,7 @@ async def upload_document(
             f.write(content)
 
         # Stage 1: Parse
-        trace.append({"step": "parse", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
+        trace.append({"step": "parse", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
         doc_data = await doc_parser.parse(file_path, safe_filename)
         trace[-1]["status"] = "complete"
         trace[-1]["details"] = f"Extracted {doc_data['word_count']} words from {doc_data['total_pages']} pages"
@@ -109,14 +109,14 @@ async def upload_document(
             raise HTTPException(422, "Document is empty or contains too little text.")
 
         # Stage 2: Section detection (unchanged)
-        trace.append({"step": "section_detection", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
+        trace.append({"step": "section_detection", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
         sections = detect_sections(doc_data["full_text"])
         detected_count = sum(1 for v in sections.values() if v)
         trace[-1]["status"] = "complete"
         trace[-1]["details"] = f"Detected {detected_count} document sections"
 
         # Stage 3: FAISS indexing
-        trace.append({"step": "vector_indexing", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
+        trace.append({"step": "vector_indexing", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
         try:
             num_chunks = await vector_service.index_document(
                 session_id=session_id,
@@ -131,7 +131,7 @@ async def upload_document(
             trace[-1]["details"] = str(exc)
 
         # Stage 4: Signal extraction (DB + Redis)
-        trace.append({"step": "signal_extraction", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
+        trace.append({"step": "signal_extraction", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
         signals = await signal_service.extract_and_persist(
             db=db,
             session_id=session_id,
@@ -149,13 +149,13 @@ async def upload_document(
             trace.append({
                 "step": "missing_signals",
                 "status": "complete",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "details": f"{missing_count} signals missing: {', '.join(missing_names)}",
             })
 
         # Stage 5: Sensitivity analysis is embedded inside scoring
-        trace.append({"step": "scoring", "status": "in_progress", "timestamp": datetime.utcnow().isoformat()})
-        trace.append({"step": "recommend", "status": "complete", "timestamp": datetime.utcnow().isoformat()})
+        trace.append({"step": "scoring", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
+        trace.append({"step": "recommend", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()})
 
         # Stage 6: Score + persist Result
         result_response = recommendation_service.score_and_persist(

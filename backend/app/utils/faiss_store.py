@@ -161,9 +161,10 @@ def add_embeddings(
         faiss.normalize_L2(vectors)  # cosine similarity via normalised L2
         index.add(vectors)  # type: ignore[arg-type]
 
+        base_offset = len(meta)
         for i, (chunk, page) in enumerate(zip(chunks, pages)):
             meta.append({
-                "chunk_id": len(meta) + i,
+                "chunk_id": base_offset + i,
                 "session_id": session_id,
                 "text": chunk,
                 "page": page,

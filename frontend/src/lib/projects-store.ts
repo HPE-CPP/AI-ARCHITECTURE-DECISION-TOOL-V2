@@ -99,9 +99,7 @@ export async function updateProject(id: string, patch: Partial<Project> & { user
   if (patch.name !== undefined) payload.name = patch.name;
   if (patch.description !== undefined) payload.description = patch.description;
   if (patch.status !== undefined) payload.status = patch.status;
-  // FIX FE-SEC-001: only accept the typed camelCase alias, never the raw snake_case
-  // (prevents callers from accidentally trusting an untrusted user_id string)
-  if (patch.userId !== undefined) payload.user_id = patch.userId;
+  // H-001/L-001 FIX: user_id is immutable after creation; do not send in PUT.
   if (patch.analysisId !== undefined) payload.analysis_id = patch.analysisId;
   if (patch.mode !== undefined) payload.mode = patch.mode;
 
