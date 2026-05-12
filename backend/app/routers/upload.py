@@ -8,6 +8,7 @@ import tempfile
 import logging
 import shutil
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
@@ -28,12 +29,14 @@ doc_parser = DocumentParser()
 @router.post("/upload", response_model=AnalysisResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), regex="^(openai|ollama)$"),
+    provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), pattern="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token),
 ):
     """Upload a document for architecture analysis."""
+    if not uid:
+        raise HTTPException(401, "Authentication required to upload documents.")
 
     # --- Validate ---
     if not file.filename:

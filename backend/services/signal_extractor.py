@@ -118,16 +118,66 @@ Respond with a JSON object with signal names as keys, each containing: value, co
 """
 
 SIGNAL_OPTIONS = {
-    "dataset_size": ["small", "medium", "large", "very_large"],
-    "query_volume": ["low", "medium", "high", "very_high"],
-    "latency_requirement": ["relaxed", "moderate", "strict", "ultra_low"],
-    "data_volatility": ["static", "low", "moderate", "high"],
-    "accuracy_requirement": ["moderate", "high", "very_high", "critical"],
-    "domain_specificity": ["general", "moderate", "specialized", "highly_specialized"],
-    "security_level": ["standard", "elevated", "high", "critical"],
-    "cost_sensitivity": ["low", "moderate", "high", "very_high"],
-    "deployment_preference": ["cloud", "on_premise", "hybrid", "edge"],
-    "user_scale": ["small", "medium", "large", "enterprise"],
+    "dataset_size": [
+        {"value": "small", "label": "Small (< 100k records)"},
+        {"value": "medium", "label": "Medium (100k - 10M records)"},
+        {"value": "large", "label": "Large (10M - 500M records)"},
+        {"value": "very_large", "label": "Very Large (> 500M records)"},
+    ],
+    "query_volume": [
+        {"value": "low", "label": "Low (< 10 QPS)"},
+        {"value": "medium", "label": "Medium (10 - 100 QPS)"},
+        {"value": "high", "label": "High (100 - 1000 QPS)"},
+        {"value": "very_high", "label": "Very High (> 1000 QPS)"},
+    ],
+    "latency_requirement": [
+        {"value": "relaxed", "label": "Relaxed (> 1s)"},
+        {"value": "moderate", "label": "Moderate (200ms - 1s)"},
+        {"value": "strict", "label": "Strict (50ms - 200ms)"},
+        {"value": "ultra_low", "label": "Ultra-Low (< 50ms)"},
+    ],
+    "data_volatility": [
+        {"value": "static", "label": "Static (rarely changes)"},
+        {"value": "low", "label": "Low (daily/weekly updates)"},
+        {"value": "moderate", "label": "Moderate (hourly updates)"},
+        {"value": "high", "label": "High (real-time streaming)"},
+    ],
+    "accuracy_requirement": [
+        {"value": "moderate", "label": "Moderate (general assistance)"},
+        {"value": "high", "label": "High (professional use)"},
+        {"value": "very_high", "label": "Very High (medical/legal)"},
+        {"value": "critical", "label": "Critical (zero-hallucination)"},
+    ],
+    "domain_specificity": [
+        {"value": "general", "label": "General Knowledge"},
+        {"value": "moderate", "label": "Moderately Specialized"},
+        {"value": "specialized", "label": "Highly Specialized"},
+        {"value": "highly_specialized", "label": "Proprietary/Niche"},
+    ],
+    "security_level": [
+        {"value": "standard", "label": "Standard (Public data)"},
+        {"value": "elevated", "label": "Elevated (Internal data)"},
+        {"value": "high", "label": "High (PII/Sensitive data)"},
+        {"value": "critical", "label": "Critical (Classified data)"},
+    ],
+    "cost_sensitivity": [
+        {"value": "low", "label": "Low (Performance at any cost)"},
+        {"value": "moderate", "label": "Moderate (Balanced)"},
+        {"value": "high", "label": "High (Cost optimized)"},
+        {"value": "very_high", "label": "Very High (Strict budget)"},
+    ],
+    "deployment_preference": [
+        {"value": "cloud", "label": "Cloud (AWS/GCP/Azure)"},
+        {"value": "on_premise", "label": "On-Premise (Self-hosted)"},
+        {"value": "hybrid", "label": "Hybrid Cloud"},
+        {"value": "edge", "label": "Edge Computing"},
+    ],
+    "user_scale": [
+        {"value": "small", "label": "Small (< 100 users)"},
+        {"value": "medium", "label": "Medium (100 - 1000 users)"},
+        {"value": "large", "label": "Large (1k - 10k users)"},
+        {"value": "enterprise", "label": "Enterprise (> 10k users)"},
+    ],
 }
 
 

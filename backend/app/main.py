@@ -40,13 +40,16 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # CORS
+    # CORS — SEC-006 FIX: Replaced allow_origin_regex='.*' with explicit origin
+    # allowlist from settings. Wildcard + credentials violates CORS spec and allows
+    # any site to make credentialed cross-origin requests to this API.
+    _allow_credentials = bool(settings.CORS_ORIGINS) and "*" not in settings.CORS_ORIGINS
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=".*", # Permissive for local development
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=settings.CORS_ORIGINS,
+        allow_credentials=_allow_credentials,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
     )
 
     # Mount routers under /api/v1
