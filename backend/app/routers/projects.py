@@ -80,10 +80,17 @@ def create_project(
 @router.get("/projects")
 def list_projects(
     user_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token)
 ):
-    """List all projects for the authenticated user."""
+    """List all projects for the authenticated user.
+
+    P7-006 FIX: Added limit/offset pagination (default 50, max 200).
+    Without this, a user with thousands of projects would exhaust server
+    memory serialising every ORM object on every list call.
+    """
     actual_user_id = uid if uid else user_id
     if not actual_user_id:
         raise HTTPException(401, "Authentication required")
@@ -91,8 +98,14 @@ def list_projects(
         raise HTTPException(401, "Authentication required for non-guest users")
 
     q = db.query(Project).filter(Project.user_id == actual_user_id)
-    projects = q.order_by(Project.updated_at.desc()).all()
-    return {"projects": [_to_response(p) for p in projects]}
+    total = q.count()
+    projects = q.order_by(Project.updated_at.desc()).offset(offset).limit(limit).all()
+    return {
+        "projects": [_to_response(p) for p in projects],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -104,11 +117,22 @@ def get_project(
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token)
 ):
-    """Get a single project by ID."""
+    """Get a single project by ID.
+
+    SEC-003 FIX: Previous version called `q.first()` before `q` was ever
+    assigned, causing a guaranteed NameError on every request to this endpoint.
+    Now builds the query properly, applying the user_id scope when a JWT is
+    present so users cannot enumerate other users' projects.
+    """
     try:
         pid = uuid.UUID(project_id)
     except ValueError:
         raise HTTPException(404, "Project not found")
+
+    q = db.query(Project).filter(Project.id == pid)
+    if uid:
+        # Scope to the authenticated user — prevents cross-user enumeration
+        q = q.filter(Project.user_id == uid)
 
     project = q.first()
     if not project:

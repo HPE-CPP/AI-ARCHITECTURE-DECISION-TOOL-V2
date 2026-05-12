@@ -2,8 +2,9 @@
 AI Architecture Decision Platform - Main FastAPI Application
 """
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 
 from config import settings
@@ -27,6 +28,28 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# P7-007 FIX: Security response headers middleware
+# The API returned zero security headers. OWASP recommends these four as a
+# baseline for any HTTP API consumed by browsers.
+# ---------------------------------------------------------------------------
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Append OWASP-recommended security headers to every API response."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        # Prevent MIME-type sniffing attacks
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent this API from being framed by another page (clickjacking)
+        response.headers["X-Frame-Options"] = "DENY"
+        # Strict CSP: the API itself serves no HTML, so block everything
+        response.headers["Content-Security-Policy"] = "default-src 'none'"
+        # Do not send the Referer header cross-origin
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
 # --- App ---
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
 app = FastAPI(
@@ -38,6 +61,10 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# P7-007: Security headers must be added BEFORE CORS so they are present on
+# all responses including preflight OPTIONS responses.
+app.add_middleware(SecurityHeadersMiddleware)
 
 # SEC-3.5 FIX: CORS wildcard + allow_credentials=True violates the CORS spec
 _allow_credentials = bool(settings.CORS_ORIGINS) and "*" not in settings.CORS_ORIGINS

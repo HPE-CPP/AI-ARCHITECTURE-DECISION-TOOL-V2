@@ -193,6 +193,16 @@ class LLMClient:
             logger.warning(f"Failed to parse JSON from LLM response: {raw[:200]}")
             return {"error": "Failed to parse LLM response as JSON", "raw": raw}
 
+    def switch_provider(self, provider: str) -> None:
+        """Switch LLM provider at runtime (e.g. from ollama ↔ openai).
+
+        This was previously dead code — indented inside sanitize_json_string
+        after a return statement and thus completely unreachable.
+        """
+        self.provider = provider.lower()
+        if self.provider == "openai" and not self._openai_client and settings.OPENAI_API_KEY:
+            self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
 
 def sanitize_json_string(raw: str) -> str:
     """Robustly extract JSON from noisy LLM output.
@@ -225,12 +235,6 @@ def sanitize_json_string(raw: str) -> str:
         return raw[start_idx:end_idx + 1]
         
     return raw
-
-    def switch_provider(self, provider: str):
-        """Switch LLM provider at runtime."""
-        self.provider = provider.lower()
-        if self.provider == "openai" and not self._openai_client and settings.OPENAI_API_KEY:
-            self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 def get_llm_client(provider: str = None) -> LLMClient:

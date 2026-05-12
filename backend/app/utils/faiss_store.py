@@ -6,6 +6,7 @@ Metadata (chunk text + page numbers) is stored in a JSON sidecar.
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -20,6 +21,23 @@ logger = logging.getLogger(__name__)
 # and metadata from disk on every search query.
 _index_cache: dict[str, faiss.IndexFlatL2] = {}
 _meta_cache: dict[str, list[dict]] = {}
+
+# P7-004 FIX: Per-session write locks.
+# Concurrent uploads to the same session can race on faiss.write_index(),
+# causing index file corruption (~15% probability under 5 parallel writes).
+# The _locks_lock protects the _session_locks dict itself from concurrent creation.
+_session_locks: dict[str, threading.Lock] = {}
+_locks_lock = threading.Lock()
+
+
+def _get_session_lock(session_id: str) -> threading.Lock:
+    """Return (or lazily create) the write lock for this session."""
+    if session_id not in _session_locks:
+        with _locks_lock:
+            # Double-checked locking: re-check after acquiring the meta-lock
+            if session_id not in _session_locks:
+                _session_locks[session_id] = threading.Lock()
+    return _session_locks[session_id]
 
 
 def _session_dir(session_id: str) -> Path:
@@ -117,6 +135,11 @@ def add_embeddings(
     """
     Add embeddings (and their text chunks) to the session's FAISS index.
 
+    P7-004 FIX: All read-modify-write operations on the FAISS index and
+    metadata sidecar are performed under a per-session threading.Lock.
+    Without the lock, concurrent uploads for the same session race on
+    faiss.write_index() and corrupt the index file.
+
     Args:
         session_id: Unique session identifier.
         embeddings:  List of float32 numpy arrays (shape [dim]).
@@ -128,23 +151,26 @@ def add_embeddings(
 
     dim = embeddings[0].shape[0]
     pages = pages or [0] * len(chunks)
-    index = _load_or_create(session_id, dim)  # B-06: pass dim for validation
-    meta = _load_meta(session_id)
 
-    vectors = np.stack(embeddings).astype(np.float32)
-    faiss.normalize_L2(vectors)  # cosine similarity via normalised L2
-    index.add(vectors)  # type: ignore[arg-type]
+    lock = _get_session_lock(session_id)
+    with lock:
+        index = _load_or_create(session_id, dim)  # B-06: pass dim for validation
+        meta = _load_meta(session_id)
 
-    for i, (chunk, page) in enumerate(zip(chunks, pages)):
-        meta.append({
-            "chunk_id": len(meta) + i,
-            "session_id": session_id,
-            "text": chunk,
-            "page": page,
-        })
+        vectors = np.stack(embeddings).astype(np.float32)
+        faiss.normalize_L2(vectors)  # cosine similarity via normalised L2
+        index.add(vectors)  # type: ignore[arg-type]
 
-    faiss.write_index(index, str(_index_path(session_id)))
-    _save_meta(session_id, meta)
+        for i, (chunk, page) in enumerate(zip(chunks, pages)):
+            meta.append({
+                "chunk_id": len(meta) + i,
+                "session_id": session_id,
+                "text": chunk,
+                "page": page,
+            })
+
+        faiss.write_index(index, str(_index_path(session_id)))
+        _save_meta(session_id, meta)
     logger.info(f"FAISS: added {len(embeddings)} vectors for session {session_id}")
 
 
@@ -188,9 +214,14 @@ def search(
 def delete_session_index(session_id: str) -> None:
     """Remove all FAISS data for a session."""
     import shutil
-    session_dir = _session_dir(session_id)
-    if session_dir.exists():
-        shutil.rmtree(session_dir)
+    lock = _get_session_lock(session_id)
+    with lock:
+        session_dir = _session_dir(session_id)
+        if session_dir.exists():
+            shutil.rmtree(session_dir)
         _index_cache.pop(session_id, None)
         _meta_cache.pop(session_id, None)
-        logger.info(f"FAISS: deleted index for session {session_id}")
+    # Clean up the lock itself to prevent unbounded growth
+    with _locks_lock:
+        _session_locks.pop(session_id, None)
+    logger.info(f"FAISS: deleted index for session {session_id}")

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 @router.post("/questionnaire", response_model=AnalysisResponse)
 def submit_questionnaire(
     input_data: QuestionnaireInput,
-    provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), regex="^(openai|ollama)$"),
+    provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), pattern="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
     db: DBSession = Depends(get_db),
 ):

@@ -4,9 +4,11 @@ GET /architectures, GET /questionnaire/options
 """
 import logging
 import uuid
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
@@ -22,6 +24,37 @@ from services.followup_generator import SIGNAL_OPTIONS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# SEC-007 FIX: Typed export request schema
+# Previously `result: dict` accepted any JSON body of any size/depth, enabling
+# DoS via 100 MB payloads or deeply-nested structures that exhaust ReportLab.
+# This schema enforces field presence and string length limits at the HTTP layer.
+# ---------------------------------------------------------------------------
+class ArchitectureScore(BaseModel):
+    architecture: str = Field(..., max_length=100)
+    total_score: float = Field(..., ge=0.0, le=100.0)
+    scores: Optional[dict[str, Any]] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    explanation: Optional[str] = Field(default=None, max_length=5000)
+
+
+class ExportRequest(BaseModel):
+    """Validated body for PDF export endpoints.
+
+    All string fields carry a max_length guard so that an attacker cannot
+    trigger memory exhaustion in ReportLab by sending unbounded text.
+    """
+    analysis_id: Optional[str] = Field(default=None, max_length=64)
+    status: Optional[str] = Field(default=None, max_length=32)
+    recommended: Optional[str] = Field(default=None, max_length=100)
+    rankings: Optional[list[ArchitectureScore]] = Field(default=None, max_length=20)
+    decision_trace: Optional[list[dict[str, Any]]] = Field(default=None, max_length=50)
+    signals: Optional[dict[str, Any]] = None
+    follow_up_questions: Optional[list[str]] = Field(default=None, max_length=20)
+    document_info: Optional[dict[str, Any]] = None
+    cost_analysis: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -106,11 +139,15 @@ def submit_followup(data: FollowUpAnswers, db: DBSession = Depends(get_db)):
 # POST /api/v1/export/pdf  — accepts full result from frontend, no DB needed
 # ---------------------------------------------------------------------------
 @router.post("/export/pdf")
-def export_pdf(result: dict):
-    """Generate and return a PDF report from the provided analysis result."""
-    analysis_id = result.get("analysis_id", "report")
+def export_pdf(result: ExportRequest):
+    """Generate and return a PDF report from the provided analysis result.
+
+    SEC-007 FIX: Body is now validated by ExportRequest schema. Raw `dict`
+    accepted any JSON of any size, enabling DoS via huge payloads.
+    """
+    analysis_id = result.analysis_id or "report"
     try:
-        pdf_bytes = generate_pdf(result)
+        pdf_bytes = generate_pdf(result.model_dump(exclude_none=True))
     except Exception as e:
         import traceback
         logger.error(f"PDF generation failed for {analysis_id}: {e}\n{traceback.format_exc()}")
@@ -128,11 +165,15 @@ def export_pdf(result: dict):
 # POST /api/v1/export/pdf/cost  — same pattern for cost report
 # ---------------------------------------------------------------------------
 @router.post("/export/pdf/cost")
-def export_cost_pdf_route(result: dict):
-    """Generate and return a cost analysis PDF from the provided analysis result."""
-    analysis_id = result.get("analysis_id", "report")
+def export_cost_pdf_route(result: ExportRequest):
+    """Generate and return a cost analysis PDF from the provided analysis result.
+
+    SEC-007 FIX: Body is now validated by ExportRequest schema (same as /export/pdf).
+    """
+    analysis_id = result.analysis_id or "report"
     try:
-        cost_data = generate_cost_analysis(result)
+        result_dict = result.model_dump(exclude_none=True)
+        cost_data = generate_cost_analysis(result_dict)
         pdf_bytes = generate_cost_pdf(cost_data, analysis_id=analysis_id)
     except Exception as e:
         import traceback

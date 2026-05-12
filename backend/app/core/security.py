@@ -47,7 +47,12 @@ def _get_firebase_app():
         # Fallback: attempt default initialization (uses GOOGLE_APPLICATION_CREDENTIALS)
         _firebase_app = firebase_admin.initialize_app()
     except Exception as e:
-        print(f"Warning: Failed to initialize Firebase Admin: {e}")
+        # SEC-004 FIX: use logger instead of print() so production log aggregators
+        # (CloudWatch, Datadog, Loki) capture this critical auth initialization failure.
+        import logging
+        logging.getLogger(__name__).error(
+            "Firebase Admin initialization failed: %s", e, exc_info=True
+        )
 
     return _firebase_app
 
