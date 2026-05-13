@@ -1,15 +1,38 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useEffect, useState } from "react";
 import { AnalysisResult, CostAnalysisData, exportCostAnalysis } from "@/lib/api";
 import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { motion } from "framer-motion";
-import { DollarSign, Download, TrendingUp, Zap, AlertTriangle } from "lucide-react";
+import { IndianRupee, Download, TrendingUp, Zap, AlertTriangle } from "lucide-react";
+
+/** Format integer with Indian comma notation: 1,00,000 */
+function fmtInr(n: number): string {
+  const s = Math.round(n).toString();
+  if (s.length <= 3) return `Rs. ${s}`;
+  let result = s.slice(-3);
+  let remaining = s.slice(0, -3);
+  while (remaining.length > 0) {
+    const chunk = remaining.length >= 2 ? remaining.slice(-2) : remaining;
+    result = chunk + "," + result;
+    remaining = remaining.length >= 2 ? remaining.slice(0, -2) : "";
+  }
+  return `Rs. ${result}`;
+}
+
+/** Short form: Rs. 1.5L, Rs. 2.3Cr, Rs. 45K */
+function fmtInrShort(n: number): string {
+  if (n === 0) return "Rs. 0";
+  if (n >= 10_000_000) return `Rs. ${(n / 10_000_000).toFixed(1)} Cr`;
+  if (n >= 100_000) return `Rs. ${(n / 100_000).toFixed(1)} L`;
+  if (n >= 1000) return `Rs. ${Math.round(n / 1000)}K`;
+  return `Rs. ${n}`;
+}
 
 function fmtRange(r: [number, number]): string {
-  if (r[0] === r[1]) return `$${r[0].toLocaleString()}`;
-  return `$${r[0].toLocaleString()} - $${r[1].toLocaleString()}`;
+  if (r[0] === r[1]) return fmtInr(r[0]);
+  return `${fmtInrShort(r[0])} - ${fmtInrShort(r[1])}`;
 }
 
 function fmtAvg(r: [number, number]): number {
@@ -64,6 +87,28 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
   const recArch = architectures[summary.recommended];
   if (!recArch) return null;
 
+  // Measure the chart container so YAxis width and labels adapt to the available space.
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(600);
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      setChartWidth(entries[0]?.contentRect.width ?? 600);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const isNarrow = chartWidth < 420;
+  // YAxis label column width: wide enough to read on desktop, minimal on mobile
+  const yAxisWidth = isNarrow ? 72 : 144;
+  // Truncate arch names to fit the label column
+  const yTickFormatter = (v: string) =>
+    isNarrow ? v.split(" ")[0] : v.length > 22 ? v.slice(0, 20) + "…" : v;
+  // Only render the right-side cost labels when there's room for them
+  const showBarLabels = chartWidth > 380;
+
   return (
     <div className="w-full flex flex-col gap-8">
       {/* COST OVERVIEW HERO */}
@@ -79,7 +124,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
         <div className="flex flex-col lg:flex-row items-start lg:items-center gap-8 z-10 relative">
           <div className="flex-1">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--text-primary)] mb-6 font-semibold text-sm">
-              <DollarSign size={16} /> Cost Analysis
+              <IndianRupee size={16} /> Cost Analysis
             </div>
             <h2 className="text-[var(--text-secondary)] font-bold tracking-widest uppercase mb-3 text-sm opacity-80">
               Estimated Cost for {summary.recommended_name}
@@ -105,7 +150,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             <div className="lg:w-44 p-6 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl">
               <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">Setup Cost</span>
               <div className="text-3xl font-black text-[var(--primary)]">
-                ${fmtAvg(recArch.setup_cost).toLocaleString()}
+                {fmtInrShort(fmtAvg(recArch.setup_cost))}
               </div>
               <span className="text-xs text-[var(--text-secondary)] mt-1">one-time</span>
             </div>
@@ -114,7 +159,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             <div className="lg:w-44 p-6 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl">
               <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">Per Query</span>
               <div className="text-3xl font-black text-[var(--accent)]">
-                ${recArch.cost_per_query[0].toFixed(3)}
+                {`Rs. ${recArch.cost_per_query[0].toFixed(3)}`}
               </div>
               <span className="text-xs text-[var(--text-secondary)] mt-1">estimated avg</span>
             </div>
@@ -133,32 +178,48 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
           className="glass-panel p-8"
         >
           <h3 className="text-2xl font-bold mb-8 tracking-tight flex items-center gap-3">
-            <DollarSign size={20} /> Monthly Cost Comparison
+            <IndianRupee size={20} /> Monthly Cost Comparison
           </h3>
-          <div className="h-[300px] w-full">
+          <div className="h-[300px] w-full" ref={chartContainerRef}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={comparisonData} layout="vertical" margin={{ top: 4, right: 60, left: 0, bottom: 4 }}>
+              <BarChart
+                data={comparisonData}
+                layout="vertical"
+                margin={{ top: 4, right: showBarLabels ? 56 : 8, left: 0, bottom: 4 }}
+              >
                 <XAxis
                   type="number"
-                  tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
-                  tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+                  tickFormatter={(v) => fmtInrShort(v)}
+                  tick={{ fill: 'var(--text-secondary)', fontSize: isNarrow ? 9 : 11 }}
                   axisLine={false}
                   tickLine={false}
+                  tickCount={isNarrow ? 3 : 5}
                 />
                 <YAxis
                   dataKey="name"
                   type="category"
-                  width={160}
+                  width={yAxisWidth}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: 'var(--text-primary)', fontWeight: 600, fontSize: 11 }}
-                  tickFormatter={(v: string) => v.length > 20 ? v.slice(0, 18) + '…' : v}
+                  tick={{ fill: 'var(--text-primary)', fontWeight: 600, fontSize: isNarrow ? 10 : 11 }}
+                  tickFormatter={yTickFormatter}
                 />
                 <Tooltip
-                  formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Avg Monthly']}
+                  formatter={(value) => [fmtInr(Number(value)), 'Avg Monthly']}
                   contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '16px', color: 'var(--text-primary)', fontWeight: 'bold' }}
                 />
-                <Bar dataKey="monthly_avg" radius={[0, 8, 8, 0]} barSize={26} label={{ position: 'right', formatter: (v: number) => `$${v.toLocaleString()}`, fill: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
+                <Bar
+                  dataKey="monthly_avg"
+                  radius={[0, 8, 8, 0]}
+                  barSize={26}
+                  label={showBarLabels ? {
+                    position: 'right',
+                    formatter: (v: unknown) => fmtInrShort(Number(v)),
+                    fill: 'var(--text-secondary)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                  } : false}
+                >
                   {comparisonData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
@@ -277,28 +338,32 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             ))}
           </div>
 
-          {/* Quick comparison table */}
-          <div className="mt-6 rounded-xl border border-[var(--border)] overflow-hidden">
-            <table className="w-full text-left">
+          {/* Quick comparison table — scrollable on mobile */}
+          <div className="mt-6 rounded-xl border border-[var(--border)] overflow-x-auto">
+            <table className="w-full text-left min-w-[280px]">
               <thead className="bg-[var(--surface)]">
                 <tr className="text-[var(--text-secondary)] text-xs uppercase tracking-wider">
                   <th className="py-3 px-4 font-bold">Architecture</th>
-                  <th className="py-3 px-4 font-bold text-right">Monthly</th>
-                  <th className="py-3 px-4 font-bold text-right">Setup</th>
+                  <th className="py-3 px-4 font-bold text-right whitespace-nowrap">Monthly</th>
+                  <th className="py-3 px-4 font-bold text-right whitespace-nowrap hidden sm:table-cell">Setup</th>
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(architectures).map(([key, arch], i) => (
+                {Object.entries(architectures).map(([key, arch]) => (
                   <tr
                     key={key}
                     className={`border-t border-[var(--border)] transition-colors ${arch.is_recommended ? 'bg-[var(--primary)]/5' : 'hover:bg-[var(--surface)]'}`}
                   >
-                    <td className="py-3 px-4 text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                      {arch.full_name}
-                      {arch.is_recommended && <span className="px-1.5 py-0.5 rounded bg-[var(--primary)] text-[var(--background)] text-[9px] font-bold">REC</span>}
+                    <td className="py-3 px-4 text-sm font-bold text-[var(--text-primary)]">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{arch.full_name}</span>
+                        {arch.is_recommended && (
+                          <span className="px-1.5 py-0.5 rounded bg-[var(--primary)] text-[var(--background)] text-[9px] font-bold shrink-0">REC</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="py-3 px-4 text-sm font-bold text-right text-[var(--text-secondary)]">{fmtRange(arch.monthly_total)}</td>
-                    <td className="py-3 px-4 text-sm text-right text-[var(--text-secondary)]">{fmtRange(arch.setup_cost)}</td>
+                    <td className="py-3 px-4 text-sm font-bold text-right text-[var(--text-secondary)] whitespace-nowrap">{fmtRange(arch.monthly_total)}</td>
+                    <td className="py-3 px-4 text-sm text-right text-[var(--text-secondary)] whitespace-nowrap hidden sm:table-cell">{fmtRange(arch.setup_cost)}</td>
                   </tr>
                 ))}
               </tbody>
