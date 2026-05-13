@@ -8,7 +8,8 @@ import { DecisionTrace } from "@/components/DecisionTrace";
 import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
-import { updateProject } from "@/lib/projects-store";
+import { updateProject, updateAnalysisHistoryEntry, getAnalysisHistory, AnalysisHistoryEntry } from "@/lib/projects-store";
+import { AnalysisHistory } from "@/components/AnalysisHistory";
 
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -53,6 +54,22 @@ function getStageIndex(status: string): number {
   return idx === -1 ? 0 : idx;
 }
 
+// Time thresholds (seconds) at which each stage should visually begin,
+// regardless of what the backend last reported. These mirror realistic
+// processing times so the indicator never looks frozen.
+const STAGE_TIME_THRESHOLDS = [0, 14, 38, 54]; // Parsing / Extracting / Scoring / Validating
+
+function getDisplayStageIndex(backendStatus: string, elapsedSeconds: number): number {
+  const backendIndex = getStageIndex(backendStatus);
+  // Walk thresholds in reverse to find the highest time-based stage reached
+  let timeIndex = 0;
+  for (let i = STAGE_TIME_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (elapsedSeconds >= STAGE_TIME_THRESHOLDS[i]) { timeIndex = i; break; }
+  }
+  // Never go backwards — always show whichever is further along
+  return Math.max(backendIndex, timeIndex);
+}
+
 function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -65,6 +82,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const loadingStartRef = useRef<number>(Date.now());
+  const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryEntry[]>([]);
 
   // 1. Fetch data with exponential backoff and a maximum retry cap
   // FIX FE-009: The flat 1.5s interval with no retry cap caused infinite polling
@@ -111,19 +129,23 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     return () => clearTimeout(timeoutRef);
   }, [resolvedParams.analysisId]);
 
-  // 2. Scroll to top + mark project completed when results arrive
+  // 2. Scroll to top + mark project completed + update history when results arrive
   useEffect(() => {
     if (!loading && result?.status === "complete") {
       window.scrollTo({ top: 0, behavior: "smooth" });
-      // Mark project as completed
       if (projectId) {
         updateProject(projectId, {
           status: "completed",
           analysisId: resolvedParams.analysisId,
         });
+        updateAnalysisHistoryEntry(projectId, resolvedParams.analysisId, {
+          recommended: result.recommended,
+          confidence: result.confidence,
+        });
+        setAnalysisHistory(getAnalysisHistory(projectId));
       }
     }
-  }, [loading, result?.status, projectId, resolvedParams.analysisId]);
+  }, [loading, result?.status, projectId, resolvedParams.analysisId, result?.recommended, result?.confidence]);
 
   // 3. Elapsed-time counter — ticks every second while loading so the screen
   // never looks frozen even when the backend status hasn't changed.
@@ -158,7 +180,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   // --- LOADING STATE ---
   if (loading || ["queued", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
     const currentStatus = result?.status || "queued";
-    const activeIndex = getStageIndex(currentStatus);
+    const activeIndex = getDisplayStageIndex(currentStatus, elapsedSeconds);
     const activeStage = ANALYSIS_STAGES[activeIndex];
     const ActiveIcon = activeStage.Icon;
 
@@ -564,6 +586,13 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
         <div className="lg:col-span-4 w-full relative">
           <div className="sticky top-24 w-full space-y-8">
+            {projectId && analysisHistory.length >= 2 && (
+              <AnalysisHistory
+                entries={analysisHistory}
+                currentAnalysisId={resolvedParams.analysisId}
+                projectId={projectId}
+              />
+            )}
             <DecisionPipeline result={result} />
             <DecisionTrace trace={result.decision_trace || []} />
           </div>
