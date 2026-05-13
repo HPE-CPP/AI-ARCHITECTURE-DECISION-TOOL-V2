@@ -5,10 +5,48 @@ import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionPipeline } from "@/components/DecisionPipeline";
 import { DecisionTrace } from "@/components/DecisionTrace";
-import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen } from "lucide-react";
+import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject } from "@/lib/projects-store";
+
+const ANALYSIS_STAGES = [
+  {
+    statuses: ["queued", "detecting_sections", "parsing"],
+    label: "Parsing Document",
+    shortLabel: "Parsing",
+    desc: "Identifying structure and content sections",
+    Icon: FileText,
+  },
+  {
+    statuses: ["extracting_signals"],
+    label: "Extracting Signals",
+    shortLabel: "Signals",
+    desc: "Locating key technical requirements",
+    Icon: Search,
+  },
+  {
+    statuses: ["scoring"],
+    label: "Scoring Architectures",
+    shortLabel: "Scoring",
+    desc: "Running deterministic scoring engine",
+    Icon: Activity,
+  },
+  {
+    statuses: ["validating"],
+    label: "Validating Results",
+    shortLabel: "Validating",
+    desc: "Verifying consistency and confidence levels",
+    Icon: ShieldCheck,
+  },
+] as const;
+
+function getStageIndex(status: string): number {
+  const idx = ANALYSIS_STAGES.findIndex(s =>
+    (s.statuses as readonly string[]).includes(status)
+  );
+  return idx === -1 ? 0 : idx;
+}
 
 function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> }) {
   const resolvedParams = use(params);
@@ -101,25 +139,96 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
   // --- LOADING STATE ---
   if (loading || ["queued", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
+    const currentStatus = result?.status || "queued";
+    const activeIndex = getStageIndex(currentStatus);
+    const activeStage = ANALYSIS_STAGES[activeIndex];
+    const ActiveIcon = activeStage.Icon;
+
     return (
       <div className="w-full min-h-screen pt-24 pb-12 px-4 flex flex-col items-center justify-center">
-        <div className="flex flex-col items-center text-center max-w-lg mb-12">
-          <div className="relative w-24 h-24 mb-8 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-t-2 border-[color:var(--primary)] animate-spin" />
-            <div className="absolute inset-2 rounded-full border-t-2 border-[color:var(--accent)] animate-spin animation-delay-150" />
-            <Activity className="text-[color:var(--primary)] animate-pulse" size={32} />
-          </div>
-          <h2 className="text-4xl font-bold mb-4 tracking-tight drop-shadow-sm">Analyzing Architecture</h2>
-          <p className="text-[color:var(--text-secondary)] text-lg leading-relaxed">
-            Please wait while our engine deterministically evaluates patterns...
-          </p>
-        </div>
+        <div className="w-full max-w-2xl flex flex-col items-center text-center gap-12">
 
-        {result?.decision_trace && (
-          <div className="w-full max-w-3xl">
-            <DecisionTrace trace={result.decision_trace} />
+          {/* Spinning icon + current stage label */}
+          <div className="flex flex-col items-center gap-5">
+            <div className="relative w-20 h-20 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-t-2 border-[color:var(--primary)] animate-spin" />
+              <div className="absolute inset-2 rounded-full border-t-2 border-[color:var(--accent)] animate-spin [animation-duration:1.8s]" />
+              <ActiveIcon className="text-[color:var(--primary)] animate-pulse" size={28} />
+            </div>
+            <div>
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">{activeStage.label}</h2>
+              <p className="text-[color:var(--text-secondary)] text-base sm:text-lg font-medium">{activeStage.desc}</p>
+            </div>
           </div>
-        )}
+
+          {/* 4-step progress pipeline */}
+          <div className="w-full px-2">
+            <div className="flex items-start w-full">
+              {ANALYSIS_STAGES.map((stage, index) => {
+                const isCompleted = index < activeIndex;
+                const isActive = index === activeIndex;
+                const isPending = index > activeIndex;
+                const StageIcon = stage.Icon;
+
+                return (
+                  <React.Fragment key={stage.label}>
+                    <div className="flex flex-col items-center gap-2.5 flex-shrink-0">
+                      {/* Circle */}
+                      <div className={`
+                        relative w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500
+                        ${isCompleted ? "bg-[color:var(--text-primary)]" : ""}
+                        ${isActive ? "border-2 border-[color:var(--primary)] bg-[color:var(--surface)]" : ""}
+                        ${isPending ? "border border-[color:var(--border)] bg-[color:var(--surface)]" : ""}
+                      `}>
+                        {isActive && (
+                          <div className="absolute inset-0 rounded-full border-2 border-[color:var(--primary)] animate-ping opacity-30" />
+                        )}
+                        {isCompleted ? (
+                          <CheckCircle size={18} className="text-[color:var(--background)]" />
+                        ) : (
+                          <StageIcon
+                            size={15}
+                            className={
+                              isActive
+                                ? "text-[color:var(--primary)]"
+                                : "text-[color:var(--text-secondary)] opacity-30"
+                            }
+                          />
+                        )}
+                      </div>
+
+                      {/* Label */}
+                      <span className={`
+                        text-[10px] sm:text-xs font-bold text-center leading-tight max-w-[64px] sm:max-w-[80px] transition-colors duration-500
+                        ${isCompleted ? "text-[color:var(--text-primary)]" : ""}
+                        ${isActive ? "text-[color:var(--primary)]" : ""}
+                        ${isPending ? "text-[color:var(--text-secondary)] opacity-30" : ""}
+                      `}>
+                        <span className="sm:hidden">{stage.shortLabel}</span>
+                        <span className="hidden sm:inline">{stage.label}</span>
+                      </span>
+                    </div>
+
+                    {/* Connector line */}
+                    {index < ANALYSIS_STAGES.length - 1 && (
+                      <div className={`
+                        flex-1 h-px mx-2 sm:mx-3 mt-5 transition-colors duration-500
+                        ${index < activeIndex ? "bg-[color:var(--text-primary)]" : "bg-[color:var(--border)]"}
+                      `} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Decision trace if already available */}
+          {result?.decision_trace && result.decision_trace.length > 0 && (
+            <div className="w-full">
+              <DecisionTrace trace={result.decision_trace} />
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -245,7 +354,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                       {/* Value badge */}
                       {sig.value ? (
                         <span className="px-3 py-1 rounded-lg bg-[color:var(--background)] border border-[color:var(--border)] text-sm font-bold text-[color:var(--text-primary)]">
-                          {sig.value.replace(/_/g, " ")}
+                          {sig.value.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                         </span>
                       ) : (
                         <span className="px-3 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-bold text-red-500 flex items-center gap-1">
