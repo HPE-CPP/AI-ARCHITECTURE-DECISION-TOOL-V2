@@ -22,10 +22,7 @@ _firebase_app = None
 def _get_firebase_app():
     global _firebase_app
     if not _FIREBASE_AVAILABLE:
-        raise RuntimeError(
-            "firebase-admin is not installed. "
-            "Run: pip install firebase-admin==6.5.0"
-        )
+        return None
     if _firebase_app:
         return _firebase_app
 
@@ -45,10 +42,17 @@ def _get_firebase_app():
             return _firebase_app
 
         # Fallback: attempt default initialization (uses GOOGLE_APPLICATION_CREDENTIALS)
-        _firebase_app = firebase_admin.initialize_app()
+        # We wrap this in a try/except to catch the "Project ID required" error
+        try:
+            _firebase_app = firebase_admin.initialize_app()
+        except ValueError as ve:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Firebase default initialization skipped (Project ID missing). "
+                "Only guest access will be available. Error: %s", ve
+            )
+            return None
     except Exception as e:
-        # SEC-004 FIX: use logger instead of print() so production log aggregators
-        # (CloudWatch, Datadog, Loki) capture this critical auth initialization failure.
         import logging
         logging.getLogger(__name__).error(
             "Firebase Admin initialization failed: %s", e, exc_info=True
@@ -68,7 +72,7 @@ def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Security(s
     Verify the Firebase JWT token and return the user's UID.
     Returns None if no token is provided.
     """
-    if credentials is None:
+    if credentials is None or not credentials.credentials or credentials.credentials == "null":
         return None
 
     # For local development/testing without firebase credentials
@@ -76,22 +80,25 @@ def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Security(s
         return "dev-user-id"
 
     if not _FIREBASE_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Authentication service unavailable — firebase-admin not installed",
-        )
+        return None # Graceful fallback to guest mode
 
-    _get_firebase_app()
+    app = _get_firebase_app()
+    if not app:
+        # Auth service misconfigured — fallback to guest
+        import logging
+        logging.getLogger(__name__).warning("Auth token provided but Firebase is not initialized. Falling back to guest.")
+        return None
 
     try:
         decoded_token = fb_auth.verify_id_token(credentials.credentials)
         uid = decoded_token.get("uid")
         if not uid:
-            raise HTTPException(status_code=401, detail="Invalid token: No UID found")
+            return None
         return uid
     except Exception as e:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Invalid authentication credentials: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        # If token verification fails, we return None (guest mode) 
+        # instead of crashing with a 401, unless you specifically want to block.
+        # But the USER requested it should allow creating projects as a guest.
+        import logging
+        logging.getLogger(__name__).warning("Token verification failed: %s. Falling back to guest.", e)
+        return None

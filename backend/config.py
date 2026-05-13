@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     API_PREFIX: str = "/api/v1"
+    FIREBASE_PROJECT_ID: Optional[str] = "archguide-dev"
 
     # CORS — add your Vercel URL here or set CORS_ORIGINS env var
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]

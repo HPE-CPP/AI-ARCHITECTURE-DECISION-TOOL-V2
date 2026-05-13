@@ -2,10 +2,14 @@
 AI Architecture Decision Platform — Main FastAPI Application
 Entry point: uvicorn app.main:app --reload
 """
-import logging
-import sys
 import os
+import sys
+import logging
 from pathlib import Path
+
+# FIX OMP-001: Fix for "OMP: Error #15" on Windows where multiple OpenMP runtimes conflict
+# This must be set before any heavy libraries (FAISS, torch, etc.) are imported.
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
