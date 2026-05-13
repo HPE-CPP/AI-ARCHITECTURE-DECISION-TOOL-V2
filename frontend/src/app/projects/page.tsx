@@ -30,6 +30,11 @@ export default function ProjectsPage() {
   // FIX FE-012: separate loading state so we can show skeletons during fetch
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [undoInfo, setUndoInfo] = useState<{
+    id: string;
+    project: Project;
+    secondsLeft: number;
+  } | null>(null);
 
   // Load projects on mount
   useEffect(() => {
@@ -103,16 +108,38 @@ export default function ProjectsPage() {
   }, [editTarget, projects]);
 
   const handleDelete = useCallback((id: string) => {
-    const previousProjects = [...projects];
-    // Optimistic update
-    setProjects(projects.filter(p => p.id !== id));
-    
-    deleteProject(id).catch((e) => {
-      // Rollback on failure
-      setProjects(previousProjects);
-      console.error("Failed to delete project", e);
-    });
+    const projectToDelete = projects.find(p => p.id === id);
+    if (!projectToDelete) return;
+    // Optimistic remove — actual API call is deferred 5 s so the user can undo
+    setProjects(prev => prev.filter(p => p.id !== id));
+    setUndoInfo({ id, project: projectToDelete, secondsLeft: 5 });
   }, [projects]);
+
+  const handleUndo = useCallback(() => {
+    if (!undoInfo) return;
+    // Restore the card in sorted order (most recent first)
+    setProjects(prev =>
+      [...prev, undoInfo.project].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )
+    );
+    setUndoInfo(null);
+  }, [undoInfo]);
+
+  // Countdown tick — when it reaches 0 the delete is committed for real
+  useEffect(() => {
+    if (!undoInfo) return;
+    if (undoInfo.secondsLeft <= 0) {
+      deleteProject(undoInfo.id).catch(e => console.error("Failed to delete project", e));
+      setUndoInfo(null);
+      return;
+    }
+    const t = setTimeout(
+      () => setUndoInfo(prev => prev ? { ...prev, secondsLeft: prev.secondsLeft - 1 } : null),
+      1000,
+    );
+    return () => clearTimeout(t);
+  }, [undoInfo]);
 
   const handleDuplicate = useCallback((id: string) => {
     duplicateProject(id).then(() => {
@@ -337,6 +364,52 @@ export default function ProjectsPage() {
     mode={editTarget ? "edit" : "create"}
   />
       </div>
+
+      {/* Undo delete toast */}
+      <AnimatePresence>
+        {undoInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-[color:var(--surface)] border border-[color:var(--border)] shadow-2xl shadow-black/40 backdrop-blur-md whitespace-nowrap"
+          >
+            <span className="text-sm text-[color:var(--text-secondary)]">
+              <span className="text-[color:var(--text-primary)] font-bold">
+                &ldquo;{undoInfo.project.name}&rdquo;
+              </span>{" "}
+              deleted
+            </span>
+
+            <button
+              onClick={handleUndo}
+              className="px-3 py-1.5 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] text-xs font-bold hover:opacity-80 transition-opacity"
+            >
+              Undo
+            </button>
+
+            {/* Countdown ring */}
+            <div className="relative w-6 h-6 shrink-0">
+              <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="var(--border)" strokeWidth="2" />
+                <circle
+                  cx="12" cy="12" r="10"
+                  fill="none"
+                  stroke="var(--text-secondary)"
+                  strokeWidth="2"
+                  strokeDasharray={String(2 * Math.PI * 10)}
+                  strokeDashoffset={String(2 * Math.PI * 10 * (1 - undoInfo.secondsLeft / 5))}
+                  style={{ transition: "stroke-dashoffset 0.9s linear" }}
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-[color:var(--text-secondary)]">
+                {undoInfo.secondsLeft}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
