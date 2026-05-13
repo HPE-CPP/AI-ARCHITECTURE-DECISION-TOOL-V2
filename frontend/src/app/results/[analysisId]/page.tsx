@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, use, Suspense } from "react";
+import React, { useEffect, useState, useRef, use, Suspense } from "react";
 import { getAnalysis, submitFollowUp, AnalysisResult } from "@/lib/api";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
@@ -9,6 +9,11 @@ import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCirc
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject } from "@/lib/projects-store";
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 
 const ANALYSIS_STAGES = [
   {
@@ -58,6 +63,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const [error, setError] = useState<string | null>(null);
   const [followUpAnswers, setFollowUpAnswers] = useState<Record<string, string>>({});
   const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const loadingStartRef = useRef<number>(Date.now());
 
   // 1. Fetch data with exponential backoff and a maximum retry cap
   // FIX FE-009: The flat 1.5s interval with no retry cap caused infinite polling
@@ -118,6 +125,17 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     }
   }, [loading, result?.status, projectId, resolvedParams.analysisId]);
 
+  // 3. Elapsed-time counter — ticks every second while loading so the screen
+  // never looks frozen even when the backend status hasn't changed.
+  useEffect(() => {
+    if (!loading) return;
+    loadingStartRef.current = Date.now();
+    const timer = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - loadingStartRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [loading]);
+
   const handleFollowUpChange = (signal: string, val: string) => {
     setFollowUpAnswers(prev => ({ ...prev, [signal]: val }));
   };
@@ -156,9 +174,28 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
               <ActiveIcon className="text-[color:var(--primary)] animate-pulse" size={28} />
             </div>
             <div>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">{activeStage.label}</h2>
+              <div className="flex items-center justify-center gap-3 mb-2">
+                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">{activeStage.label}</h2>
+                {elapsedSeconds > 0 && (
+                  <span className="px-2.5 py-1 rounded-full bg-[color:var(--surface)] border border-[color:var(--border)] text-xs font-bold text-[color:var(--text-secondary)] tabular-nums">
+                    {formatElapsed(elapsedSeconds)}
+                  </span>
+                )}
+              </div>
               <p className="text-[color:var(--text-secondary)] text-base sm:text-lg font-medium">{activeStage.desc}</p>
             </div>
+
+            {/* Reassurance message after 35 s — tells the user the backend is alive */}
+            {elapsedSeconds >= 35 && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-semibold"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                Still running — complex documents can take up to 3 minutes
+              </motion.div>
+            )}
           </div>
 
           {/* 4-step progress pipeline */}
@@ -222,11 +259,21 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
             </div>
           </div>
 
-          {/* Decision trace if already available */}
+          {/* Live activity log — shown as soon as the backend starts emitting trace steps */}
           {result?.decision_trace && result.decision_trace.length > 0 && (
-            <div className="w-full">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full glass-panel p-6 rounded-2xl"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs font-bold uppercase tracking-widest text-[color:var(--text-secondary)]">
+                  Live Activity
+                </span>
+              </div>
               <DecisionTrace trace={result.decision_trace} />
-            </div>
+            </motion.div>
           )}
         </div>
       </div>
