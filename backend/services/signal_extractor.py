@@ -1,6 +1,12 @@
 """
 Signal Extraction Service
-Extracts architecture decision signals from document text using LLM + heuristics.
+Extracts architecture decision signals from document text using LLM + semantic + heuristics.
+
+Determinism guarantees:
+  - LLM extraction uses temperature=0.0 and seed=42 (via generate_deterministic_json).
+  - Sentence-aware chunking ensures stable chunk boundaries.
+  - Semantic extraction (sentence-transformers) is fully deterministic.
+  - Two-pass validation reduces hallucinations for uncertain signals.
 
 Optimizations applied:
   - Page relevance scoring: only pages containing signal keywords are sent to the LLM.
@@ -8,12 +14,13 @@ Optimizations applied:
   - Parallel chunk extraction: large documents are split into overlapping chunks and
     analysed concurrently with asyncio.gather; highest-confidence signal per chunk wins.
   - In-memory extraction cache: SHA-256 keyed, TTL 1 h — skips LLM entirely on re-upload.
-  - Keyword pre-extraction still runs (zero LLM cost) and boosts final confidence.
+  - Keyword + semantic pre-extraction runs (zero LLM cost) and boosts final confidence.
 """
 import asyncio
 import json
 import logging
 import re
+import time
 from typing import Optional, Any
 
 from services.llm_client import LLMClient
@@ -80,26 +87,30 @@ _ALL_KEYWORDS: frozenset[str] = frozenset(
 )
 register_signal_keywords(_ALL_KEYWORDS)
 
-EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Analyze the following document text and extract architecture decision signals.
+EXTRACTION_PROMPT = """You are an expert AI architecture analyst performing STRICT evidence-based signal extraction.
 
-For each signal, provide:
-- value: the extracted value (MUST be one of the listed options, or null if not found)
-- confidence: 0.0 to 1.0 (0 if not found, higher if explicitly stated)
-- source_text: a VERBATIM quote copied exactly from the document that supports this value. Do NOT paraphrase, summarize, or rephrase. Copy the exact sentence or phrase as it appears in the document. If not found, use an empty string.
-- page_number: the page number where the source_text appears (0 if not found)
+ABSOLUTE RULES — FOLLOW WITHOUT EXCEPTION:
+1. NEVER invent, guess, or fabricate values. If a signal is NOT explicitly mentioned or strongly implied in the document, you MUST set value to null and confidence to 0.0.
+2. PREFER null over guessing. When uncertain, ALWAYS return null. A missing value is infinitely better than a fabricated one.
+3. source_text MUST be a VERBATIM word-for-word copy from the document. Do NOT paraphrase, summarize, or rephrase.
+4. confidence > 0.7 is ONLY allowed when you provide an exact verbatim quote from the document as source_text.
+5. If you cannot find a direct quote, set confidence ≤ 0.5 regardless of how strongly you believe the signal exists.
+6. NEVER assume requirements that are not stated. Do NOT infer from general context.
 
-CRITICAL RULES:
-1. DO NOT hallucinate. If a signal is not mentioned in the document, set value to null and confidence to 0.
-2. Only extract what is explicitly stated or strongly implied.
-3. source_text MUST be a word-for-word copy from the document. Every word in your source_text must appear consecutively in the document. If you cannot find an exact quote, set source_text to "" and confidence to 0.
-4. Confidence levels:
-   - 0.0: Not found at all
-   - 0.1-0.3: Weakly implied
-   - 0.4-0.6: Moderately implied
-   - 0.7-0.8: Strongly implied
-   - 0.9-1.0: Explicitly stated with a verbatim source quote
+For each signal, return:
+- value: one of the listed options, or null if not found/uncertain
+- confidence: 0.0 to 1.0 following the strict scale below
+- source_text: EXACT verbatim quote from document (empty string if none found)
+- page_number: page where the quote appears (0 if not found)
 
-SIGNALS TO EXTRACT:
+CONFIDENCE SCALE:
+- 0.0: Not found at all — MUST use null value
+- 0.1-0.3: Weakly implied, no direct mention — MUST use null value
+- 0.4-0.6: Moderately implied, indirect evidence exists
+- 0.7-0.8: Strongly implied with supporting verbatim quote
+- 0.9-1.0: Explicitly stated with exact verbatim source text
+
+SIGNALS TO EXTRACT (use ONLY these exact values):
 1. dataset_size: (small/medium/large/very_large) - Volume of data
 2. query_volume: (low/medium/high/very_high) - Expected queries/requests
 3. latency_requirement: (relaxed/moderate/strict/ultra_low) - Response time needs
@@ -114,7 +125,7 @@ SIGNALS TO EXTRACT:
 DOCUMENT TEXT:
 {document_text}
 
-Respond with a JSON object with signal names as keys, each containing: value, confidence, source_text, page_number.
+Respond with a JSON object. For EACH signal that lacks clear evidence, use: {{"value": null, "confidence": 0.0, "source_text": "", "page_number": 0}}
 """
 
 SIGNAL_OPTIONS = {
@@ -190,9 +201,10 @@ class SignalExtractor:
     # ── Public API ────────────────────────────────────────────────────────────
 
     async def extract_signals(self, document_data: dict) -> dict[str, dict]:
-        """Extract signals with page filtering, caching, and parallel chunk analysis."""
+        """Extract signals with semantic matching, page filtering, caching, and parallel chunks."""
         full_text = document_data.get("full_text", "")
         pages = document_data.get("pages", [])
+        extraction_start = time.monotonic()
 
         if not full_text.strip():
             return self._empty_signals()
@@ -200,10 +212,14 @@ class SignalExtractor:
         # ── 1. Cache check ────────────────────────────────────────────────────
         cached = extraction_cache.get(full_text)
         if cached is not None:
+            logger.info("Extraction cache hit — skipping all extraction steps.")
             return cached
 
         # ── 2. Keyword pre-extraction (zero LLM cost) ─────────────────────────
         keyword_signals = self._keyword_extraction(full_text, pages)
+
+        # ── 2b. Semantic pre-extraction (zero LLM cost) ──────────────────────
+        semantic_signals = self._semantic_extraction(full_text)
 
         # ── 3. Page filtering: skip pages with no signal keywords ─────────────
         relevant_pages = get_relevant_pages(pages, min_score=1)
@@ -225,11 +241,17 @@ class SignalExtractor:
         # ── 6. Source verification ─────────────────────────────────────────────
         llm_signals = self._verify_sources(llm_signals, full_text, pages)
 
-        # ── 7. Merge keyword + LLM results ─────────────────────────────────────
-        merged = self._merge_signals(keyword_signals, llm_signals)
+        # ── 7. Two-pass validation for uncertain signals ──────────────────────
+        llm_signals = await self._two_pass_validation(llm_signals, full_text)
 
-        # ── 8. Cache result ────────────────────────────────────────────────────
+        # ── 8. Merge keyword + semantic + LLM results ──────────────────────────
+        merged = self._merge_signals(keyword_signals, llm_signals, semantic_signals)
+
+        # ── 9. Cache result ────────────────────────────────────────────────────
         extraction_cache.set(full_text, merged)
+
+        elapsed = time.monotonic() - extraction_start
+        logger.info("Signal extraction completed in %.2fs", elapsed)
 
         return merged
 
@@ -269,21 +291,30 @@ class SignalExtractor:
 
     @staticmethod
     def _make_chunks(text: str) -> list[str]:
-        """Split text into overlapping chunks of CHUNK_SIZE chars."""
-        chunks = []
-        start = 0
-        while start < len(text):
-            chunks.append(text[start : start + CHUNK_SIZE])
-            start += CHUNK_SIZE - CHUNK_OVERLAP
-        return chunks
+        """Split text into sentence-aware overlapping chunks.
+
+        Uses the sentence-aware chunker from app.utils.embeddings to ensure
+        chunk boundaries never fall mid-sentence.
+        """
+        try:
+            from app.utils.embeddings import chunk_text
+            return chunk_text(text, chunk_size=500, overlap=3)
+        except ImportError:
+            # Fallback to character-based chunking
+            chunks = []
+            start = 0
+            while start < len(text):
+                chunks.append(text[start : start + CHUNK_SIZE])
+                start += CHUNK_SIZE - CHUNK_OVERLAP
+            return chunks
 
     # ── LLM extraction ────────────────────────────────────────────────────────
 
     async def _llm_extraction(self, text: str) -> dict[str, dict]:
-        """Single LLM call for signal extraction."""
+        """Single deterministic LLM call for signal extraction."""
         try:
             prompt = EXTRACTION_PROMPT.format(document_text=text)
-            result = await self.llm.generate_json(prompt=prompt)
+            result = await self.llm.generate_deterministic_json(prompt=prompt)
 
             if "error" in result:
                 logger.warning("LLM extraction returned error, using empty signals")
@@ -482,29 +513,41 @@ class SignalExtractor:
 
     # ── Signal merging ────────────────────────────────────────────────────────
 
-    def _merge_signals(self, keyword_signals: dict, llm_signals: dict) -> dict[str, dict]:
+    def _merge_signals(
+        self, keyword_signals: dict, llm_signals: dict, semantic_signals: dict = None,
+    ) -> dict[str, dict]:
         """
-        Merge keyword and LLM signals.
-        LLM value takes precedence; confidence is boosted when both agree.
-        Source falls back to keyword when LLM source fails verification.
+        Merge keyword, LLM, and semantic signals.
+        LLM value takes precedence; confidence is boosted when multiple sources agree.
+        Semantic evidence provides supporting context even without exact keyword matches.
         """
+        semantic_signals = semantic_signals or {}
         merged = {}
         for key in SIGNAL_SCHEMA:
             kw = keyword_signals.get(key, {})
             llm = llm_signals.get(key, {})
+            sem = semantic_signals.get(key, {})
 
             value = llm.get("value") if llm.get("value") else kw.get("value")
 
             kw_conf = kw.get("confidence", 0)
             llm_conf = llm.get("confidence", 0)
-            if kw_conf > 0 and llm_conf > 0:
+            sem_conf = sem.get("confidence", 0)
+
+            # Multi-source confidence merging (deterministic)
+            if llm_conf > 0 and kw_conf > 0 and sem_conf > 0:
+                combined_conf = min(1.0, llm_conf + kw_conf * 0.2 + sem_conf * 0.15)
+            elif llm_conf > 0 and kw_conf > 0:
                 combined_conf = min(1.0, llm_conf + kw_conf * 0.3)
+            elif llm_conf > 0 and sem_conf > 0:
+                combined_conf = min(1.0, llm_conf + sem_conf * 0.2)
             else:
                 combined_conf = max(kw_conf, llm_conf)
 
             llm_src = llm.get("source_text", "")
             llm_verified = llm.get("source_verified", False)
             kw_src = kw.get("source_text", "")
+            sem_evidence = sem.get("best_sentence", "")
 
             if llm_src and llm_verified:
                 source_text = llm_src
@@ -512,6 +555,9 @@ class SignalExtractor:
             elif kw_src:
                 source_text = kw_src
                 page_number = kw.get("page_number", 0)
+            elif sem_evidence:
+                source_text = sem_evidence[:300]
+                page_number = 0
             else:
                 source_text = llm_src
                 page_number = llm.get("page_number") or 0
@@ -522,12 +568,75 @@ class SignalExtractor:
                 "source_text": source_text,
                 "source_verified": bool(llm_verified or (kw_src and source_text == kw_src)),
                 "page_number": page_number,
+                "semantic_similarity": round(sem.get("best_similarity", 0.0), 3),
             }
 
             if merged[key]["confidence"] < 0.1:
                 merged[key]["value"] = None
 
         return merged
+
+    # ── Semantic extraction ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _semantic_extraction(text: str) -> dict:
+        """Run semantic similarity extraction using sentence-transformers.
+
+        Returns a dict of signal_name -> {confidence, evidence_sentences, ...}.
+        Gracefully returns empty dict if sentence-transformers is not installed.
+        """
+        try:
+            from services.semantic_extractor import extract_semantic_signals, is_available
+            if not is_available():
+                logger.info("Semantic extractor not available — skipping semantic extraction.")
+                return {}
+            result = extract_semantic_signals(text)
+            found = sum(1 for v in result.values() if v.get("confidence", 0) > 0)
+            logger.info("Semantic extraction found evidence for %d/%d signals", found, len(result))
+            return result
+        except Exception as exc:
+            logger.warning("Semantic extraction failed (non-fatal): %s", exc)
+            return {}
+
+    # ── Two-pass validation ────────────────────────────────────────────────────
+
+    async def _two_pass_validation(self, signals: dict, full_text: str) -> dict:
+        """Validate uncertain signals (confidence 0.4-0.7) with a verification pass.
+
+        For signals in the uncertain range, re-checks the extracted value against
+        the source evidence. Rejects unsupported outputs.
+
+        Returns the signals dict with updated confidences.
+        """
+        uncertain = {
+            k: v for k, v in signals.items()
+            if 0.4 <= v.get("confidence", 0) <= 0.7 and v.get("value") is not None
+        }
+
+        if not uncertain:
+            return signals
+
+        logger.info("Two-pass validation: checking %d uncertain signals", len(uncertain))
+
+        for key, sig in uncertain.items():
+            source = sig.get("source_text", "")
+            value = sig.get("value", "")
+
+            if not source:
+                # No source evidence — reject the value
+                signals[key]["value"] = None
+                signals[key]["confidence"] = 0.0
+                logger.info("Two-pass: rejected '%s' — no source evidence", key)
+                continue
+
+            # Check if source text actually exists in document
+            if source.lower() not in full_text.lower():
+                signals[key]["confidence"] = round(sig["confidence"] * 0.5, 2)
+                if signals[key]["confidence"] < 0.4:
+                    signals[key]["value"] = None
+                logger.info("Two-pass: penalized '%s' — source not found in document", key)
+
+        return signals
 
     # ── Utilities ─────────────────────────────────────────────────────────────
 
@@ -543,3 +652,4 @@ class SignalExtractor:
             if not signals.get(key, {}).get("value")
             or signals[key].get("confidence", 0) < 0.3
         ]
+

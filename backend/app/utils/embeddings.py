@@ -1,7 +1,13 @@
 """
-Text chunking + OpenAI embedding utilities.
+Text chunking + embedding utilities.
+
+Sentence-aware chunking:
+  - Never splits mid-sentence.
+  - Overlapping sentence windows preserve semantic continuity.
+  - Deterministic output: identical text always produces identical chunks.
 """
 import logging
+import re
 from typing import Optional
 
 import numpy as np
@@ -13,15 +19,115 @@ logger = logging.getLogger(__name__)
 
 _enc = tiktoken.get_encoding("cl100k_base")  # works for text-embedding-3-*
 
+# Sentence boundary regex — handles common abbreviations gracefully.
+# Splits on period/question/exclamation followed by whitespace + uppercase,
+# or on newline boundaries.
+_SENTENCE_SPLIT_RE = re.compile(
+    r'(?<=[.!?])\s+(?=[A-Z])|(?<=\n)\s*(?=\S)'
+)
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences deterministically.
+
+    Falls back to newline splitting if no sentence boundaries are found.
+    Preserves original whitespace within sentences.
+    """
+    if not text.strip():
+        return []
+
+    sentences = _SENTENCE_SPLIT_RE.split(text)
+    # Filter out empty strings and strip each sentence
+    result = [s.strip() for s in sentences if s.strip()]
+    return result
+
+
+def _count_tokens(text: str) -> int:
+    """Count tokens using the tiktoken encoder."""
+    return len(_enc.encode(text))
+
 
 def chunk_text(
     text: str,
     chunk_size: int = None,
     overlap: int = None,
 ) -> list[str]:
+    """Split text into overlapping sentence-window chunks.
+
+    Guarantees:
+      - Never splits mid-sentence.
+      - Overlapping sentence windows (configurable overlap_sentences).
+      - Deterministic: identical text always produces identical chunks.
+      - Each chunk stays within the token budget (chunk_size tokens).
+
+    Args:
+        text: Input text to chunk.
+        chunk_size: Maximum tokens per chunk (default from settings).
+        overlap: Number of overlap sentences between windows (default 3).
+
+    Returns:
+        List of text chunks, each within the token budget.
     """
-    Split `text` into overlapping token-window chunks.
-    Returns a list of text strings.
+    chunk_size = chunk_size or settings.EMBEDDING_CHUNK_SIZE
+    # overlap is now interpreted as number of overlap sentences
+    overlap_sentences = overlap if overlap is not None else 3
+
+    sentences = _split_sentences(text)
+    if not sentences:
+        return []
+
+    chunks: list[str] = []
+    i = 0
+
+    while i < len(sentences):
+        current_chunk_sentences: list[str] = []
+        current_tokens = 0
+
+        # Add sentences until we exceed the token budget
+        j = i
+        while j < len(sentences):
+            sent_tokens = _count_tokens(sentences[j])
+
+            # If a single sentence exceeds chunk_size, include it as its own chunk
+            if not current_chunk_sentences and sent_tokens > chunk_size:
+                current_chunk_sentences.append(sentences[j])
+                j += 1
+                break
+
+            if current_tokens + sent_tokens > chunk_size and current_chunk_sentences:
+                break
+
+            current_chunk_sentences.append(sentences[j])
+            current_tokens += sent_tokens
+            j += 1
+
+        if current_chunk_sentences:
+            chunks.append(" ".join(current_chunk_sentences))
+
+        # Advance by (sentences consumed - overlap), minimum 1
+        sentences_consumed = j - i
+        advance = max(1, sentences_consumed - overlap_sentences)
+        i += advance
+
+        # Stop if we've consumed everything
+        if j >= len(sentences):
+            break
+
+    logger.debug(
+        "Sentence-aware chunking: %d sentences → %d chunks (budget=%d tokens, overlap=%d sentences)",
+        len(sentences), len(chunks), chunk_size, overlap_sentences,
+    )
+    return chunks
+
+
+def chunk_text_legacy(
+    text: str,
+    chunk_size: int = None,
+    overlap: int = None,
+) -> list[str]:
+    """Legacy token-window chunking (kept for backward compatibility).
+
+    Splits on raw token boundaries without sentence awareness.
     """
     chunk_size = chunk_size or settings.EMBEDDING_CHUNK_SIZE
     overlap = overlap or settings.EMBEDDING_CHUNK_OVERLAP

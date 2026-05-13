@@ -135,7 +135,11 @@ class ScoringEngine:
         return hashlib.md5(serialized.encode("utf-8")).hexdigest()
 
     def score(self, signals: dict[str, dict]) -> dict:
-        """Compute architecture scores from extracted signals."""
+        """Compute architecture scores from extracted signals.
+
+        Uses confidence-weighted scoring where low-confidence signals
+        minimally affect scores and high-confidence signals dominate.
+        """
         scores = {arch: 0.0 for arch in self.architectures}
         factor_breakdown: dict[str, dict[str, float]] = {arch: {} for arch in self.architectures}
         total_weight = 0.0
@@ -161,8 +165,11 @@ class ScoringEngine:
                 continue
 
             weight = self.weights.get(signal_name, 1.0)
-            # Apply confidence as a modifier
-            effective_weight = weight * confidence
+
+            # Confidence-tier weighted scoring
+            # Low confidence signals minimally affect scores
+            confidence_multiplier = self._confidence_tier_multiplier(confidence)
+            effective_weight = weight * confidence * confidence_multiplier
             total_weight += effective_weight
             evaluated_factors += 1
 
@@ -211,6 +218,29 @@ class ScoringEngine:
             # AI-5.2: False when no signals were evaluated — frontend should show a warning.
             "data_sufficient": data_sufficient,
         }
+
+    @staticmethod
+    def _confidence_tier_multiplier(confidence: float) -> float:
+        """Map confidence to a tier-based weight multiplier.
+
+        Tiers:
+          - Very High (>= 0.8): 1.0x — full impact
+          - High (0.6 - 0.8):   0.85x — near full impact
+          - Medium (0.4 - 0.6): 0.6x — moderate impact
+          - Low (0.1 - 0.4):    0.3x — minimal impact
+          - None (< 0.1):       0.0x — no impact
+
+        This ensures uncertain signals don't unduly influence recommendations.
+        """
+        if confidence >= 0.8:
+            return 1.0
+        elif confidence >= 0.6:
+            return 0.85
+        elif confidence >= 0.4:
+            return 0.6
+        elif confidence >= 0.1:
+            return 0.3
+        return 0.0
 
     def _compute_overall_confidence(self, signals: dict) -> float:
         """Compute overall confidence of the recommendation."""

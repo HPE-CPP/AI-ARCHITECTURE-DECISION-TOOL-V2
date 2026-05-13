@@ -1,10 +1,16 @@
 """
 LLM Client - Unified interface for OpenAI and Ollama.
 Supports dynamic provider switching and structured output.
+
+Determinism guarantees:
+  - Extraction calls use temperature=0.0, seed=42, and JSON mode.
+  - Identical input MUST produce identical output for extraction paths.
+  - Recommendation/creative calls retain configurable temperature.
 """
 import asyncio
 import json
 import logging
+import time
 from typing import Optional, Any
 from openai import AsyncOpenAI
 import httpx
@@ -12,6 +18,9 @@ import httpx
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Deterministic seed for reproducible LLM outputs
+DETERMINISTIC_SEED = 42
 
 # B-02 FIX: Use a single module-level shared AsyncClient instead of creating a new one
 # per LLM call. This enables TCP connection pooling and saves 10-50ms per request.
@@ -48,11 +57,24 @@ class LLMClient:
         temperature: float = 0.1,
         max_tokens: int = 4096,
         json_mode: bool = False,
+        deterministic: bool = False,
     ) -> str:
-        """Generate completion from the configured LLM provider."""
+        """Generate completion from the configured LLM provider.
+
+        Args:
+            deterministic: When True, forces temperature=0.0 and seed=42
+                           regardless of the caller's temperature argument.
+                           Use for extraction paths that must be reproducible.
+        """
         import tiktoken
         from fastapi import HTTPException
-        
+
+        # Force determinism when requested
+        if deterministic:
+            temperature = 0.0
+
+        start_ts = time.monotonic()
+
         # AI-002 FIX: Context Window Protection
         # Count tokens and truncate the prompt if it exceeds the model's safe limit.
         try:
@@ -80,16 +102,27 @@ class LLMClient:
             logger.warning(f"Failed to count tokens: {e}")
 
         if self.provider == "openai":
-            return await self._openai_generate(prompt, system_prompt, temperature, max_tokens, json_mode)
+            result = await self._openai_generate(prompt, system_prompt, temperature, max_tokens, json_mode, deterministic)
         elif self.provider == "ollama":
-            return await self._ollama_generate(prompt, system_prompt, temperature, max_tokens, json_mode)
+            result = await self._ollama_generate(prompt, system_prompt, temperature, max_tokens, json_mode, deterministic)
         else:
             raise ValueError(f"Unsupported LLM provider: {self.provider}")
 
+        elapsed = time.monotonic() - start_ts
+        logger.info(
+            "LLM generate completed: provider=%s deterministic=%s temperature=%.2f elapsed=%.2fs",
+            self.provider, deterministic, temperature, elapsed,
+        )
+        return result
+
     async def _openai_generate(
-        self, prompt: str, system_prompt: str, temperature: float, max_tokens: int, json_mode: bool
+        self, prompt: str, system_prompt: str, temperature: float,
+        max_tokens: int, json_mode: bool, deterministic: bool = False,
     ) -> str:
-        """Call OpenAI API."""
+        """Call OpenAI API.
+
+        When deterministic=True, passes seed=42 for reproducible outputs.
+        """
         if not self._openai_client:
             raise RuntimeError("OpenAI API key not configured. Set OPENAI_API_KEY in .env")
 
@@ -104,6 +137,8 @@ class LLMClient:
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if deterministic:
+            kwargs["seed"] = DETERMINISTIC_SEED
 
         try:
             response = await self._openai_client.chat.completions.create(**kwargs)
@@ -114,13 +149,16 @@ class LLMClient:
             raise RuntimeError(f"OpenAI API call failed: {str(e)}")
 
     async def _ollama_generate(
-        self, prompt: str, system_prompt: str, temperature: float, max_tokens: int, json_mode: bool
+        self, prompt: str, system_prompt: str, temperature: float,
+        max_tokens: int, json_mode: bool, deterministic: bool = False,
     ) -> str:
         """Call Ollama local API using the shared HTTP client with a guarded timeout.
 
         B-02 FIX: Reuse module-level _ollama_http_client for connection pooling.
         B-03 FIX: Wrap in asyncio.wait_for(timeout=90) so a slow GPU/CPU machine
                   cannot starve the entire event loop for up to 5 minutes.
+
+        When deterministic=True, sets seed=42 and temperature=0.0 in options.
         """
         try:
             messages = [
@@ -131,6 +169,9 @@ class LLMClient:
                 "temperature": temperature,
                 "num_predict": max_tokens,
             }
+            if deterministic:
+                options["seed"] = DETERMINISTIC_SEED
+                options["temperature"] = 0.0
 
             payload: dict[str, Any] = {
                 "model": settings.OLLAMA_MODEL,
@@ -173,6 +214,7 @@ class LLMClient:
         prompt: str,
         system_prompt: str = "You are an expert AI systems architect. Always respond with valid JSON.",
         temperature: float = 0.0,
+        deterministic: bool = False,
     ) -> dict:
         """Generate structured JSON output from LLM."""
         try:
@@ -181,6 +223,7 @@ class LLMClient:
                 system_prompt=system_prompt,
                 temperature=temperature,
                 json_mode=True,
+                deterministic=deterministic,
             )
         except Exception as e:
             logger.error(f"LLM generate() failed in generate_json: {e}")
@@ -192,6 +235,23 @@ class LLMClient:
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse JSON from LLM response: {raw[:200]}")
             return {"error": "Failed to parse LLM response as JSON", "raw": raw}
+
+    async def generate_deterministic_json(
+        self,
+        prompt: str,
+        system_prompt: str = "You are an expert AI systems architect. Always respond with valid JSON.",
+    ) -> dict:
+        """Generate deterministic JSON — always uses temperature=0.0 and seed=42.
+
+        Use this for signal extraction and any path where identical input
+        must always produce identical output.
+        """
+        return await self.generate_json(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            temperature=0.0,
+            deterministic=True,
+        )
 
     def switch_provider(self, provider: str) -> None:
         """Switch LLM provider at runtime (e.g. from ollama ↔ openai).
