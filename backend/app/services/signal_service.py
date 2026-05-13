@@ -75,23 +75,36 @@ async def extract_and_persist(
         logger.info(f"Signals cache HIT for session {session_id}")
         return cached
 
-    # 2. FAISS retrieval to enrich context
+    # 2. FAISS retrieval — pass as separate field so it does not corrupt
+    # the full_text used for the extraction cache key and source verification.
     try:
         faiss_context = await retrieve_context(session_id)
         if faiss_context:
-            # Prepend retrieved context to the full text for better coverage
-            enriched_text = faiss_context + "\n\n" + document_data.get("full_text", "")
-            document_data = {**document_data, "full_text": enriched_text[:12000]}
+            document_data = {**document_data, "retrieved_context": faiss_context}
     except Exception as exc:
-        logger.warning(f"FAISS retrieval failed, using raw text: {exc}")
+        logger.warning(f"FAISS retrieval failed: {exc}")
 
     # 3. Extract signals
     llm = get_llm_client(provider)
     extractor = SignalExtractor(llm)
     signals = await extractor.extract_signals(document_data)
 
+    pre_ah_count = sum(1 for s in signals.values() if s.get("value"))
+    logger.info("Pre-anti-hallucination: %d/%d signals have values", pre_ah_count, len(signals))
+
     # Anti-hallucination pass
     signals = _apply_anti_hallucination(signals)
+
+    post_ah_count = sum(1 for s in signals.values() if s.get("value"))
+    logger.info(
+        "Post-anti-hallucination: %d/%d signals retained (threshold=%.1f)",
+        post_ah_count, len(signals), 0.3,
+    )
+    if post_ah_count == 0 and pre_ah_count == 0:
+        logger.error(
+            "EXTRACTION FAILURE: 0 signals extracted. "
+            "LLM may be unreachable. Check Ollama/OpenAI connection."
+        )
 
     # 4. Persist to PostgreSQL
     try:
@@ -105,22 +118,42 @@ async def extract_and_persist(
     return signals
 
 
-def _apply_anti_hallucination(signals: dict, threshold: float = 0.4) -> dict:
+def _normalize_value(value: str) -> str:
+    """Normalize LLM output value to match scoring rule keys.
+
+    LLMs often return slightly variant spellings:
+      "on-premise" → "on_premise", "Very High" → "very_high", etc.
+    """
+    return value.lower().strip().replace(" ", "_").replace("-", "_")
+
+
+def _apply_anti_hallucination(signals: dict, threshold: float = 0.3) -> dict:
     """Null out signal values below the confidence threshold OR with invalid values.
 
-    H-004 FIX: In addition to the confidence check, validate that each signal's
-    value is one of the allowed options in SCORING_RULES.  This prevents LLM
-    hallucinated values (e.g. "INVENTED_VALUE") from passing through to the
-    scoring engine even when confidence is high.
+    Threshold is intentionally set low (0.3) because source-verification no
+    longer penalises confidence.  The primary safety net is the value-validity
+    check: any value not in the scoring rules is rejected regardless of
+    confidence, so hallucinated labels cannot reach the scoring engine.
+
+    Value normalisation is applied first so that common variant spellings
+    (e.g. "on-premise", "Very High") are accepted rather than rejected.
     """
     from services.scoring_engine import SCORING_RULES
 
     for key, sig in signals.items():
+        value = sig.get("value")
+
+        # Normalise first so "on-premise" → "on_premise" passes validation
+        if value and isinstance(value, str):
+            normalised = _normalize_value(value)
+            if normalised != value:
+                sig["value"] = normalised
+                value = normalised
+
         if sig.get("confidence", 0) < threshold:
             sig["value"] = None
             continue
-        # Validate value against allowed options
-        value = sig.get("value")
+
         if value and key in SCORING_RULES:
             allowed = set(SCORING_RULES[key].keys())
             if value not in allowed:

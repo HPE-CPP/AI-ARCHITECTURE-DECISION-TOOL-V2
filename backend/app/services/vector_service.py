@@ -64,7 +64,11 @@ async def index_document(
 
 async def retrieve_context(
     session_id: str,
-    query: str = "architecture requirements dataset latency",
+    query: str = (
+        "dataset size records volume latency response time query throughput "
+        "data volatility updates accuracy security compliance cost budget "
+        "deployment cloud on-premise users scale domain specialized"
+    ),
     top_k: int = 8,
 ) -> str:
     """

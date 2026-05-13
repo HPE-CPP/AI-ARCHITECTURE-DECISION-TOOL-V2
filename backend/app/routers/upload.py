@@ -140,15 +140,24 @@ async def upload_document(
         )
         extracted_count = sum(1 for s in signals.values() if s.get("value"))
         missing_count = sum(1 for s in signals.values() if not s.get("value"))
-        trace[-1]["status"] = "complete"
-        trace[-1]["details"] = f"Extracted {extracted_count}/10 signals"
+
+        if extracted_count == 0:
+            trace[-1]["status"] = "error"
+            trace[-1]["details"] = (
+                "LLM returned 0 signals. "
+                f"Provider: {provider}. "
+                "Check that Ollama is running (`ollama serve`) and the model is loaded (`ollama pull llama3.2`)."
+            )
+        else:
+            trace[-1]["status"] = "complete"
+            trace[-1]["details"] = f"Extracted {extracted_count}/10 signals"
 
         # Stage 4b: Report missing signals
         if missing_count > 0:
             missing_names = [k.replace("_", " ") for k, s in signals.items() if not s.get("value")]
             trace.append({
                 "step": "missing_signals",
-                "status": "complete",
+                "status": "warning" if extracted_count > 0 else "error",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "details": f"{missing_count} signals missing: {', '.join(missing_names)}",
             })
