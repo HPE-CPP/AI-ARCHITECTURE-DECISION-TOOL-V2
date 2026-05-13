@@ -196,6 +196,26 @@ def get_architectures():
     return {"architectures": ARCHITECTURE_DESCRIPTIONS}
 
 
+# ---------------------------------------------------------------------------
+# POST /api/v1/admin/cache/clear  — dev-only cache flush
+# ---------------------------------------------------------------------------
+@router.post("/admin/cache/clear")
+def clear_extraction_cache():
+    """Clear the in-memory and Redis extraction cache.
+
+    Use after code changes to signal extraction so that previously cached
+    results for the same document are re-computed with the new logic.
+    Only intended for development use.
+    """
+    from config import settings
+    if not getattr(settings, "DEBUG", False):
+        raise HTTPException(403, "Cache clear is only available in DEBUG mode")
+    from services.extraction_cache import extraction_cache
+    extraction_cache.clear()
+    logger.info("Extraction cache cleared via admin endpoint")
+    return {"cleared": True, "message": "Extraction cache cleared successfully"}
+
+
 @router.get("/questionnaire/options")
 def get_questionnaire_options():
     return {

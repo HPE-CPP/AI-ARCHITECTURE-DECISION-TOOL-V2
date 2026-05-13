@@ -11,6 +11,7 @@ Optimizations applied:
   - Keyword pre-extraction still runs (zero LLM cost) and boosts final confidence.
 """
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -80,42 +81,57 @@ _ALL_KEYWORDS: frozenset[str] = frozenset(
 )
 register_signal_keywords(_ALL_KEYWORDS)
 
-EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Analyze the following document text and extract architecture decision signals.
+EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Read the document and extract 10 architecture signals as JSON.
 
-For each signal, provide:
-- value: the extracted value (MUST be one of the listed options, or null if not found)
-- confidence: 0.0 to 1.0 (0 if not found, higher if explicitly stated)
-- source_text: a VERBATIM quote copied exactly from the document that supports this value. Do NOT paraphrase, summarize, or rephrase. Copy the exact sentence or phrase as it appears in the document. If not found, use an empty string.
-- page_number: the page number where the source_text appears (0 if not found)
+SIGNAL NAMES AND ALLOWED VALUES — you must use EXACTLY these strings for "value":
+  dataset_size:          "small" | "medium" | "large" | "very_large"
+  query_volume:          "low" | "medium" | "high" | "very_high"
+  latency_requirement:   "relaxed" | "moderate" | "strict" | "ultra_low"
+  data_volatility:       "static" | "low" | "moderate" | "high"
+  accuracy_requirement:  "moderate" | "high" | "very_high" | "critical"
+  domain_specificity:    "general" | "moderate" | "specialized" | "highly_specialized"
+  security_level:        "standard" | "elevated" | "high" | "critical"
+  cost_sensitivity:      "low" | "moderate" | "high" | "very_high"
+  deployment_preference: "cloud" | "on_premise" | "hybrid" | "edge"
+  user_scale:            "small" | "medium" | "large" | "enterprise"
 
-CRITICAL RULES:
-1. DO NOT hallucinate. If a signal is not mentioned in the document, set value to null and confidence to 0.
-2. Only extract what is explicitly stated or strongly implied.
-3. source_text MUST be a word-for-word copy from the document. Every word in your source_text must appear consecutively in the document. If you cannot find an exact quote, set source_text to "" and confidence to 0.
-4. Confidence levels:
-   - 0.0: Not found at all
-   - 0.1-0.3: Weakly implied
-   - 0.4-0.6: Moderately implied
-   - 0.7-0.8: Strongly implied
-   - 0.9-1.0: Explicitly stated with a verbatim source quote
+HOW TO PICK THE RIGHT VALUE — infer from context even if not stated word-for-word:
+  dataset_size:          GB/TB of documents or millions of records → "large"; hundreds of GBs or billions of records → "very_large"; thousands of records → "small"
+  query_volume:          hundreds of daily users / internal tool → "low"; thousands req/day → "medium"; high-traffic / >1000 QPS → "high"
+  latency_requirement:   "under 2 seconds" or ">1s acceptable" → "relaxed"; "under 1 second" → "moderate"; "real-time / <100ms" → "strict"; "<50ms" → "ultra_low"
+  data_volatility:       "updated daily" or continuous data → "moderate"; "updated weekly/monthly" → "low"; "real-time streaming" → "high"; "historical archive" → "static"
+  accuracy_requirement:  "avoid hallucination / cite sources" → "very_high"; medical/legal/financial compliance → "critical"; customer-facing production → "high"; internal prototype → "moderate"
+  domain_specificity:    internal company docs, procedures, support tickets → "specialized"; general Q&A chatbot → "general"; highly niche/proprietary domain → "highly_specialized"
+  security_level:        "internal procedures / on-premise required" → "elevated"; HIPAA/GDPR/PCI/classified → "high" or "critical"; public data → "standard"
+  cost_sensitivity:      "cost efficiency important / budget conscious" → "high"; "strict budget constraints" → "very_high"; unlimited budget → "low"
+  deployment_preference: "on-premise / private cloud / self-hosted" → "on_premise"; AWS/GCP/Azure → "cloud"; "both cloud and on-prem" → "hybrid"; IoT/edge devices → "edge"
+  user_scale:            "<100 users / small team" → "small"; "100-1000" → "medium"; "1000-10000" → "large"; ">10000 or enterprise-wide" → "enterprise"
 
-SIGNALS TO EXTRACT:
-1. dataset_size: (small/medium/large/very_large) - Volume of data
-2. query_volume: (low/medium/high/very_high) - Expected queries/requests
-3. latency_requirement: (relaxed/moderate/strict/ultra_low) - Response time needs
-4. data_volatility: (static/low/moderate/high) - How often data changes
-5. accuracy_requirement: (moderate/high/very_high/critical) - Accuracy needs
-6. domain_specificity: (general/moderate/specialized/highly_specialized) - Domain specialization
-7. security_level: (standard/elevated/high/critical) - Security needs
-8. cost_sensitivity: (low/moderate/high/very_high) - Budget constraints
-9. deployment_preference: (cloud/on_premise/hybrid/edge) - Deployment target
-10. user_scale: (small/medium/large/enterprise) - Number of users
+CONFIDENCE SCALE:
+  0.0   = signal not mentioned at all (use null for value too)
+  0.3   = weakly implied or general context
+  0.5   = moderately clear from context
+  0.7   = clearly stated
+  0.9   = explicitly defined with numbers or keywords
 
-DOCUMENT TEXT:
-{document_text}
+IMPORTANT RULES:
+1. For "value": use null ONLY when the document provides absolutely zero signal for that dimension. Otherwise infer.
+2. For "source_text": copy one exact sentence from the document. Use "" if no suitable sentence exists.
+3. Set confidence >= 0.3 whenever you can infer a reasonable value.
+4. Output raw JSON only — no markdown, no explanation, no code blocks.
 
-Respond with a JSON object with signal names as keys, each containing: value, confidence, source_text, page_number.
+EXAMPLE OUTPUT (fill in your actual findings from the document):
+{"dataset_size": {"value": "large", "confidence": 0.8, "source_text": "The total estimated dataset size is 120 GB", "page_number": 1}, "query_volume": {"value": "low", "confidence": 0.6, "source_text": "500 daily users", "page_number": 1}, "latency_requirement": {"value": "relaxed", "confidence": 0.7, "source_text": "response time must be under 2 seconds", "page_number": 1}, "data_volatility": {"value": "moderate", "confidence": 0.7, "source_text": "Support tickets are added daily", "page_number": 1}, "accuracy_requirement": {"value": "very_high", "confidence": 0.8, "source_text": "avoid hallucinating answers", "page_number": 1}, "domain_specificity": {"value": "specialized", "confidence": 0.7, "source_text": "Internal knowledge base articles", "page_number": 1}, "security_level": {"value": "elevated", "confidence": 0.7, "source_text": "documents contain internal procedures", "page_number": 1}, "cost_sensitivity": {"value": "high", "confidence": 0.6, "source_text": "cost efficiency is important", "page_number": 1}, "deployment_preference": {"value": "on_premise", "confidence": 0.8, "source_text": "prefer on-premise deployment", "page_number": 1}, "user_scale": {"value": "small", "confidence": 0.7, "source_text": "500 daily users", "page_number": 1}}
+
+RETRIEVED CONTEXT (if any):
+RETRIEVED_CONTEXT_PLACEHOLDER
+
+DOCUMENT:
+DOCUMENT_TEXT_PLACEHOLDER
 """
+
+# Prompt fingerprint — automatically invalidates stale cache entries when the prompt changes.
+_PROMPT_FINGERPRINT = hashlib.md5(EXTRACTION_PROMPT.encode()).hexdigest()[:8]
 
 SIGNAL_OPTIONS = {
     "dataset_size": [
@@ -193,13 +209,21 @@ class SignalExtractor:
         """Extract signals with page filtering, caching, and parallel chunk analysis."""
         full_text = document_data.get("full_text", "")
         pages = document_data.get("pages", [])
+        # Retrieved context from FAISS — supplementary only; NOT used for cache key
+        # or source verification so same document always yields the same cache key.
+        retrieved_context = document_data.get("retrieved_context", "")
 
         if not full_text.strip():
             return self._empty_signals()
 
         # ── 1. Cache check ────────────────────────────────────────────────────
-        cached = extraction_cache.get(full_text)
+        # Include the prompt fingerprint so that cache entries from previous
+        # versions of the prompt are automatically invalidated when the prompt
+        # changes — no manual cache flush required.
+        _cache_key = f"p:{_PROMPT_FINGERPRINT}\x00{full_text}"
+        cached = extraction_cache.get(_cache_key)
         if cached is not None:
+            logger.info("Extraction cache HIT (prompt=%s) — skipping LLM call", _PROMPT_FINGERPRINT)
             return cached
 
         # ── 2. Keyword pre-extraction (zero LLM cost) ─────────────────────────
@@ -217,19 +241,30 @@ class SignalExtractor:
 
         # ── 5. LLM extraction — single call or parallel chunks ─────────────────
         if len(context) <= MAX_CONTEXT_CHARS:
-            llm_signals = await self._llm_extraction(context)
+            llm_signals = await self._llm_extraction(context, retrieved_context)
             logger.info("Single-call extraction (%d chars)", len(context))
         else:
-            llm_signals = await self._parallel_chunk_extraction(context)
+            llm_signals = await self._parallel_chunk_extraction(context, retrieved_context)
 
-        # ── 6. Source verification ─────────────────────────────────────────────
+        # ── 5b. Heuristic fallback ─────────────────────────────────────────────
+        # If the LLM returned 0 values (timeout, wrong format, not running),
+        # run the regex-based heuristic extractor instead.  Heuristics are
+        # transparent and reliable for well-structured requirements documents.
+        llm_found = sum(1 for s in llm_signals.values() if s.get("value"))
+        if llm_found == 0:
+            logger.warning(
+                "LLM returned 0 signals — activating heuristic extraction fallback"
+            )
+            llm_signals = self._heuristic_extraction(full_text, pages)
+
+        # ── 6. Source verification (against original full_text + pages) ────────
         llm_signals = self._verify_sources(llm_signals, full_text, pages)
 
-        # ── 7. Merge keyword + LLM results ─────────────────────────────────────
+        # ── 7. Merge keyword + LLM/heuristic results ──────────────────────────
         merged = self._merge_signals(keyword_signals, llm_signals)
 
-        # ── 8. Cache result ────────────────────────────────────────────────────
-        extraction_cache.set(full_text, merged)
+        # ── 8. Cache result ───────────────────────────────────────────────────
+        extraction_cache.set(_cache_key, merged)
 
         return merged
 
@@ -279,25 +314,53 @@ class SignalExtractor:
 
     # ── LLM extraction ────────────────────────────────────────────────────────
 
-    async def _llm_extraction(self, text: str) -> dict[str, dict]:
+    async def _llm_extraction(self, text: str, retrieved_context: str = "") -> dict[str, dict]:
         """Single LLM call for signal extraction."""
         try:
-            prompt = EXTRACTION_PROMPT.format(document_text=text)
+            ctx_body = retrieved_context.strip() if retrieved_context else "(none)"
+            # Use str.replace() — NOT .format() — because document text may contain
+            # literal curly braces (JSON, code, templates) that break str.format().
+            prompt = (
+                EXTRACTION_PROMPT
+                .replace("RETRIEVED_CONTEXT_PLACEHOLDER", ctx_body)
+                .replace("DOCUMENT_TEXT_PLACEHOLDER", text)
+            )
             result = await self.llm.generate_json(prompt=prompt)
 
             if "error" in result:
-                logger.warning("LLM extraction returned error, using empty signals")
+                logger.error(
+                    "LLM extraction returned error: %s. "
+                    "Check that Ollama/OpenAI is running and the model is loaded.",
+                    result.get("error", "unknown"),
+                )
                 return self._empty_signals()
 
+            # Unwrap if LLM nested signals inside a wrapper key
+            # e.g. {"signals": {...}} or {"architecture_signals": {...}}
+            if not any(k in result for k in SIGNAL_SCHEMA):
+                for wrapper in ("signals", "architecture_signals", "result",
+                                "data", "output", "extraction", "analysis"):
+                    if wrapper in result and isinstance(result[wrapper], dict):
+                        result = result[wrapper]
+                        logger.debug("Unwrapped LLM JSON from key '%s'", wrapper)
+                        break
+
             validated: dict[str, dict] = {}
+            found_count = 0
             for key in SIGNAL_SCHEMA:
                 if key in result and isinstance(result[key], dict):
                     sig = result[key]
+                    raw_value = sig.get("value")
+                    # Treat JSON null, the string "null", and empty string as absent
+                    value = None if raw_value in (None, "null", "", "N/A", "n/a") else raw_value
+                    conf = min(1.0, max(0.0, float(sig.get("confidence", 0) or 0)))
+                    if value:
+                        found_count += 1
                     validated[key] = {
-                        "value": sig.get("value"),
-                        "confidence": min(1.0, max(0.0, float(sig.get("confidence", 0)))),
-                        "source_text": str(sig.get("source_text", ""))[:300],
-                        "page_number": int(sig.get("page_number", 0)),
+                        "value": value,
+                        "confidence": conf,
+                        "source_text": str(sig.get("source_text", "") or "")[:300],
+                        "page_number": int(sig.get("page_number", 0) or 0),
                     }
                 else:
                     validated[key] = {
@@ -306,13 +369,19 @@ class SignalExtractor:
                         "source_text": "",
                         "page_number": 0,
                     }
+
+            logger.info("LLM extracted %d/%d signals with values", found_count, len(SIGNAL_SCHEMA))
             return validated
 
         except Exception as e:
-            logger.error("LLM extraction failed: %s", e)
+            logger.error(
+                "LLM extraction failed: %s. "
+                "Verify Ollama is running (`ollama serve`) and model is pulled (`ollama pull llama3.2`)",
+                e,
+            )
             return self._empty_signals()
 
-    async def _parallel_chunk_extraction(self, text: str) -> dict[str, dict]:
+    async def _parallel_chunk_extraction(self, text: str, retrieved_context: str = "") -> dict[str, dict]:
         """
         For large documents: split into overlapping chunks, extract from all chunks
         concurrently (bounded by a semaphore), then keep the highest-confidence
@@ -325,14 +394,17 @@ class SignalExtractor:
         # return_exceptions=True ensures a single failed chunk doesn't discard all results.
         semaphore = asyncio.Semaphore(5)
 
-        async def _bounded_extraction(chunk: str) -> dict:
+        async def _bounded_extraction(chunk: str, ctx: str = "") -> dict:
             async with semaphore:
-                return await self._llm_extraction(chunk)
+                return await self._llm_extraction(chunk, ctx)
 
-        results = await asyncio.gather(
-            *[_bounded_extraction(chunk) for chunk in chunks],
-            return_exceptions=True,
-        )
+        # Pass retrieved_context only to the first chunk to avoid inflating token
+        # usage across all parallel calls.
+        tasks = [
+            _bounded_extraction(chunk, retrieved_context if i == 0 else "")
+            for i, chunk in enumerate(chunks)
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Winner-takes-all per signal: highest confidence across chunks
         merged: dict[str, dict] = self._empty_signals()
@@ -419,7 +491,10 @@ class SignalExtractor:
     ) -> dict[str, dict]:
         """
         Verify each LLM-provided source_text actually appears in the document.
-        Falls back to fuzzy recovery; penalises confidence on failure.
+        Falls back to fuzzy recovery. Does NOT penalise confidence on failure —
+        the value itself can be correct even when the exact quote isn't verbatim.
+        Penalising confidence here caused valid signals to be nulled downstream
+        by the anti-hallucination threshold, dramatically degrading recall.
         """
         text_lower = full_text.lower()
 
@@ -442,12 +517,10 @@ class SignalExtractor:
                 sig["page_number"] = self._find_page_for_text(recovered, pages)
                 continue
 
-            logger.warning(
-                "Source for '%s' not verified — penalising confidence %.2f → %.2f",
-                key, sig.get("confidence", 0), sig.get("confidence", 0) * 0.5,
-            )
+            # Mark unverified but do NOT touch confidence — a slightly paraphrased
+            # quote does not invalidate the extracted value.
+            logger.debug("Source for '%s' not verified (value kept)", key)
             sig["source_verified"] = False
-            sig["confidence"] = round(sig.get("confidence", 0) * 0.5, 2)
 
         return signals
 
@@ -479,6 +552,228 @@ class SignalExtractor:
             if text_lower in page.get("text", "").lower():
                 return page.get("page_number", 0)
         return 0
+
+    # ── Heuristic extraction (LLM-independent fallback) ───────────────────────
+
+    # Each entry: (regex_pattern_string, value_or_"NUM", confidence)
+    # Patterns are tried in order; first match wins for each signal.
+    _HEURISTIC_RULES: dict[str, list] = {
+        "dataset_size": [
+            (r"\d+(?:\.\d+)?\s*(?:pb|petabyte)", "very_large", 0.75),
+            (r"\d+(?:\.\d+)?\s*(?:tb|terabyte)", "very_large", 0.72),
+            (r"\b(?:[5-9]\d{2}|\d{4,})(?:\.\d+)?\s*gb\b", "very_large", 0.68),
+            (r"\b\d+(?:\.\d+)?\s*gb\b", "large", 0.65),
+            (r"billions?\s+of\s+\w+", "very_large", 0.68),
+            (r"hundreds?\s+of\s+millions?\s+of\s+\w+", "very_large", 0.65),
+            (r"millions?\s+of\s+\w+", "large", 0.65),
+            (r"hundreds?\s+of\s+thousands?\s+of\s+\w+", "medium", 0.60),
+            (r"tens?\s+of\s+thousands?\s+of\s+\w+", "medium", 0.58),
+            (r"thousands?\s+of\s+\w+", "small", 0.55),
+            (r"hundreds?\s+of\s+\w+", "small", 0.50),
+        ],
+        "query_volume": [
+            (r"\d[\d,]*\s*(?:qps|queries?\s+per\s+second|req(?:uests?)?\s+per\s+second)", "NUM_QPS", 0.80),
+            (r"\bhigh\s+(?:traffic|throughput|load|volume|concurren)", "high", 0.62),
+            (r"\b\d[\d,]*\s+(?:daily|per\s+day)\s+(?:users?|queries?|req\w*)", "NUM_DAILY", 0.70),
+            (r"\bconcurrent\s+(?:users?|sessions?|requests?)", "high", 0.55),
+            (r"\bsmall\s+team\b|\binternal\s+(?:tool|use\s+only)\b", "low", 0.58),
+            (r"\bfew\s+(?:users?|employees?)\b", "low", 0.55),
+        ],
+        "latency_requirement": [
+            (r"(?:under|less\s+than|within|<)\s*50\s*ms", "ultra_low", 0.85),
+            (r"(?:under|less\s+than|within|<)\s*(?:100|150|200)\s*ms", "strict", 0.82),
+            (r"(?:under|less\s+than|within|<)\s*(?:0\.5|500\s*ms|half\s+a\s+second)", "strict", 0.78),
+            (r"(?:under|less\s+than|within|<)\s*1\s*s(?:ec(?:ond)?)?(?!\d)", "moderate", 0.82),
+            (r"(?:under|less\s+than|within|<)\s*[12]\s*s(?:ec(?:ond)?)?(?!\d)", "relaxed", 0.80),
+            (r"\breal[\s-]?time\b(?!\s+streaming)", "strict", 0.62),
+            (r"\bsub[\s-]?second\b", "strict", 0.72),
+            (r"\blow[\s-]?latency\b", "strict", 0.62),
+            (r"\bbatch\s+process(?:ing)?\b|\boffline\b|\basynchronous\b", "relaxed", 0.68),
+        ],
+        "data_volatility": [
+            (r"\breal[\s-]?time\s+(?:streaming|data|feed|updates?|ingestion)\b", "high", 0.78),
+            (r"\b(?:continuously?|constantly|frequently)\s+(?:updat|chang|refresh)", "high", 0.68),
+            (r"\b(?:add|updat|refresh)\w*\s+(?:daily|every\s+day)\b", "moderate", 0.72),
+            (r"\b(?:add|updat|refresh)\w*\s+(?:hourly|every\s+hour)\b", "moderate", 0.75),
+            (r"\b(?:add|updat|refresh)\w*\s+(?:weekly|every\s+week|each\s+week)\b", "low", 0.72),
+            (r"\b(?:add|updat|refresh)\w*\s+(?:monthly|every\s+month)\b", "low", 0.68),
+            (r"\bstatic\b|\barchiv\w*\b|\bhistorical\b|\brarely\s+chang", "static", 0.70),
+            (r"\bimmutable\b|\bno\s+updates?\b", "static", 0.72),
+        ],
+        "accuracy_requirement": [
+            (r"\bhallucinat\w+\b", "very_high", 0.82),
+            (r"\bcite\s+sources?\b|\bsource\s+(?:citation|verification|grounding)\b", "very_high", 0.78),
+            (r"\bHIPAA\b|\bGDPR\b|\bPCI\b|\bFDA\b|\bSOX\b|\bSOC\s*2\b", "critical", 0.85),
+            (r"\b(?:medical|healthcare|clinical|pharmaceutical)\b", "critical", 0.72),
+            (r"\b(?:legal|law\s+firm|litigation|jurisprudence)\b", "critical", 0.72),
+            (r"\bfinancial\s+(?:compliance|regulation|audit)\b", "critical", 0.70),
+            (r"\bhigh\s+accuracy\b|\bprecise\s+answers\b|\bfactually?\s+correct\b", "high", 0.68),
+            (r"\bcustomer[\s-]?facing\b|\bproduction[\s-]?grade\b", "high", 0.62),
+            (r"\binternal\s+(?:tool|use\s+only|prototype)\b", "moderate", 0.55),
+        ],
+        "domain_specificity": [
+            (r"\b(?:medical|healthcare|clinical|pharmaceutical|biotech)\b", "highly_specialized", 0.78),
+            (r"\b(?:legal|law|jurisprudence|compliance\s+regulation)\b", "highly_specialized", 0.75),
+            (r"\bproprietary\s+(?:knowledge|data|information)\b", "highly_specialized", 0.72),
+            (r"\binternal\s+(?:knowledge\s+base|procedures?|documentation|support)\b", "specialized", 0.70),
+            (r"\bsupport\s+(?:tickets?|cases?|documentation)\b", "specialized", 0.65),
+            (r"\bcompany[\s-]?(?:specific|internal|proprietary)\b", "specialized", 0.65),
+            (r"\bdomain[\s-]?specific\b|\bspecializ\w+\b|\bniche\b", "specialized", 0.62),
+            (r"\bgeneral[\s-]?purpose\b|\bgeneral\s+(?:knowledge|assistant|chat)\b", "general", 0.65),
+        ],
+        "security_level": [
+            (r"\bHIPAA\b|\bGDPR\b|\bPCI[\s-]?DSS\b|\bFedRAMP\b|\bITAR\b|\btop\s+secret\b|\bclassified\b", "critical", 0.88),
+            (r"\bPII\b|\bpersonal(?:ly\s+identifiable)?\s+(?:information|data)\b|\bsensitive\s+data\b", "high", 0.78),
+            (r"\bconfidential\b|\brestricted\s+(?:data|access)\b", "high", 0.72),
+            (r"\bon[\s-]?premise\b|\bprivate\s+cloud\b|\bself[\s-]?hosted\b", "elevated", 0.65),
+            (r"\binternal\s+(?:procedures?|documents?|use\s+only|data)\b", "elevated", 0.62),
+            (r"\bpublic\s+(?:data|information|api|dataset)\b|\bopen\s+(?:source|data)\b", "standard", 0.62),
+        ],
+        "cost_sensitivity": [
+            (r"\bvery\s+(?:tight|limited|strict)\s+budget\b|\bno\s+budget\b|\bminimal\s+cost\b", "very_high", 0.78),
+            (r"\bcost[\s-]?(?:effective|efficient|optimization|sensitive|important|conscious)\b", "high", 0.72),
+            (r"\bbudget[\s-]?(?:conscious|constrained|limited)\b|\baffordab\w+\b", "high", 0.70),
+            (r"\bROI\b|\breturn\s+on\s+investment\b|\bcost\s+reduction\b", "high", 0.65),
+            (r"\bbalanced\b.{0,30}(?:cost|budget)\b|\bmoderate\s+(?:cost|budget)\b", "moderate", 0.60),
+            (r"\bperformance\s+at\s+any\s+cost\b|\bunlimited\s+budget\b|\benterprise[\s-]?grade\s+budget\b", "low", 0.72),
+        ],
+        "deployment_preference": [
+            (r"\bhybrid\s+cloud\b|\bboth\s+cloud\s+and\s+on[\s-]?prem|\bon[\s-]?prem\w*\s+(?:and|or)\s+cloud", "hybrid", 0.82),
+            (r"\bself[\s-]?hosted\b|\bon[\s-]?premise\b|\bon[\s-]?prem\b|\bdata\s+cent(?:er|re)\b", "on_premise", 0.82),
+            (r"\bprivate\s+cloud\b|\bsecure\s+(?:private\s+)?cloud\b", "on_premise", 0.72),
+            (r"\bAWS\b|\bAmazon\s+Web\s+Services\b|\bGoogle\s+Cloud\b|\bGCP\b|\bAzure\b|\bMicrosoft\s+Azure\b", "cloud", 0.85),
+            (r"\bcloud[\s-]?native\b|\bSaaS\b|\bmanaged\s+cloud\b", "cloud", 0.72),
+            (r"\bedge\s+(?:computing|devices?|deployment|inference)\b|\bIoT\b|\bembedded\b|\boffline\s+device", "edge", 0.82),
+        ],
+        "user_scale": [
+            (r"\b(\d[\d,]*)\s*k?\s+(?:daily\s+)?(?:active\s+)?users?\b", "NUM_USERS", 0.78),
+            (r"\benterprise[\s-]?wide\b|\bcompany[\s-]?wide\b|\borganization[\s-]?wide\b", "enterprise", 0.75),
+            (r"\bFortune\s+500\b|\bmultinational\b|\bglobal\s+(?:org|organization|company|workforce)\b", "enterprise", 0.78),
+            (r"\blarge\s+(?:organization|company|enterprise|corporation)\b", "large", 0.65),
+            (r"\bsmall\s+(?:team|company|startup)\b|\bfew\s+(?:users?|employees?|people)\b", "small", 0.65),
+            (r"\bpilot\b|\bprototype\b|\bproof\s+of\s+concept\b|\bPoC\b", "small", 0.58),
+        ],
+    }
+
+    # Compiled once at class-definition time
+    _COMPILED_HEURISTICS: dict[str, list] = {}
+
+    @classmethod
+    def _get_compiled_heuristics(cls) -> dict[str, list]:
+        if not cls._COMPILED_HEURISTICS:
+            cls._COMPILED_HEURISTICS = {
+                sig: [(re.compile(pat, re.IGNORECASE), val, conf) for pat, val, conf in rules]
+                for sig, rules in cls._HEURISTIC_RULES.items()
+            }
+        return cls._COMPILED_HEURISTICS
+
+    def _heuristic_extraction(self, text: str, pages: list[dict]) -> dict[str, dict]:
+        """
+        Regex/pattern-based signal extraction — runs as a fallback when the LLM
+        returns 0 signals (e.g., Ollama not running, wrong JSON format, timeout).
+
+        Returns values with moderate confidence (0.4-0.85) derived from explicit
+        text patterns.  Much cheaper than an LLM call and surprisingly accurate for
+        well-structured requirements documents.
+        """
+        compiled = self._get_compiled_heuristics()
+        signals: dict[str, dict] = {}
+
+        for sig, rules in compiled.items():
+            matched_value: Optional[str] = None
+            matched_conf: float = 0.0
+            matched_src: str = ""
+
+            for pattern, value_template, conf in rules:
+                m = pattern.search(text)
+                if not m:
+                    continue
+
+                # Resolve numeric sentinel values
+                value: Optional[str] = None
+                if value_template == "NUM_QPS":
+                    num_str = re.sub(r"[,\s]", "", m.group(0).split()[0])
+                    try:
+                        qps = float(num_str)
+                        if qps >= 1000:
+                            value = "very_high"
+                        elif qps >= 100:
+                            value = "high"
+                        elif qps >= 10:
+                            value = "medium"
+                        else:
+                            value = "low"
+                    except ValueError:
+                        continue
+
+                elif value_template == "NUM_DAILY":
+                    num_str = re.sub(r"[,\s]", "", m.group(0).split()[0])
+                    try:
+                        daily = float(num_str)
+                        # daily queries → rough QPS = daily / 86400
+                        if daily >= 1_000_000:
+                            value = "very_high"
+                        elif daily >= 10_000:
+                            value = "high"
+                        elif daily >= 500:
+                            value = "medium"
+                        else:
+                            value = "low"
+                    except ValueError:
+                        continue
+
+                elif value_template == "NUM_USERS":
+                    raw = re.sub(r",", "", m.group(1)) if m.lastindex and m.group(1) else re.sub(r"[,\s]", "", m.group(0).split()[0])
+                    try:
+                        n = float(raw)
+                        if "k" in m.group(0).lower():
+                            n *= 1000
+                        if n > 10_000:
+                            value = "enterprise"
+                        elif n > 1_000:
+                            value = "large"
+                        elif n >= 100:
+                            value = "medium"
+                        else:
+                            value = "small"
+                    except ValueError:
+                        continue
+                else:
+                    value = value_template
+
+                if value and conf > matched_conf:
+                    matched_value = value
+                    matched_conf = conf
+                    # Extract surrounding sentence as source
+                    idx = m.start()
+                    sent_start = max(0, text.rfind(".", 0, idx) + 1)
+                    sent_end = text.find(".", idx + len(m.group(0)))
+                    if sent_end == -1:
+                        sent_end = min(len(text), idx + 200)
+                    matched_src = text[sent_start:sent_end].strip()[:250]
+                    break  # first (highest-priority) match wins
+
+            if matched_value:
+                page_num = self._find_page_for_text(matched_src, pages)
+                signals[sig] = {
+                    "value": matched_value,
+                    "confidence": matched_conf,
+                    "source_text": matched_src,
+                    "page_number": page_num,
+                    "source_verified": True,
+                }
+            else:
+                signals[sig] = {
+                    "value": None,
+                    "confidence": 0.0,
+                    "source_text": "",
+                    "page_number": 0,
+                    "source_verified": False,
+                }
+
+        found = sum(1 for s in signals.values() if s.get("value"))
+        logger.info("Heuristic extraction: %d/%d signals found", found, len(SIGNAL_SCHEMA))
+        return signals
 
     # ── Signal merging ────────────────────────────────────────────────────────
 

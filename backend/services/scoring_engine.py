@@ -213,14 +213,29 @@ class ScoringEngine:
         }
 
     def _compute_overall_confidence(self, signals: dict) -> float:
-        """Compute overall confidence of the recommendation."""
-        confidences = [s.get("confidence", 0) for s in signals.values()]
-        if not confidences:
+        """Compute overall confidence of the recommendation.
+
+        Only signals that actually have a non-null value contribute to the
+        average — signals that were nulled by anti-hallucination should not
+        inflate coverage or be counted in the mean (they were not scored).
+        Coverage (fraction of 10 signals that have a value) acts as a separate
+        penalty so a recommendation from 3 signals is less confident than one
+        from 9, even if per-signal confidence is the same.
+        """
+        total = len(signals)
+        if total == 0:
             return 0.0
-        avg = sum(confidences) / len(confidences)
-        # Factor in how many signals we have
-        coverage = sum(1 for c in confidences if c > 0.3) / len(confidences)
-        return round(avg * 0.6 + coverage * 0.4, 2)
+
+        valued = [(s.get("value"), s.get("confidence", 0)) for s in signals.values()]
+        active_confs = [c for v, c in valued if v is not None and c > 0.0]
+
+        if not active_confs:
+            return 0.0
+
+        avg_active = sum(active_confs) / len(active_confs)
+        coverage = len(active_confs) / total
+
+        return round(avg_active * 0.7 + coverage * 0.3, 2)
 
     def _generate_why_not(self, ranked: list, scores: dict, breakdown: dict) -> dict[str, str]:
         """Generate explanations for why non-recommended architectures rank lower."""
