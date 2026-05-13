@@ -12,65 +12,81 @@ logger = logging.getLogger(__name__)
 # Scoring rules: each signal value maps to score adjustments for each architecture
 # Format: signal_value -> {architecture: score_delta}
 SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
+    # Each value maps to how well each architecture fits that signal value.
+    # Hybrid should only compete when signals genuinely require BOTH retrieval
+    # flexibility AND fine-tuned model accuracy — not as a universal fallback.
     "dataset_size": {
-        "small": {"RAG": 0.3, "FineTuning": 0.6, "CAG": 0.9, "Hybrid": 0.4},
-        "medium": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
-        "large": {"RAG": 0.9, "FineTuning": 0.5, "CAG": 0.2, "Hybrid": 0.8},
-        "very_large": {"RAG": 1.0, "FineTuning": 0.3, "CAG": 0.1, "Hybrid": 0.9},
+        "small":      {"RAG": 0.3, "FineTuning": 0.6, "CAG": 0.9, "Hybrid": 0.3},
+        "medium":     {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.5},
+        "large":      {"RAG": 0.9, "FineTuning": 0.5, "CAG": 0.2, "Hybrid": 0.65},
+        "very_large": {"RAG": 1.0, "FineTuning": 0.3, "CAG": 0.1, "Hybrid": 0.7},
     },
     "query_volume": {
-        "low": {"RAG": 0.5, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
-        "medium": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.6},
-        "high": {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.7},
-        "very_high": {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.8},
+        "low":       {"RAG": 0.5, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
+        "medium":    {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
+        "high":      {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.6},
+        "very_high": {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.7},
     },
     "latency_requirement": {
-        "relaxed": {"RAG": 0.8, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.5},
-        "moderate": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
-        "strict": {"RAG": 0.4, "FineTuning": 0.9, "CAG": 0.3, "Hybrid": 0.7},
-        "ultra_low": {"RAG": 0.2, "FineTuning": 1.0, "CAG": 0.2, "Hybrid": 0.6},
+        # Hybrid adds a retrieval step — strict/ultra-low latency strongly disfavors it.
+        "relaxed":   {"RAG": 0.8, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.4},
+        "moderate":  {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.5},
+        "strict":    {"RAG": 0.4, "FineTuning": 0.9, "CAG": 0.3, "Hybrid": 0.55},
+        "ultra_low": {"RAG": 0.2, "FineTuning": 1.0, "CAG": 0.2, "Hybrid": 0.4},
     },
     "data_volatility": {
-        "static": {"RAG": 0.5, "FineTuning": 0.9, "CAG": 0.8, "Hybrid": 0.5},
-        "low": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.6},
-        "moderate": {"RAG": 0.9, "FineTuning": 0.4, "CAG": 0.3, "Hybrid": 0.7},
-        "high": {"RAG": 1.0, "FineTuning": 0.2, "CAG": 0.1, "Hybrid": 0.8},
+        # High volatility is RAG's unique strength — Hybrid's FT component hurts here.
+        "static":   {"RAG": 0.5, "FineTuning": 0.9, "CAG": 0.8, "Hybrid": 0.4},
+        "low":      {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.5},
+        "moderate": {"RAG": 0.9, "FineTuning": 0.4, "CAG": 0.3, "Hybrid": 0.6},
+        "high":     {"RAG": 1.0, "FineTuning": 0.2, "CAG": 0.1, "Hybrid": 0.5},
     },
     "accuracy_requirement": {
-        "moderate": {"RAG": 0.6, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.5},
-        "high": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.4, "Hybrid": 0.7},
-        "very_high": {"RAG": 0.7, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.8},
-        "critical": {"RAG": 0.5, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.9},
+        # FineTuning dominates critical/very_high accuracy; Hybrid adds overhead without
+        # matching pure FT's precision.
+        "moderate":  {"RAG": 0.6, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.4},
+        "high":      {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.4, "Hybrid": 0.6},
+        "very_high": {"RAG": 0.7, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.7},
+        "critical":  {"RAG": 0.5, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.65},
     },
     "domain_specificity": {
-        "general": {"RAG": 0.7, "FineTuning": 0.3, "CAG": 0.8, "Hybrid": 0.4},
-        "moderate": {"RAG": 0.8, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.6},
-        "specialized": {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.7},
-        "highly_specialized": {"RAG": 0.4, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.8},
+        # FineTuning is the clear winner for specialized domains; Hybrid's RAG layer adds
+        # retrieval infrastructure that highly-specialized models don't need.
+        "general":            {"RAG": 0.7, "FineTuning": 0.3, "CAG": 0.8, "Hybrid": 0.3},
+        "moderate":           {"RAG": 0.8, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
+        "specialized":        {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.6},
+        "highly_specialized": {"RAG": 0.4, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.6},
     },
     "security_level": {
-        "standard": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.7, "Hybrid": 0.6},
-        "elevated": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.7},
-        "high": {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.8},
-        "critical": {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.7},
+        "standard": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.7, "Hybrid": 0.5},
+        "elevated": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
+        "high":     {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.65},
+        "critical": {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.6},
     },
     "cost_sensitivity": {
-        "low": {"RAG": 0.7, "FineTuning": 0.8, "CAG": 0.5, "Hybrid": 0.8},
-        "moderate": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.6, "Hybrid": 0.7},
-        "high": {"RAG": 0.6, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.5},
-        "very_high": {"RAG": 0.5, "FineTuning": 0.2, "CAG": 0.9, "Hybrid": 0.4},
+        # Hybrid is the most expensive option — high/very_high cost sensitivity should
+        # strongly disfavor it.
+        "low":       {"RAG": 0.7, "FineTuning": 0.8, "CAG": 0.5, "Hybrid": 0.65},
+        "moderate":  {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.6, "Hybrid": 0.5},
+        "high":      {"RAG": 0.6, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
+        "very_high": {"RAG": 0.5, "FineTuning": 0.2, "CAG": 0.9, "Hybrid": 0.2},
     },
     "deployment_preference": {
-        "cloud": {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.7},
+        # FIX: "hybrid deployment" (cloud + on-prem mix) ≠ "Hybrid architecture".
+        # Removed circular 1.0 self-boost; Hybrid gets a modest advantage (0.75) since
+        # hybrid deployment environments benefit from its flexibility, not a perfect score.
+        "cloud":      {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.6},
         "on_premise": {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.7, "Hybrid": 0.6},
-        "hybrid": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.4, "Hybrid": 1.0},
-        "edge": {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.5, "Hybrid": 0.5},
+        "hybrid":     {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.4, "Hybrid": 0.75},
+        "edge":       {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.5, "Hybrid": 0.4},
     },
     "user_scale": {
-        "small": {"RAG": 0.5, "FineTuning": 0.5, "CAG": 0.9, "Hybrid": 0.3},
-        "medium": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.6},
-        "large": {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.2, "Hybrid": 0.8},
-        "enterprise": {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.1, "Hybrid": 1.0},
+        # FIX: Removed Hybrid=1.0 for enterprise. Enterprise scale favors RAG and
+        # FineTuning equally; Hybrid is an option, not the automatic winner.
+        "small":      {"RAG": 0.5, "FineTuning": 0.5, "CAG": 0.9, "Hybrid": 0.2},
+        "medium":     {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
+        "large":      {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.2, "Hybrid": 0.65},
+        "enterprise": {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.1, "Hybrid": 0.75},
     },
 }
 
