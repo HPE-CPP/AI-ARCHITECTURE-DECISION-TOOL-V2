@@ -32,29 +32,33 @@ logger = logging.getLogger(__name__)
 # DoS via 100 MB payloads or deeply-nested structures that exhaust ReportLab.
 # This schema enforces field presence and string length limits at the HTTP layer.
 # ---------------------------------------------------------------------------
-class ArchitectureScore(BaseModel):
-    architecture: str = Field(..., max_length=100)
-    total_score: float = Field(..., ge=0.0, le=100.0)
-    scores: Optional[dict[str, Any]] = None
-    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    explanation: Optional[str] = Field(default=None, max_length=5000)
-
-
 class ExportRequest(BaseModel):
     """Validated body for PDF export endpoints.
 
-    All string fields carry a max_length guard so that an attacker cannot
-    trigger memory exhaustion in ReportLab by sending unbounded text.
+    Mirrors AnalysisResponse so the frontend can POST the full result object
+    it already holds. All string fields carry a max_length guard to prevent
+    memory exhaustion in the PDF renderer.
     """
     analysis_id: Optional[str] = Field(default=None, max_length=64)
     status: Optional[str] = Field(default=None, max_length=32)
     recommended: Optional[str] = Field(default=None, max_length=100)
-    rankings: Optional[list[ArchitectureScore]] = Field(default=None, max_length=20)
-    decision_trace: Optional[list[dict[str, Any]]] = Field(default=None, max_length=50)
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # Scores, ranking, and breakdown — sent as flat dicts by the frontend
+    scores: Optional[dict[str, Any]] = None
+    ranking: Optional[list[str]] = Field(default=None, max_length=20)
+    suitability: Optional[dict[str, Any]] = None
+    factor_breakdown: Optional[dict[str, Any]] = None
+    why_not: Optional[dict[str, Any]] = None
+    architecture_details: Optional[dict[str, Any]] = None
+    sensitivity: Optional[dict[str, Any]] = None
+    # Signals and trace
     signals: Optional[dict[str, Any]] = None
-    follow_up_questions: Optional[list[str]] = Field(default=None, max_length=20)
+    decision_trace: Optional[list[dict[str, Any]]] = Field(default=None, max_length=50)
+    # Metadata
+    followup_questions: Optional[list[Any]] = Field(default=None, max_length=20)
     document_info: Optional[dict[str, Any]] = None
     cost_analysis: Optional[dict[str, Any]] = None
+    created_at: Optional[str] = Field(default=None, max_length=64)
 
 
 # ---------------------------------------------------------------------------
