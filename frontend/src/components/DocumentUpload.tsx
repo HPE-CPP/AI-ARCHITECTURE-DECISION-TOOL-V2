@@ -18,6 +18,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -40,45 +41,78 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
 
   const handleProcess = async () => {
     if (!file) return;
+    let eventSource: EventSource | null = null;
+
     try {
-      // Show auth gate if provided
       if (requireAuth) await requireAuth();
 
       setUploading(true);
       setError(null);
-      setProgress(10);
+      setProgress(5);
+      setStatusMessage("Uploading document...");
 
       const provider = localStorage.getItem("llm_provider") || "ollama";
-
-      // Simulating progress while uploading
-      const progressInterval = setInterval(() => {
-        setProgress(p => Math.min(p + 15, 90));
-      }, 500);
-
       const res = await uploadDocument(file, provider, projectId);
 
-      clearInterval(progressInterval);
-      setProgress(100);
-
-      // Notify parent of analysis start for project tracking
-      onAnalysisStart?.(res.analysis_id);
-
-      // Per-project storage
-      if (projectId) {
-        localStorage.setItem(getProjectKey(projectId, "analysisId"), res.analysis_id);
-        localStorage.setItem(getProjectKey(projectId, "mode"), "upload");
+      // Handle Instant Cache Hit
+      if (res.status === "completed" && res.result) {
+        setProgress(100);
+        setStatusMessage("Finalizing...");
+        handleComplete(res.result);
+        return;
       }
 
-      setTimeout(() => {
-        router.push(`/results/${res.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
-      }, 500);
+      // Handle Processing with SSE
+      const sessionId = res.session_id;
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      eventSource = new EventSource(`${apiBase}/api/v1/progress/${sessionId}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setProgress(data.progress);
+          setStatusMessage(data.message);
+
+          if (data.status === "complete" && data.result) {
+            eventSource?.close();
+            handleComplete(data.result);
+          } else if (data.status === "error") {
+            throw new Error(data.message);
+          }
+        } catch (e: any) {
+          setError(e.message || "Progress tracking failed");
+          eventSource?.close();
+          setUploading(false);
+        }
+      };
+
+      eventSource.onerror = () => {
+        setError("Connection to progress stream lost");
+        eventSource?.close();
+        setUploading(false);
+      };
 
     } catch (err: any) {
       setError(err.message || "Failed to upload document");
       setUploading(false);
       setProgress(0);
+      eventSource?.close();
     }
   };
+
+  const handleComplete = (result: any) => {
+    onAnalysisStart?.(result.analysis_id);
+
+    if (projectId) {
+      localStorage.setItem(getProjectKey(projectId, "analysisId"), result.analysis_id);
+      localStorage.setItem(getProjectKey(projectId, "mode"), "upload");
+    }
+
+    setTimeout(() => {
+      router.push(`/results/${result.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
+    }, 500);
+  };
+
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -189,11 +223,17 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                 {uploading ? (
                   <>
                     <Loader2 className="animate-spin" size={20} />
-                    {progress < 100 ? `Analyzing... ${progress}%` : "Finalizing..."}
+                    <div className="flex flex-col items-center">
+                      <span className="text-sm font-bold">{progress}%</span>
+                      <span className="text-[10px] uppercase tracking-widest opacity-70 leading-none mt-1">
+                        {statusMessage || "Analyzing..."}
+                      </span>
+                    </div>
                   </>
                 ) : (
                   "Begin Analysis"
                 )}
+
               </button>
             </div>
           </div>

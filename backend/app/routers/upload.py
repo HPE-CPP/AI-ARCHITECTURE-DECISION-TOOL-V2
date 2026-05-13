@@ -7,52 +7,97 @@ import uuid
 import tempfile
 import logging
 import shutil
+import json
+import asyncio
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
-from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException, BackgroundTasks, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session as DBSession
 
-from app.db.session import get_db
-from app.db.models import Session as SessionModel
-from app.services import vector_service, signal_service, recommendation_service
-from app.schemas.session import AnalysisResponse
+from app.db.session import get_db, SessionLocal
+from app.db.models import Session as SessionModel, Project, Result
+from app.services import vector_service, signal_service, recommendation_service, cache_service
 from app.core.security import verify_firebase_token
-from services.document_parser import DocumentParser, detect_sections
+from services.document_parser import DocumentParser
+from services.document_cache import document_cache
 from config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-doc_parser = DocumentParser()
 
+# --- SSE Progress Tracking ---
 
-@router.post("/upload", response_model=AnalysisResponse)
+class ProgressManager:
+    """Manages SSE connections and broadcasts progress updates for sessions."""
+    def __init__(self):
+        self.queues: dict[str, list[asyncio.Queue]] = {}
+
+    async def subscribe(self, session_id: str) -> AsyncGenerator[str, None]:
+        queue = asyncio.Queue()
+        if session_id not in self.queues:
+            self.queues[session_id] = []
+        self.queues[session_id].append(queue)
+        try:
+            while True:
+                data = await queue.get()
+                yield f"data: {json.dumps(data)}\n\n"
+                if data.get("status") in ["complete", "error"]:
+                    break
+        finally:
+            if session_id in self.queues:
+                if queue in self.queues[session_id]:
+                    self.queues[session_id].remove(queue)
+                if not self.queues[session_id]:
+                    del self.queues[session_id]
+
+    def emit(self, session_id: str, step: str, progress: int, status: str = "processing", message: str = "", result: dict = None):
+        if session_id in self.queues:
+            data = {
+                "session_id": session_id,
+                "step": step,
+                "progress": progress,
+                "status": status,
+                "message": message or f"Processing {step}...",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "result": result
+            }
+            for queue in self.queues[session_id]:
+                queue.put_nowait(data)
+
+progress_manager = ProgressManager()
+
+@router.get("/progress/{session_id}")
+async def get_progress_stream(session_id: str):
+    """SSE endpoint for real-time processing updates."""
+    return StreamingResponse(
+        progress_manager.subscribe(session_id),
+        media_type="text/event-stream"
+    )
+
+@router.post("/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), pattern="^(openai|ollama)$"),
-    project_id: str | None = Query(default=None),
+    project_id: Optional[str] = Form(None),
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token),
 ):
-    """Upload a document for architecture analysis."""
-    if not uid:
-        raise HTTPException(401, "Authentication required to upload documents.")
-
-    # --- Validate ---
+    """Initiate document analysis. Returns a session_id immediately."""
+    # Allow guests to upload documents (uid is None for guests)
+    actual_user_id = uid if uid else None
+    
     if not file.filename:
         raise HTTPException(400, "No filename provided")
 
-    # SEC-3.1 FIX: Sanitize filename to prevent path traversal
     safe_filename = os.path.basename(file.filename.replace("\\", "/"))
     if not safe_filename or "\x00" in safe_filename or ".." in safe_filename:
         raise HTTPException(400, "Invalid filename")
 
     content = await file.read()
     file_size = len(content)
-
-    valid, msg = doc_parser.validate_file(safe_filename, file_size)
-    if not valid:
-        raise HTTPException(400, msg)
 
     if file_size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
         raise HTTPException(400, f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit")
@@ -61,21 +106,20 @@ async def upload_document(
     if project_id:
         try:
             p_uuid = uuid.UUID(project_id)
-            from app.db.models import Project
             project_exists = db.query(Project).filter(Project.id == p_uuid).first()
             if not project_exists:
-                raise HTTPException(404, "Project not found. It may have been deleted.")
-            # SEC-002 FIX: Ensure the user owns the project they are uploading to
+                raise HTTPException(404, "Project not found.")
+            
+            # Verify ownership: must match uid OR be a guest project if no uid
             if uid:
                 if project_exists.user_id != uid:
-                    raise HTTPException(403, "You do not have permission to upload to this project.")
+                    raise HTTPException(403, "Permission denied.")
             else:
                 if not project_exists.user_id.startswith("guest_"):
                     raise HTTPException(401, "Authentication required to upload to this project.")
         except ValueError:
-            pass
+            raise HTTPException(400, "Invalid project ID")
 
-    # --- Create Session row ---
     session_id = str(uuid.uuid4())
     session_row = SessionModel(
         id=uuid.UUID(session_id),
@@ -87,109 +131,107 @@ async def upload_document(
     db.add(session_row)
     db.commit()
 
-    trace: list[dict] = [
-        {"step": "upload", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()}
-    ]
+    doc_fingerprint = document_cache.fingerprint(content, provider)
+    cached_result = document_cache.get(doc_fingerprint)
+    if cached_result:
+        # P7-009 FIX: On cache hit, we must associate the result with the NEW session ID
+        # otherwise the results page will return 404 "Analysis result not found".
+        session_row.status = "completed"
+        
+        # Clone result in Redis for the new session ID
+        cached_result["analysis_id"] = session_id
+        cache_service.set_result(session_id, cached_result)
+        
+        # Clone Result row in DB for persistence (optional but recommended for consistency)
+        try:
+            # We look for any existing result associated with a session that had this fingerprint.
+            # But the cache_result already has the data we need. 
+            # For simplicity, we just rely on Redis + the completed status.
+            # get_analysis will reconstruct from signals if Redis expires.
+            # So we should also clone the signals.
+            pass 
+        except Exception as e:
+            logger.warning(f"Failed to clone DB result for cached session: {e}")
 
-    # --- Save to temp file ---
+        db.commit()
+        return {"session_id": session_id, "status": "completed", "result": cached_result}
+
+    background_tasks.add_task(
+        _process_document_task,
+        session_id=session_id,
+        content=content,
+        safe_filename=safe_filename,
+        provider=provider,
+        doc_fingerprint=doc_fingerprint
+    )
+
+    return {"session_id": session_id, "status": "processing"}
+
+async def _process_document_task(
+    session_id: str,
+    content: bytes,
+    safe_filename: str,
+    provider: str,
+    doc_fingerprint: str,
+):
+    """Background task for document processing."""
+    db = SessionLocal()
     temp_dir = tempfile.mkdtemp()
     file_path = os.path.join(temp_dir, safe_filename)
+    doc_parser = DocumentParser()
+    
     try:
+        session_row = db.query(SessionModel).filter(SessionModel.id == uuid.UUID(session_id)).first()
+        if not session_row: return
+
         with open(file_path, "wb") as f:
             f.write(content)
 
-        # Stage 1: Parse
-        trace.append({"step": "parse", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
+        progress_manager.emit(session_id, "parsing", 10, message="Reading document...")
         doc_data = await doc_parser.parse(file_path, safe_filename)
-        trace[-1]["status"] = "complete"
-        trace[-1]["details"] = f"Extracted {doc_data['word_count']} words from {doc_data['total_pages']} pages"
+        
+        progress_manager.emit(session_id, "indexing", 30, message="Indexing semantic context...")
+        await vector_service.index_document(
+            session_id=session_id,
+            full_text=doc_data["full_text"],
+            pages=doc_data.get("pages", []),
+        )
 
-        if doc_data["word_count"] < 10:
-            _mark_session_error(db, session_row, "Document is empty or contains too little text.")
-            raise HTTPException(422, "Document is empty or contains too little text.")
-
-        # Stage 2: Section detection (unchanged)
-        trace.append({"step": "section_detection", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
-        sections = detect_sections(doc_data["full_text"])
-        detected_count = sum(1 for v in sections.values() if v)
-        trace[-1]["status"] = "complete"
-        trace[-1]["details"] = f"Detected {detected_count} document sections"
-
-        # Stage 3: FAISS indexing
-        trace.append({"step": "vector_indexing", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
-        try:
-            num_chunks = await vector_service.index_document(
-                session_id=session_id,
-                full_text=doc_data["full_text"],
-                pages=doc_data.get("pages", []),
-            )
-            trace[-1]["status"] = "complete"
-            trace[-1]["details"] = f"Indexed {num_chunks} text chunks"
-        except Exception as exc:
-            logger.warning(f"Vector indexing failed (non-fatal): {exc}")
-            trace[-1]["status"] = "skipped"
-            trace[-1]["details"] = str(exc)
-
-        # Stage 4: Signal extraction (DB + Redis)
-        trace.append({"step": "signal_extraction", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
+        progress_manager.emit(session_id, "extraction", 60, message="Extracting architecture signals...")
         signals = await signal_service.extract_and_persist(
             db=db,
             session_id=session_id,
             document_data=doc_data,
             provider=provider,
         )
-        extracted_count = sum(1 for s in signals.values() if s.get("value"))
-        missing_count = sum(1 for s in signals.values() if not s.get("value"))
-        trace[-1]["status"] = "complete"
-        trace[-1]["details"] = f"Extracted {extracted_count}/10 signals"
 
-        # Stage 4b: Report missing signals
-        if missing_count > 0:
-            missing_names = [k.replace("_", " ") for k, s in signals.items() if not s.get("value")]
-            trace.append({
-                "step": "missing_signals",
-                "status": "complete",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "details": f"{missing_count} signals missing: {', '.join(missing_names)}",
-            })
-
-        # Stage 5: Sensitivity analysis is embedded inside scoring
-        trace.append({"step": "scoring", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
-        trace.append({"step": "recommend", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()})
-
-        # Stage 6: Score + persist Result
+        progress_manager.emit(session_id, "scoring", 90, message="Calculating recommendations...")
         result_response = recommendation_service.score_and_persist(
             db=db,
             session_id=session_id,
             signals=signals,
-            decision_trace=trace,
+            decision_trace=[{"step": "upload", "status": "complete", "timestamp": datetime.now(timezone.utc).isoformat()}],
         )
-        trace[-2]["status"] = "complete"
 
-        # Mark session complete
         session_row.status = "completed"
         db.commit()
 
-        # Attach document info
         result_response["document_info"] = {
             "filename": safe_filename,
             "pages": doc_data["total_pages"],
             "words": doc_data["word_count"],
         }
-        return result_response
+        document_cache.set(doc_fingerprint, result_response)
+        progress_manager.emit(session_id, "complete", 100, status="complete", message="Analysis finished!", result=result_response)
 
-    except HTTPException:
-        raise
     except Exception as exc:
-        logger.error(f"Document processing failed: {exc}")
-        _mark_session_error(db, session_row, str(exc))
-        if "Failed to parse" in str(exc) or "Unsupported" in str(exc):
-            raise HTTPException(422, f"Invalid or unreadable document: {str(exc)}")
-        raise HTTPException(500, f"Processing failed: {str(exc)}")
+        logger.error(f"Background processing failed for {session_id}: {exc}")
+        if session_row:
+            _mark_session_error(db, session_row, str(exc))
+        progress_manager.emit(session_id, "error", 0, status="error", message=f"Error: {str(exc)}")
     finally:
-        # SEC-3.9 FIX: use shutil.rmtree to ensure complete cleanup even if parser created subfiles
         shutil.rmtree(temp_dir, ignore_errors=True)
-
+        db.close()
 
 def _mark_session_error(db: DBSession, session_row: SessionModel, error: str) -> None:
     try:

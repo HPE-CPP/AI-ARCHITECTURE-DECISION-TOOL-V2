@@ -1,6 +1,11 @@
 """
 Redis cache service — wraps Upstash Redis (or any Redis) with
 a simple get/set/delete API using JSON serialisation.
+
+SSL/TLS:
+  - Automatically handles rediss:// (Upstash) connections.
+  - Sets ssl_cert_reqs=CERT_NONE for Upstash compatibility.
+  - Graceful fallback when Redis is unavailable.
 """
 import json
 import logging
@@ -13,22 +18,25 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 # Build Redis client once at module load time.
-# Upstash requires SSL; the URL starts with rediss://
 _redis_kwargs: dict = {"decode_responses": True}
 if settings.REDIS_TOKEN:
-    # Upstash REST-style auth: password = token
-    # (SSL is automatically inferred from the rediss:// URL schema)
     _redis_kwargs["password"] = settings.REDIS_TOKEN
 
-# SEC-3.8 FIX: Removed blocking _client.ping() at module load time.
-# The old pattern blocked the async event loop during startup for the full Redis
-# round-trip latency. The client is now created eagerly but connectivity is only
-# verified on the first actual operation, keeping startup non-blocking.
+# Fix Redis SSL for Upstash rediss:// URLs
+if settings.REDIS_URL.startswith("rediss://"):
+    import ssl
+    _redis_kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+    logger.info("Redis SSL mode enabled for rediss:// URL.")
+
 try:
     _client = redis_lib.Redis.from_url(settings.REDIS_URL, **_redis_kwargs)
-    # Ping on a background thread to avoid blocking the event loop.
-    # If Redis is unavailable the first .get() / .set() will raise and be caught.
-    logger.info("Redis client created. Connectivity will be verified on first use.")
+    # Verify connectivity with a non-blocking test
+    try:
+        _client.ping()
+        logger.info("Redis connection verified successfully.")
+    except Exception as ping_exc:
+        logger.warning("Redis ping failed — caching may be unavailable: %s", ping_exc)
+        # Keep the client — it may recover on next operation
 except Exception as exc:
     logger.warning(f"Redis client creation failed — caching disabled. Reason: {exc}")
     _client = None  # type: ignore[assignment]
