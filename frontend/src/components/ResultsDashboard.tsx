@@ -2,8 +2,7 @@
 import React, { useMemo, memo } from "react";
 import { AnalysisResult } from "@/lib/api";
 import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
-  BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip, Legend,
 } from "recharts";
 import { motion } from "framer-motion";
 import { CheckCircle, Download, Slash } from "lucide-react";
@@ -15,7 +14,7 @@ import { exportAnalysis } from "@/lib/api";
 export const ResultsDashboard = memo(function ResultsDashboard({ result }: { result: AnalysisResult }) {
   const {
     recommended, scores, confidence, ranking, why_not,
-    factor_breakdown, architecture_details
+    factor_breakdown, architecture_details, suitability
   } = result;
 
   const radarData = useMemo(() => {
@@ -153,31 +152,42 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           className="flex flex-col gap-8"
         >
           <div className="glass-panel p-8">
-            <h3 className="text-2xl font-bold mb-8 tracking-tight">Suitability Comparison</h3>
-            <div className="h-[220px] w-full" data-testid="bar-container">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={scoresData} layout="vertical" margin={{ top: 4, right: 56, left: 0, bottom: 4 }}>
-                  <XAxis type="number" domain={[0, 100]} hide />
-                  <YAxis
-                    dataKey="name"
-                    type="category"
-                    width={120}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--text-primary)', fontWeight: 600, fontSize: 11 }}
-                    tickFormatter={(v: string) => v.length > 16 ? v.slice(0, 14) + '\u2026' : v}
-                  />
-                  <Tooltip
-                    formatter={(value) => [`${Number(value).toFixed(1)}`, 'Score']}
-                    contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '16px', color: 'var(--text-primary)', fontWeight: 'bold' }}
-                  />
-                  <Bar dataKey="score" radius={[0, 8, 8, 0]} barSize={24} label={{ position: 'right', formatter: (v: number) => v.toFixed(1), fill: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}>
-                    {scoresData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? "var(--primary)" : index === 1 ? "var(--accent)" : "var(--text-secondary)"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            <h3 className="text-2xl font-bold mb-6 tracking-tight">Architecture Ranking</h3>
+            <div className="space-y-3" data-testid="bar-container">
+              {scoresData.map((entry, index) => {
+                const suit = suitability?.[entry.name] ?? "";
+                const isRec = entry.name === recommended;
+                const suitColor = suit.toLowerCase().includes("highly")
+                  ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
+                  : suit.toLowerCase().includes("not")
+                  ? "text-red-500 bg-red-500/10 border-red-500/20"
+                  : suit.toLowerCase().includes("moderate")
+                  ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
+                  : "text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/20";
+                const barColor = index === 0 ? "var(--primary)" : index === 1 ? "var(--accent)" : "var(--text-secondary)";
+                const fullName = architecture_details?.[entry.name]?.full_name || entry.name;
+                return (
+                  <div key={entry.name} className={`p-3 rounded-xl border transition-colors ${isRec ? "border-[var(--primary)]/30 bg-[var(--primary)]/5" : "border-[var(--border)] bg-[var(--surface)]"}`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0"
+                        style={{ backgroundColor: barColor }}>
+                        {index + 1}
+                      </span>
+                      <span className="text-sm font-bold text-[var(--text-primary)] flex-1 truncate">{fullName}</span>
+                      <span className="text-sm font-black text-[var(--text-primary)]">{entry.score.toFixed(1)}/100</span>
+                      {suit && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border hidden sm:inline ${suitColor}`}>
+                          {suit}
+                        </span>
+                      )}
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-[var(--background)] border border-[var(--border)] overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${entry.score}%`, backgroundColor: barColor }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -193,7 +203,9 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
               <div className="space-y-5">
                 {Object.entries(why_not).slice(0, 3).map(([arch, reason]) => (
                   <div key={arch} className="flex flex-col border-b border-[var(--border)] pb-4 last:border-0 last:pb-0">
-                    <span className="text-sm font-bold text-[var(--primary)] mb-1">{arch}</span>
+                    <span className="text-sm font-bold text-[var(--primary)] mb-1">
+                      {architecture_details?.[arch]?.full_name || arch}
+                    </span>
                     <span className="text-sm text-[var(--text-secondary)] leading-relaxed select-text">{reason}</span>
                   </div>
                 ))}
