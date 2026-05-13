@@ -1,16 +1,5 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-import { auth } from "./firebase";
-
-async function getAuthToken(): Promise<string | null> {
-  if (auth.currentUser) {
-    try {
-      return await auth.currentUser.getIdToken();
-    } catch (e) {
-      console.warn("Failed to get Firebase token", e);
-    }
-  }
-  return null;
-}
+import { fetchWithApiFallback } from "./api-base";
+import { getCachedAuthToken } from "./auth-token";
 
 export interface Signal {
   value: string | null;
@@ -47,6 +36,7 @@ export interface AnalysisResult {
   created_at?: string;
   error?: string;
   cost_analysis?: CostAnalysisData;
+  document_info?: { filename?: string; pages?: number; words?: number };
 }
 
 export interface CostBreakdownItem {
@@ -130,10 +120,10 @@ export async function uploadDocument(file: File, provider: string = "ollama", pr
   if (projectId) qs.append("project_id", projectId);
   
   const headers: Record<string, string> = {};
-  const token = await getAuthToken();
+  const token = await getCachedAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}/api/v1/upload?${qs.toString()}`, {
+  const res = await fetchWithApiFallback(`/api/v1/upload?${qs.toString()}`, {
     method: "POST",
     headers,
     body: formData,
@@ -150,10 +140,10 @@ export async function submitQuestionnaire(answers: Record<string, string | null>
   if (projectId) qs.append("project_id", projectId);
   
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = await getAuthToken();
+  const token = await getCachedAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}/api/v1/questionnaire?${qs.toString()}`, {
+  const res = await fetchWithApiFallback(`/api/v1/questionnaire?${qs.toString()}`, {
     method: "POST",
     headers,
     // FIX FE-005: Backend expects { answers: {...} } not raw answers dict
@@ -168,10 +158,10 @@ export async function submitQuestionnaire(answers: Record<string, string | null>
 
 export async function getAnalysis(analysisId: string): Promise<AnalysisResult> {
   const headers: Record<string, string> = {};
-  const token = await getAuthToken();
+  const token = await getCachedAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}/api/v1/analysis/${analysisId}`, { headers });
+  const res = await fetchWithApiFallback(`/api/v1/analysis/${analysisId}`, { headers });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "Failed to fetch analysis");
@@ -181,10 +171,10 @@ export async function getAnalysis(analysisId: string): Promise<AnalysisResult> {
 
 export async function submitFollowUp(analysisId: string, answers: Record<string, string>): Promise<AnalysisResult> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = await getAuthToken();
+  const token = await getCachedAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}/api/v1/followup`, {
+  const res = await fetchWithApiFallback(`/api/v1/followup`, {
     method: "POST",
     headers,
     body: JSON.stringify({ analysis_id: analysisId, answers }),
@@ -197,7 +187,7 @@ export async function submitFollowUp(analysisId: string, answers: Record<string,
 }
 
 export async function getQuestionnaireOptions(): Promise<QuestionnaireOptions> {
-  const res = await fetch(`${API_BASE}/api/v1/questionnaire/options`);
+  const res = await fetchWithApiFallback(`/api/v1/questionnaire/options`);
   if (!res.ok) throw new Error("Failed to fetch options");
   return res.json();
 }
@@ -214,10 +204,10 @@ function _triggerDownload(url: string, filename: string): void {
 
 export async function exportAnalysis(result: AnalysisResult): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = await getAuthToken();
+  const token = await getCachedAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}/api/v1/export/pdf`, {
+  const res = await fetchWithApiFallback(`/api/v1/export/pdf`, {
     method: "POST",
     headers,
     body: JSON.stringify(result),
@@ -229,10 +219,10 @@ export async function exportAnalysis(result: AnalysisResult): Promise<void> {
 
 export async function exportCostAnalysis(result: AnalysisResult): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = await getAuthToken();
+  const token = await getCachedAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}/api/v1/export/pdf/cost`, {
+  const res = await fetchWithApiFallback(`/api/v1/export/pdf/cost`, {
     method: "POST",
     headers,
     body: JSON.stringify(result),
