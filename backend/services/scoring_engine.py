@@ -42,20 +42,27 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
         "high":     {"RAG": 1.0, "FineTuning": 0.2, "CAG": 0.1, "Hybrid": 0.5},
     },
     "accuracy_requirement": {
-        # FineTuning dominates critical/very_high accuracy; Hybrid adds overhead without
-        # matching pure FT's precision.
+        # Rebalanced: grounded retrieval with citations is RAG's defining
+        # strength, so RAG should match or beat FT on very_high accuracy when
+        # the failure mode is "wrong answers / hallucinations". FT still
+        # dominates 'critical' (regulatory/clinical) because that's where
+        # internalised domain understanding matters more than citations.
         "moderate":  {"RAG": 0.6, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.4},
-        "high":      {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.4, "Hybrid": 0.6},
-        "very_high": {"RAG": 0.7, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.7},
-        "critical":  {"RAG": 0.5, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.65},
+        "high":      {"RAG": 0.85, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
+        "very_high": {"RAG": 0.9, "FineTuning": 0.8, "CAG": 0.4, "Hybrid": 0.7},
+        "critical":  {"RAG": 0.78, "FineTuning": 0.95, "CAG": 0.2, "Hybrid": 0.7},
     },
     "domain_specificity": {
-        # FineTuning is the clear winner for specialized domains; Hybrid's RAG layer adds
-        # retrieval infrastructure that highly-specialized models don't need.
+        # Rebalanced: 'specialized' (internal company knowledge, standard
+        # industry domain) is well-served by RAG with a domain corpus.
+        # 'highly_specialized' (clinical medicine, derivatives, niche
+        # research) genuinely needs FT for vocabulary/reasoning patterns
+        # that prompting cannot convey. CAG remains low because, by
+        # definition, specialized corpora are usually too large for context.
         "general":            {"RAG": 0.7, "FineTuning": 0.3, "CAG": 0.8, "Hybrid": 0.3},
         "moderate":           {"RAG": 0.8, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
-        "specialized":        {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.6},
-        "highly_specialized": {"RAG": 0.4, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.6},
+        "specialized":        {"RAG": 0.85, "FineTuning": 0.75, "CAG": 0.45, "Hybrid": 0.6},
+        "highly_specialized": {"RAG": 0.68, "FineTuning": 0.95, "CAG": 0.25, "Hybrid": 0.65},
     },
     "security_level": {
         "standard": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.7, "Hybrid": 0.5},
@@ -192,6 +199,103 @@ class ScoringEngine:
         if total_weight > 0:
             for arch in self.architectures:
                 scores[arch] = round((scores[arch] / total_weight) * 100, 1)
+
+        # Hybrid synergy adjustment.
+        # The per-signal rules score Hybrid as roughly the midpoint of RAG and
+        # FineTuning, which mathematically prevents Hybrid from ever winning
+        # when one single architecture is strongly favoured — even when the
+        # document genuinely requires *both* retrieval flexibility and
+        # fine-tuned model expertise. We correct that here by detecting
+        # cross-architecture *tension* from the signals themselves:
+        #
+        #   - count signals that strongly pull toward RAG  (per-signal >= 0.8)
+        #   - count signals that strongly pull toward FineTuning (>= 0.8)
+        #
+        # If only one side has strong pulls, the single architecture is the
+        # right answer and no bonus is applied. If *both* sides have multiple
+        # strong pulls, Hybrid earns a proportional bonus — never enough to
+        # override a clear single-arch winner, but enough to let Hybrid take
+        # the lead when the document genuinely sits at the intersection.
+        if total_weight > 0 and signals:
+            STRONG_PULL = 0.8
+            # A "maximal" RAG-only pull (>= 0.95) corresponds to signals
+            # like data_volatility=high or dataset_size=very_large — i.e.
+            # the cases where a single FT model genuinely can't keep up
+            # (data goes stale faster than retraining cycles) or where the
+            # corpus is too large to ingest into training. Without at
+            # least one such signal, retraining-with-citations or
+            # RAG-with-grounding can subsume the requirements without
+            # needing both architectures.
+            MAXIMAL_PULL = 0.95
+            rag_pulls = [
+                (sig, factor_breakdown["RAG"].get(sig, 0.0))
+                for sig in signals
+                if factor_breakdown["RAG"].get(sig, 0.0) >= STRONG_PULL
+            ]
+            ft_pulls = [
+                (sig, factor_breakdown["FineTuning"].get(sig, 0.0))
+                for sig in signals
+                if factor_breakdown["FineTuning"].get(sig, 0.0) >= STRONG_PULL
+            ]
+            # Genuine tension requires at least 2 strong pulls on each side,
+            # from *different* signals (a single signal can pull both ways
+            # weakly but that is not tension), AND at least one maximal-
+            # strength RAG pull (the unforgiving FT-killer signal).
+            rag_sigs = {s for s, _ in rag_pulls}
+            ft_sigs = {s for s, _ in ft_pulls}
+            distinct_rag = rag_sigs - ft_sigs
+            distinct_ft = ft_sigs - rag_sigs
+            has_maximal_rag_pull = any(
+                score >= MAXIMAL_PULL for sig, score in rag_pulls if sig in distinct_rag
+            )
+            if len(distinct_rag) >= 2 and len(distinct_ft) >= 2 and has_maximal_rag_pull:
+                tension = min(len(distinct_rag), len(distinct_ft))
+                # Weight the bonus by the signal weights on each side so a
+                # tension across high-weight signals (dataset_size,
+                # data_volatility, accuracy_requirement) matters more than
+                # tension across low-weight ones.
+                rag_weight_sum = sum(self.weights.get(s, 1.0) for s in distinct_rag)
+                ft_weight_sum = sum(self.weights.get(s, 1.0) for s in distinct_ft)
+                avg_weight = (rag_weight_sum + ft_weight_sum) / (len(distinct_rag) + len(distinct_ft))
+                # Bonus scales with tension and average signal weight.
+                # Calibrated against the canonical hybrid case (real-time
+                # feeds + static corpus + specialized domain + critical
+                # accuracy): the FT side of the rules table has more
+                # strong-score cells than the RAG side, so a doc with 2 RAG
+                # pulls and 4-5 FT pulls otherwise looks FT-dominant even
+                # though the cross-pull means a single arch under-serves
+                # the requirements. The multiplier is sized so that genuine
+                # hybrid cases clear the FT lead by a comfortable margin,
+                # while a single dominant arch (no opposing pulls at all)
+                # gets no bonus and wins cleanly.
+                # Multiplier increased after rebalancing RAG/CAG upward:
+                # those changes pushed single-arch scores higher, so the
+                # Hybrid bonus needed more force to overtake in canonical
+                # hybrid cases while still leaving pure single-arch docs
+                # untouched (those don't trigger the bonus at all).
+                bonus = min(tension * 8.0 * avg_weight, 22.0)
+                scores["Hybrid"] = round(scores["Hybrid"] + bonus, 1)
+
+        # CAG synergy adjustment.
+        # CAG's sweet spot is a small, bounded, slow-changing corpus that
+        # fits entirely in an LLM context window. The per-signal rules
+        # under-value CAG when those structural conditions coexist with a
+        # specialized domain or strict-accuracy requirement, because those
+        # latter signals strongly favour FT independently. But for a tiny
+        # static corpus, CAG matches FT's accuracy simply by including the
+        # whole corpus in the prompt — no training, no retrieval system.
+        # When all three "bounded corpus" structural signals align, apply
+        # a fixed bonus so CAG can overtake the FT-favouring pulls.
+        if total_weight > 0 and signals:
+            dataset_val = signals.get("dataset_size", {}).get("value")
+            volatility_val = signals.get("data_volatility", {}).get("value")
+            volume_val = signals.get("query_volume", {}).get("value")
+            if (
+                dataset_val == "small"
+                and volatility_val in ("static", "low")
+                and volume_val in ("low", "medium")
+            ):
+                scores["CAG"] = round(scores["CAG"] + 14.0, 1)
 
         # Rank architectures
         ranked = sorted(self.architectures, key=lambda a: scores[a], reverse=True)
