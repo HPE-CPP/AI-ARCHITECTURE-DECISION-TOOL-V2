@@ -115,10 +115,13 @@ export async function updateProject(id: string, patch: Partial<Project> & { user
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await fetch(`${API_BASE}/api/v1/projects/${id}`, {
+  const res = await fetch(`${API_BASE}/api/v1/projects/${id}`, {
     method: "DELETE",
-    headers: await getAuthHeaders()
+    headers: await getAuthHeaders(),
   });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Failed to delete project (${res.status})`);
+  }
   notify();
 }
 
@@ -144,4 +147,45 @@ export function setLastActiveProjectId(id: string) {
   if (typeof window !== "undefined") {
     localStorage.setItem("archguide_last_project", id);
   }
+}
+
+export interface AnalysisHistoryEntry {
+  analysis_id: string;
+  created_at: string;
+  mode?: "upload" | "questionnaire";
+  recommended?: string; // top architecture short name
+  confidence?: number;
+}
+
+export function getAnalysisHistory(projectId: string): AnalysisHistoryEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(getProjectKey(projectId, "history"));
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addToAnalysisHistory(projectId: string, entry: AnalysisHistoryEntry): void {
+  if (typeof window === "undefined") return;
+  const history = getAnalysisHistory(projectId);
+  const exists = history.some((e) => e.analysis_id === entry.analysis_id);
+  if (!exists) {
+    const updated = [entry, ...history].slice(0, 10);
+    localStorage.setItem(getProjectKey(projectId, "history"), JSON.stringify(updated));
+  }
+}
+
+export function updateAnalysisHistoryEntry(
+  projectId: string,
+  analysisId: string,
+  patch: Partial<AnalysisHistoryEntry>
+): void {
+  if (typeof window === "undefined") return;
+  const history = getAnalysisHistory(projectId);
+  const updated = history.map((e) =>
+    e.analysis_id === analysisId ? { ...e, ...patch } : e
+  );
+  localStorage.setItem(getProjectKey(projectId, "history"), JSON.stringify(updated));
 }

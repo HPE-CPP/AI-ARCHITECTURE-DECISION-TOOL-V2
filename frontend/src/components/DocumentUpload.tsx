@@ -3,7 +3,7 @@ import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { UploadCloud, FileText, AlertCircle, Loader2, CheckCircle2, X, AlertTriangle } from "lucide-react";
+import { UploadCloud, FileText, AlertCircle, Loader2, CheckCircle2, X, AlertTriangle, FileX, RefreshCw } from "lucide-react";
 import { getProjectKey } from "@/lib/projects-store";
 import { getApiBase } from "@/lib/api-base";
 import { getCachedAuthToken } from "@/lib/auth-token";
@@ -20,6 +20,98 @@ interface DocumentUploadProps {
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   return `${Math.round(bytes / 1024)} KB`;
+}
+
+interface ParsedError {
+  title: string;
+  body: string;
+  action: string;
+  Icon: React.ElementType;
+  variant: "guidance" | "failure";
+}
+
+function parseUploadError(message: string): ParsedError {
+  const m = message || "";
+
+  if (m.includes("ArchGuide results report") || m.includes("results report")) {
+    return {
+      title: "This is an ArchGuide report",
+      body: "Looks like you uploaded a PDF that ArchGuide already generated. That file is a results summary, not a requirements document.",
+      action: "Go back and upload your original project spec or use-case description instead.",
+      Icon: RefreshCw,
+      variant: "guidance",
+    };
+  }
+  if (m.includes("too short") || m.includes("too little text") || m.includes("empty")) {
+    return {
+      title: "Document is too short",
+      body: "The file you uploaded does not have enough content to work with.",
+      action: "Try uploading a document with at least a few paragraphs describing your system.",
+      Icon: FileX,
+      variant: "guidance",
+    };
+  }
+  if (m.includes("doesn't appear to be") || m.includes("low_coverage") || m.includes("signal categories")) {
+    return {
+      title: "Looks like the wrong document",
+      body: "This file does not seem to contain AI or software system requirements. It might be a report, invoice, or unrelated document.",
+      action: "Upload something that describes your system: data sources, expected users, performance needs, security requirements, or deployment setup.",
+      Icon: FileX,
+      variant: "guidance",
+    };
+  }
+  if (m.includes("very few technical requirement") || m.includes("keyword matches")) {
+    return {
+      title: "Not enough technical detail",
+      body: "The document mentions very little about system requirements.",
+      action: "Include details like how much data your system handles, how many users will use it, how fast it needs to respond, and where it will be deployed.",
+      Icon: FileX,
+      variant: "guidance",
+    };
+  }
+  if (m.includes("signal(s) could be extracted") || m.includes("minimum 3 required")) {
+    return {
+      title: "Could not read enough requirements",
+      body: "The document passed the first check but the AI could not find enough specific requirements inside it.",
+      action: "Add more detail about your use case: expected users, data volume, response time targets, security needs, and where the system will run.",
+      Icon: AlertTriangle,
+      variant: "guidance",
+    };
+  }
+  if (m.includes("corrupted") || m.includes("password-protected") || m.includes("Unable to read")) {
+    return {
+      title: "Could not open this file",
+      body: "The file appears to be corrupted, password-protected, or saved in a format we cannot read.",
+      action: "Try exporting it as a plain PDF, or paste the content into a .txt file and upload that.",
+      Icon: FileX,
+      variant: "failure",
+    };
+  }
+  if (m.includes("Network error") || m.includes("timed out")) {
+    return {
+      title: "Connection issue",
+      body: "The upload could not reach the server.",
+      action: "Check your internet connection and try again.",
+      Icon: AlertCircle,
+      variant: "failure",
+    };
+  }
+  if (m.includes("too large") || m.includes("exceeds")) {
+    return {
+      title: "File is too large",
+      body: "The file exceeds the 50 MB upload limit.",
+      action: "Try splitting the document or removing large images before uploading.",
+      Icon: AlertTriangle,
+      variant: "failure",
+    };
+  }
+  return {
+    title: "Upload failed",
+    body: "Something went wrong while processing your document.",
+    action: "Try again with a different file, or switch to the Guided Flow option instead.",
+    Icon: AlertCircle,
+    variant: "failure",
+  };
 }
 
 async function uploadWithProgress(
@@ -153,20 +245,45 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
   return (
     <div className="w-full flex flex-col items-center">
       <AnimatePresence mode="wait">
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-start gap-3 text-sm w-full max-w-xl"
-          >
-            <AlertCircle size={20} className="shrink-0 mt-0.5" />
-            <p className="flex-1">{error}</p>
-            <button onClick={() => setError(null)} className="opacity-70 hover:opacity-100">
-              <X size={16} />
-            </button>
-          </motion.div>
-        )}
+        {error && (() => {
+          const { title, body, action, Icon, variant } = parseUploadError(error);
+          const isGuidance = variant === "guidance";
+          const colors = isGuidance
+            ? { border: "border-amber-500/25", bg: "bg-amber-500/8", icon: "bg-amber-500/15 text-amber-400", title: "text-amber-400", body: "text-amber-400/75", divider: "bg-amber-500/15", action: "text-amber-500/80" }
+            : { border: "border-red-500/25", bg: "bg-red-500/8", icon: "bg-red-500/15 text-red-400", title: "text-red-400", body: "text-red-400/75", divider: "bg-red-500/15", action: "text-red-400/70" };
+
+          return (
+            <motion.div
+              key="upload-error"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className={`mb-6 w-full max-w-xl rounded-2xl border ${colors.border} ${colors.bg} overflow-hidden`}
+            >
+              <div className="flex items-start gap-3 p-4 pb-3">
+                <div className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${colors.icon}`}>
+                  <Icon size={17} />
+                </div>
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <p className={`text-sm font-bold leading-snug mb-1 ${colors.title}`}>{title}</p>
+                  <p className={`text-xs leading-relaxed ${colors.body}`}>{body}</p>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className={`shrink-0 opacity-40 hover:opacity-80 transition-opacity pt-0.5 ${colors.title}`}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className={`mx-4 h-px ${colors.divider}`} />
+              <div className="px-4 py-3 flex items-start gap-2.5">
+                <span className={`text-[9px] font-black uppercase tracking-widest shrink-0 mt-px ${colors.title} opacity-50`}>Fix</span>
+                <p className={`text-[11px] leading-relaxed font-medium ${colors.action}`}>{action}</p>
+              </div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {!file ? (
