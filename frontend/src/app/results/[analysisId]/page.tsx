@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject, updateAnalysisHistoryEntry, getAnalysisHistory, AnalysisHistoryEntry } from "@/lib/projects-store";
 import { AnalysisHistory } from "@/components/AnalysisHistory";
+import { ArchGuideChat } from "@/components/ArchGuideChat";
 
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -307,7 +308,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-semibold"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                Still running — complex documents can take up to 3 minutes
+                Still running - complex documents can take up to 3 minutes
               </motion.div>
             )}
           </div>
@@ -806,7 +807,13 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         </div>
 
       </div>
-        </>
+
+      {/* Floating chat widget */}
+      {result.recommended && (
+        <ArchGuideChat
+          analysisId={resolvedParams.analysisId}
+          result={result}
+        />
       )}
     </div>
   );

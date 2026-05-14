@@ -217,6 +217,33 @@ export async function exportAnalysis(result: AnalysisResult): Promise<void> {
   _triggerDownload(url, `ArchGuide_Report_${result.analysis_id}.pdf`);
 }
 
+export interface ChatMessageItem {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function sendChatMessage(
+  analysisId: string,
+  message: string,
+  history: ChatMessageItem[],
+): Promise<string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getCachedAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetchWithApiFallback("/api/v1/chat", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ analysis_id: analysisId, message, history }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Chat failed");
+  }
+  const data = await res.json();
+  return data.response as string;
+}
+
 export async function exportCostAnalysis(result: AnalysisResult): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = await getCachedAuthToken();

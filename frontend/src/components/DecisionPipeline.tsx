@@ -106,7 +106,7 @@ export function DecisionPipeline({ result }: { result: AnalysisResult }) {
     pipeline.push({
       icon: <Award size={18} />,
       label: "Recommendation Generated",
-      detail: `${recName}${score ? ` — Score: ${score.toFixed(1)}/100` : ""}${conf ? ` — Confidence: ${(conf * 100).toFixed(0)}%` : ""}`,
+      detail: `${recName}${score ? ` | Score: ${score.toFixed(1)}/100` : ""}${conf ? ` | Confidence: ${(conf * 100).toFixed(0)}%` : ""}`,
       status: "highlight",
     });
 

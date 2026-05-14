@@ -52,7 +52,7 @@ export function AnalysisHistory({ entries, currentAnalysisId, projectId }: Props
           const runNumber = entries.length - idx;
           const archShort = entry.recommended
             ? (ARCH_SHORT[entry.recommended] ?? entry.recommended)
-            : "—";
+            : "-";
           const ModeIcon = entry.mode === "upload" ? UploadCloud : PenTool;
 
           return (
