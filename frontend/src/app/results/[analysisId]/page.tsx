@@ -1,12 +1,12 @@
 "use client";
-import React, { useEffect, useState, useRef, use, Suspense } from "react";
-import { getAnalysis, submitFollowUp, AnalysisResult } from "@/lib/api";
+import React, { useEffect, useState, useRef, use, Suspense, useMemo } from "react";
+import { getAnalysis, submitFollowUp, AnalysisResult, getQuestionnaireOptions, QuestionnaireOptions } from "@/lib/api";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionPipeline } from "@/components/DecisionPipeline";
 import { DecisionTrace } from "@/components/DecisionTrace";
-import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle } from "lucide-react";
-import { motion } from "framer-motion";
+import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject, updateAnalysisHistoryEntry, getAnalysisHistory, AnalysisHistoryEntry } from "@/lib/projects-store";
 import { AnalysisHistory } from "@/components/AnalysisHistory";
@@ -85,6 +85,26 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryEntry[]>([]);
   const [resultReady, setResultReady] = useState(false);
   const [forcedStageIndex, setForcedStageIndex] = useState<number | null>(null);
+
+  const [isEditingInputs, setIsEditingInputs] = useState(false);
+  const [questionnaireOptions, setQuestionnaireOptions] = useState<QuestionnaireOptions | null>(null);
+  const [editAnswers, setEditAnswers] = useState<Record<string, string>>({});
+  const [currentEditStep, setCurrentEditStep] = useState(0);
+
+  const sortedEditSignals = useMemo(() => {
+    if (!questionnaireOptions) return [];
+    return Object.entries(questionnaireOptions.signals).sort((a, b) => {
+      const aReq = a[1].required ? 1 : 0;
+      const bReq = b[1].required ? 1 : 0;
+      return bReq - aReq;
+    });
+  }, [questionnaireOptions]);
+
+  useEffect(() => {
+    getQuestionnaireOptions()
+      .then(setQuestionnaireOptions)
+      .catch(err => console.error("Failed to load questionnaire options", err));
+  }, []);
 
   // Load history on mount so returning to a completed result shows the panel immediately
   useEffect(() => {
@@ -200,6 +220,52 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       setError(err.message || "Failed to submit follow-up answers");
     } finally {
       setSubmittingFollowUp(false);
+    }
+  };
+
+  const handleEditInputsClick = () => {
+    if (!result?.signals) return;
+    const initialAnswers: Record<string, string> = {};
+    Object.entries(result.signals).forEach(([k, v]) => {
+      if (v.value) initialAnswers[k] = v.value;
+    });
+    setEditAnswers(initialAnswers);
+    setCurrentEditStep(0);
+    setIsEditingInputs(true);
+  };
+
+  const handleEditChange = (key: string, val: string) => {
+    setEditAnswers(prev => ({ ...prev, [key]: prev[key] === val ? "" : val }));
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      setSubmittingFollowUp(true);
+      setError(null);
+      const data = await submitFollowUp(resolvedParams.analysisId, editAnswers);
+      setResult(data);
+      setIsEditingInputs(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setError(err.message || "Failed to update inputs");
+    } finally {
+      setSubmittingFollowUp(false);
+    }
+  };
+
+  const handleEditNext = () => {
+    if (currentEditStep < sortedEditSignals.length - 1) {
+      setCurrentEditStep(prev => prev + 1);
+    } else {
+      handleEditSubmit();
+    }
+  };
+
+  const handleEditBack = () => {
+    if (currentEditStep > 0) {
+      setCurrentEditStep(prev => prev - 1);
+    } else {
+      setIsEditingInputs(false);
     }
   };
 
@@ -360,28 +426,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       {/* Back / Edit Button */}
       <div className="flex items-center justify-between w-full">
         <button
-          onClick={() => {
-            const modeKey = projectId ? `project_${projectId}_mode` : "analyze_mode";
-            const currentMode = localStorage.getItem(modeKey);
-            const base = projectId ? `/projects/${projectId}/analyze` : "/projects";
-            const q = "?";
-
-            if (currentMode === "upload") {
-              router.push(`${base}${q}mode=upload`);
-            } else {
-              // Pre-fill questionnaire answers
-              const answersKey = projectId ? `project_${projectId}_answers` : "questionnaire_answers";
-              if (result?.signals) {
-                const answers: Record<string, string> = {};
-                Object.entries(result.signals).forEach(([key, sig]) => {
-                  if (sig.value) answers[key] = sig.value;
-                });
-                localStorage.setItem(answersKey, JSON.stringify(answers));
-              }
-              if (!projectId) localStorage.setItem("analyze_mode", "questionnaire");
-              router.push(`${base}${q}mode=questionnaire`);
-            }
-          }}
+          onClick={handleEditInputsClick}
           className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
         >
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
@@ -399,7 +444,141 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         )}
       </div>
 
-      <ResultsDashboard result={result} />
+      {isEditingInputs && questionnaireOptions && sortedEditSignals.length > 0 ? (
+        <div className="w-full flex flex-col items-center max-w-2xl mx-auto">
+          {/* Progress Bar */}
+          <div className="w-full mb-6">
+            <div className="flex justify-between items-center mb-1 text-[10px] font-bold uppercase tracking-widest text-[color:var(--text-secondary)]">
+              <span>{currentEditStep + 1} / {sortedEditSignals.length}</span>
+              <span>{Math.round(((currentEditStep + 1) / sortedEditSignals.length) * 100)}%</span>
+            </div>
+            <div className="w-full h-1 bg-[color:var(--surface)] rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-[color:var(--text-primary)]"
+                initial={{ width: 0 }}
+                animate={{ width: `${((currentEditStep + 1) / sortedEditSignals.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="w-full glass-panel p-6 md:p-10 rounded-[2.5rem] shadow-xl flex flex-col min-h-fit">
+            <AnimatePresence mode="wait">
+              {(() => {
+                const [key, schema] = sortedEditSignals[currentEditStep];
+                const originalSignal = result.signals?.[key];
+                const isMissing = !originalSignal?.value;
+                const currentValue = editAnswers[key];
+                const isSuccessfullyExtracted = originalSignal?.value && !isMissing;
+
+                return (
+                  <motion.div
+                    key={currentEditStep}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="flex flex-col"
+                  >
+                    <div className="mb-6">
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className={`px-3 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
+                          schema.required
+                            ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-[color:var(--text-primary)]"
+                            : "bg-[color:var(--surface)] text-[color:var(--text-secondary)] border-[color:var(--border)]"
+                        }`}>
+                          {schema.required ? "Required" : "Optional"}
+                        </span>
+                        
+                        {isMissing && !currentValue && (
+                          <span className="px-3 py-0.5 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] font-bold uppercase flex items-center gap-1">
+                            <AlertCircle size={10} /> Missing
+                          </span>
+                        )}
+                        {isSuccessfullyExtracted && (
+                          <span className="px-3 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold uppercase flex items-center gap-1">
+                            <ShieldCheck size={10} /> Extracted
+                          </span>
+                        )}
+                        <span className="text-[color:var(--text-secondary)] text-[9px] font-bold uppercase tracking-widest ml-auto">
+                          Signal {currentEditStep + 1}
+                        </span>
+                      </div>
+
+                      <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">
+                        {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                      </h2>
+                      <p className="text-sm md:text-base text-[color:var(--text-secondary)] leading-relaxed">
+                        {schema.description}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3 mb-8">
+                      {schema.options.map((opt) => {
+                        const isSelected = currentValue === opt.value;
+                        const [title, desc] = opt.label.split(" (");
+                        return (
+                          <motion.button
+                            key={opt.value}
+                            whileTap={{ scale: 0.99 }}
+                            onClick={() => handleEditChange(key, opt.value)}
+                            className={`
+                              w-full px-6 py-4 rounded-full border text-left transition-all duration-200
+                              ${isSelected
+                                ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-[color:var(--text-primary)] shadow-md"
+                                : "bg-transparent border-[color:var(--border)] text-[color:var(--text-primary)] hover:border-[color:var(--text-secondary)] hover:bg-[color:var(--surface)]"
+                              }
+                            `}
+                          >
+                            <div className="flex flex-col">
+                              <span className="text-base font-bold leading-tight">{title}</span>
+                              {desc && (
+                                <span className={`text-xs mt-0.5 leading-tight opacity-70 ${isSelected ? "text-[color:var(--background)]" : "text-[color:var(--text-secondary)]"}`}>
+                                  {desc.replace(")", "")}
+                                </span>
+                              )}
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                );
+              })()}
+            </AnimatePresence>
+
+            <div className="flex items-center justify-between pt-6 border-t border-[color:var(--border)] mt-auto">
+              <button
+                onClick={handleEditBack}
+                disabled={submittingFollowUp}
+                className="flex items-center gap-1 text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] p-2 transition-colors"
+              >
+                <ChevronLeft size={16} /> {currentEditStep === 0 ? "Cancel" : "Back"}
+              </button>
+
+              <button
+                onClick={handleEditNext}
+                disabled={submittingFollowUp}
+                className={`
+                  flex items-center gap-2 px-8 py-3 rounded-full font-bold text-xs transition-all shadow-lg
+                  ${submittingFollowUp
+                    ? "bg-[color:var(--surface)] text-[color:var(--text-secondary)] cursor-not-allowed border border-[color:var(--border)]"
+                    : "bg-[color:var(--text-primary)] text-[color:var(--background)] hover:scale-105"
+                  }
+                `}
+              >
+                {submittingFollowUp ? (
+                  <><Loader2 className="animate-spin" size={14} /> Recalculating</>
+                ) : currentEditStep === sortedEditSignals.length - 1 ? (
+                  <>Recalculate <Activity size={14} /></>
+                ) : (
+                  <>Next Signal <ChevronRight size={14} /></>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <ResultsDashboard result={result} />
 
       {/* Analysis History strip — shown when project has 2+ runs */}
       {projectId && analysisHistory.length >= 2 && (
@@ -627,6 +806,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         </div>
 
       </div>
+        </>
+      )}
     </div>
   );
 }
