@@ -54,6 +54,24 @@ wheels/
 coverage.xml
 htmlcov/
 *.cover
+test-results/
+playwright-report/
+blob-report/
+**/__snapshots__/
+
+# Test directories & assets
+# (User requested to ignore all test related files)
+tests/
+backend/tests/
+frontend/tests/
+artifacts/
+
+# Test configuration & dependencies
+**/pytest.ini
+**/vitest.config.ts
+**/playwright.config.ts
+**/requirements-test.txt
+frontend/tests/setup.ts
 
 # Type checking
 .mypy_cache/
@@ -116,5 +134,9 @@ AGENTS.md
 PROJECT_CONTEXT_DETAILED.md
 generate_project_report.py
 
-# Generated PDF test files (markdown sources in tests/docs/ are kept)
+# CI/CD & Hooks
+.github/
+.pre-commit-config.yaml
+
+# Generated PDF test files
 tests/pdf_versions/
