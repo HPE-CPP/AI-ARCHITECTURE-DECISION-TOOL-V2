@@ -1,24 +1,120 @@
-# Claude Code
+# ============================================================
+# SECRETS & CREDENTIALS  —  never commit these
+# ============================================================
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+*.crt
+firebase-service-account.json
+*service-account*.json
+*service_account*.json
+credentials.json
+secrets.json
+gcp-credentials.json
+*-credentials.json
+
+# ============================================================
+# ENVIRONMENT FILES
+# ============================================================
+.env
+.env.*
+!.env.example
+*.local
+
+# ============================================================
+# PYTHON
+# ============================================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+.venv_local/
+env/
+ENV/
+.virtualenv/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.cover
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+.pytype/
+
+# ============================================================
+# GENERATED / RUNTIME DATA  —  not source code
+# ============================================================
+
+# FAISS vector indices (large binary files, regenerated at runtime)
+faiss_index/
+*.faiss
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Log files
+*.log
+logs/
+
+# ============================================================
+# NODE / NEXT.JS
+# ============================================================
+node_modules/
+.next/
+out/
+.cache/
+tsconfig.tsbuildinfo
+
+# ============================================================
+# OS & EDITOR NOISE
+# ============================================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+.Spotlight-V100
+.Trashes
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============================================================
+# CLAUDE CODE / AI TOOLS
+# ============================================================
 .claude/
 CLAUDE.md
 AGENTS.md
 
-# Project utility / report scripts
+# ============================================================
+# PROJECT-SPECIFIC EXCLUSIONS
+# ============================================================
+
+# Auto-generated context/report files
+PROJECT_CONTEXT_DETAILED.md
 generate_project_report.py
-*.pdf
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Env files
-.env
-.env.*
-*.local
-
-# Logs
-*.log
-
-# Editor
-.vscode/
-.idea/
+# Generated PDF test files (markdown sources in tests/docs/ are kept)
+tests/pdf_versions/
