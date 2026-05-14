@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { auth } from "./firebase";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiBase } from "./api-base";
+const API_BASE = getApiBase();
 
 async function getAuthHeaders(): Promise<HeadersInit> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };

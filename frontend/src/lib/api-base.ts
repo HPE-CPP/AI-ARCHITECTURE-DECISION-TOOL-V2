@@ -5,10 +5,31 @@ function isLocalHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
+function normalizeApiUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim().replace(/\/$/, "");
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith(":")) {
+    return `http://localhost${trimmed}`;
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || /^\/\//.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^[^/:]+(:\d+)?$/.test(trimmed)) {
+    return `http://${trimmed}`;
+  }
+
+  return trimmed;
+}
+
 export function getApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (configured) {
-    return configured.replace(/\/$/, "");
+    return normalizeApiUrl(configured);
   }
 
   if (typeof window !== "undefined") {
