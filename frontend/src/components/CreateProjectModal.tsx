@@ -79,7 +79,7 @@ export function CreateProjectModal({
               {/* Glow accent */}
               <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-white/5 blur-3xl pointer-events-none" />
 
-              <div className="relative z-10 p-8">
+              <div className="relative z-10 p-5 sm:p-8">
                 {/* Header */}
                 <div className="flex items-start justify-between mb-6">
                   <div>

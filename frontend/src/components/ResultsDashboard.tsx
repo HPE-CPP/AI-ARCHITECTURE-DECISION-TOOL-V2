@@ -46,7 +46,7 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.1 }}
-        className="glass-panel p-8 md:p-12 relative overflow-hidden flex flex-col lg:flex-row items-center gap-12 group"
+        className="glass-panel p-6 sm:p-8 md:p-12 relative overflow-hidden flex flex-col lg:flex-row items-center gap-8 sm:gap-12 group"
       >
         <div className="absolute -top-32 -right-32 w-[600px] h-[600px] rounded-full blur-[120px] bg-white/[0.03] pointer-events-none group-hover:bg-white/[0.05] transition-colors duration-700" />
 
@@ -55,7 +55,7 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
             <CheckCircle size={16} /> Analysis Complete
           </div>
           <h2 className="text-[var(--text-secondary)] font-bold tracking-widest uppercase mb-4 opacity-80">Recommended Architecture</h2>
-          <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-[var(--text-primary)] mb-6 drop-shadow-xl">
+          <h1 className="text-4xl sm:text-6xl md:text-8xl font-black tracking-tighter text-[var(--text-primary)] mb-4 sm:mb-6 drop-shadow-xl">
             {topArch?.full_name || recommended}
           </h1>
           <p className="text-xl text-[var(--text-secondary)] leading-relaxed max-w-2xl font-medium">
@@ -72,7 +72,7 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
                 console.error("[ResultsDashboard] PDF export failed:", err);
               }
             }}
-            className="mt-10 flex items-center gap-3 px-8 py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn"
+            className="mt-6 sm:mt-10 flex items-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn text-sm sm:text-base"
           >
             <Download size={20} className="group-hover/btn:text-[var(--background)] text-[var(--text-primary)] transition-colors" /> Download PDF Report
           </button>
@@ -80,9 +80,9 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
 
         <div className="w-full lg:w-auto flex flex-col sm:flex-row gap-4 z-10">
           {/* Confidence Widget */}
-          <div className="flex-1 lg:w-48 p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
+          <div className="flex-1 lg:w-48 p-5 sm:p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-3">Confidence</span>
-            <div className="text-5xl font-black text-[var(--primary)]">
+            <div className="text-4xl sm:text-5xl font-black text-[var(--primary)]">
               {/* FIX FE-003: Use (confidence ?? 0) instead of confidence! to prevent crash */}
               {(((confidence ?? 0) * 100).toFixed(0))}<span className="text-2xl text-[var(--text-secondary)]">%</span>
             </div>
@@ -97,9 +97,9 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           </div>
 
           {/* Overall Score Widget */}
-          <div className="flex-1 lg:w-48 p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
+          <div className="flex-1 lg:w-48 p-5 sm:p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-3">Overall Score</span>
-            <div className="text-5xl font-black text-[var(--accent)]">
+            <div className="text-4xl sm:text-5xl font-black text-[var(--accent)]">
               {scores[recommended].toFixed(1)}<span className="text-2xl text-[var(--text-secondary)]">/100</span>
             </div>
           </div>
@@ -116,7 +116,7 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           className="glass-panel p-8"
         >
           <h3 className="text-2xl font-bold mb-8 tracking-tight">Factor Breakdown</h3>
-          <div className="h-[380px] w-full" data-testid="radar-container">
+          <div className="h-[280px] sm:h-[380px] w-full" data-testid="radar-container">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="48%" outerRadius="60%" data={radarData}>
                 <PolarGrid stroke="var(--border)" />

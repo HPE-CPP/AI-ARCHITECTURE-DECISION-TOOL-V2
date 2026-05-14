@@ -193,7 +193,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
           </div>
         </AnimatedSection>
 
-        <h1 className="text-4xl sm:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.9] mb-6 text-[color:var(--text-primary)]">
+        <h1 className="text-3xl sm:text-5xl lg:text-7xl xl:text-8xl font-black tracking-tighter leading-[0.9] mb-6 text-[color:var(--text-primary)]">
           Select Your <br />
           <span className="opacity-30">Input Method.</span>
         </h1>
@@ -214,15 +214,15 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
               initial="hidden"
               animate="visible"
               exit={{ opacity: 0, scale: 0.95, filter: "blur(20px)", transition: { duration: 0.5 } }}
-              className="grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-8 w-full max-w-5xl mx-auto"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 w-full max-w-5xl mx-auto"
             >
               {/* UPLOAD CARD */}
               <div
                 onClick={() => handleModeChange("upload")}
-                className="group relative cursor-pointer p-5 sm:p-10 border border-[color:var(--border)] rounded-[2rem] sm:rounded-[3.5rem] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] transition-colors duration-500 ease-in-out overflow-hidden flex flex-col items-center justify-center text-center h-[320px] sm:h-[480px] shadow-2xl active:scale-[0.98]"
+                className="group relative cursor-pointer p-6 sm:p-10 border border-[color:var(--border)] rounded-[2rem] sm:rounded-[3.5rem] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] transition-colors duration-500 ease-in-out overflow-hidden flex flex-col items-center justify-center text-center h-[240px] sm:h-[400px] lg:h-[480px] shadow-2xl active:scale-[0.98]"
               >
-                <div className="w-12 h-12 sm:w-20 sm:h-20 mb-6 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
-                  <UploadCloud size={24} className="text-[color:var(--text-primary)] sm:w-8 sm:h-8" />
+                <div className="w-12 h-12 sm:w-20 sm:h-20 mb-5 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
+                  <UploadCloud size={22} className="text-[color:var(--text-primary)] sm:w-8 sm:h-8" />
                 </div>
                 <h2 className="text-xl sm:text-4xl font-black mb-3 sm:mb-5 tracking-tighter text-[color:var(--text-primary)] group-hover:text-[color:var(--background)] transition-colors duration-500">
                   Document
@@ -238,10 +238,10 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
               {/* QUESTIONNAIRE CARD */}
               <div
                 onClick={() => handleModeChange("questionnaire")}
-                className="group relative cursor-pointer p-5 sm:p-10 border border-[color:var(--border)] rounded-[2rem] sm:rounded-[3.5rem] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] transition-colors duration-500 ease-in-out overflow-hidden flex flex-col items-center justify-center text-center h-[320px] sm:h-[480px] shadow-2xl active:scale-[0.98]"
+                className="group relative cursor-pointer p-6 sm:p-10 border border-[color:var(--border)] rounded-[2rem] sm:rounded-[3.5rem] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] transition-colors duration-500 ease-in-out overflow-hidden flex flex-col items-center justify-center text-center h-[240px] sm:h-[400px] lg:h-[480px] shadow-2xl active:scale-[0.98]"
               >
-                <div className="w-12 h-12 sm:w-20 sm:h-20 mb-6 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
-                  <PenTool size={24} className="text-[color:var(--text-primary)] sm:w-8 sm:h-8" />
+                <div className="w-12 h-12 sm:w-20 sm:h-20 mb-5 sm:mb-10 rounded-full border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--background)] group-hover:border-transparent transition-all duration-500">
+                  <PenTool size={22} className="text-[color:var(--text-primary)] sm:w-8 sm:h-8" />
                 </div>
                 <h2 className="text-xl sm:text-4xl font-black mb-3 sm:mb-5 tracking-tighter text-[color:var(--text-primary)] group-hover:text-[color:var(--background)] transition-colors duration-500">
                   Guided Flow

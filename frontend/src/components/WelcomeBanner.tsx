@@ -56,7 +56,7 @@ export function WelcomeBanner({ firstName, visible, onComplete }: WelcomeBannerP
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.35, type: "spring", stiffness: 220, damping: 20 }}
-              className="text-5xl sm:text-7xl font-black tracking-tighter text-[color:var(--text-primary)] leading-none"
+              className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tighter text-[color:var(--text-primary)] leading-none"
             >
               {firstName}
             </motion.h1>
