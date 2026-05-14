@@ -107,30 +107,54 @@ export default function ProjectsPage() {
     }
   }, [editTarget, projects]);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     const projectToDelete = projects.find(p => p.id === id);
     if (!projectToDelete) return;
-    // Optimistic remove — actual API call is deferred 5 s so the user can undo
+
+    // Remove from UI immediately
     setProjects(prev => prev.filter(p => p.id !== id));
-    setUndoInfo({ id, project: projectToDelete, secondsLeft: 5 });
+
+    try {
+      // Commit to API immediately — don't defer. Deferring caused the delete to
+      // never fire if the user navigated away before the countdown finished.
+      await deleteProject(id);
+      // Show undo toast — undo will recreate the project
+      setUndoInfo({ id, project: projectToDelete, secondsLeft: 5 });
+    } catch (e) {
+      // Delete failed — restore the project in the list
+      console.error("Failed to delete project", e);
+      setProjects(prev =>
+        [...prev, projectToDelete].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
+      );
+    }
   }, [projects]);
 
-  const handleUndo = useCallback(() => {
+  const handleUndo = useCallback(async () => {
     if (!undoInfo) return;
-    // Restore the card in sorted order (most recent first)
-    setProjects(prev =>
-      [...prev, undoInfo.project].sort(
-        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      )
-    );
     setUndoInfo(null);
-  }, [undoInfo]);
+    try {
+      // Project is already deleted from backend — recreate it with same name/description
+      const restored = await createProject({
+        name: undoInfo.project.name,
+        description: undoInfo.project.description,
+        userId: user?.uid ?? null,
+      });
+      setProjects(prev =>
+        [...prev, restored].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
+      );
+    } catch (e) {
+      console.error("Failed to restore project", e);
+    }
+  }, [undoInfo, user]);
 
-  // Countdown tick — when it reaches 0 the delete is committed for real
+  // Countdown tick — only for display, delete already committed
   useEffect(() => {
     if (!undoInfo) return;
     if (undoInfo.secondsLeft <= 0) {
-      deleteProject(undoInfo.id).catch(e => console.error("Failed to delete project", e));
       setUndoInfo(null);
       return;
     }
