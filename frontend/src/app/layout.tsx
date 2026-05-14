@@ -8,9 +8,12 @@ import { Footer } from "@/components/Footer";
 import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
-  title: "ArchGuide",
+  title: {
+    default: "ArchGuide",
+    template: "%s | ArchGuide",
+  },
   description:
-    "Enterprise-grade AI system for choosing between RAG, Fine-Tuning, CAG, and Hybrid architectures.",
+    "Stop guessing between RAG, Fine-Tuning, CAG, and Hybrid. ArchGuide analyses your requirements and recommends the right AI architecture instantly.",
 };
 
 export default function RootLayout({
