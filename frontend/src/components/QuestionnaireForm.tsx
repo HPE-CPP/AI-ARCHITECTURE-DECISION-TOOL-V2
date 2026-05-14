@@ -20,9 +20,11 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
+  const [resumed, setResumed] = useState(false);
 
   // Determine storage keys (per-project if projectId is set)
   const answersKey = projectId ? getProjectKey(projectId, "answers") : "questionnaire_answers";
+  const stepKey = projectId ? getProjectKey(projectId, "questionnaire_step") : "questionnaire_step";
 
   useEffect(() => {
     getQuestionnaireOptions()
@@ -30,26 +32,31 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       .catch(() => setError("Failed to load options. Ensure backend is running."))
       .finally(() => setLoading(false));
 
-    // PERSISTENCE: Restore answers from storage (per-project or global)
+    // Restore answers from storage
     const saved = localStorage.getItem(answersKey);
     if (saved) {
       try {
-        setAnswers(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setAnswers(parsed);
       } catch (e) {
         console.error("Failed to parse saved answers", e);
       }
     }
 
-    // FIX FE-013: Clear the opposite-scope key to prevent cross-contamination.
-    // If we are in a project context, the global key's stale data must not
-    // bleed in if the user later opens the global form. Likewise in reverse.
-    // We only wipe the key that is NOT being used by this form instance.
+    // Restore current step — so closing the tab mid-flow resumes where you left off
+    const savedStep = localStorage.getItem(stepKey);
+    if (savedStep) {
+      const step = parseInt(savedStep, 10);
+      if (!isNaN(step) && step > 0) {
+        setCurrentStep(step);
+        setResumed(true);
+      }
+    }
+
     if (projectId) {
-      // Project-scoped: invalidate stale global answers (they belong to no project)
       localStorage.removeItem("questionnaire_answers");
     }
-    // (If no projectId, leave project-scoped keys alone — other projects are unaffected)
-  }, [answersKey, projectId]);
+  }, [answersKey, stepKey, projectId]);
 
   // Sort signals: Required first, then Optional
   const sortedSignals = useMemo(() => {
@@ -63,6 +70,11 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
 
   const totalSteps = sortedSignals.length;
 
+  const goToStep = (step: number) => {
+    setCurrentStep(step);
+    localStorage.setItem(stepKey, String(step));
+  };
+
   const handleNext = () => {
     const [key, schema] = sortedSignals[currentStep];
     if (schema.required && !answers[key]) {
@@ -71,7 +83,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
     }
     setError(null);
     if (currentStep < totalSteps - 1) {
-      setCurrentStep((prev) => prev + 1);
+      goToStep(currentStep + 1);
     } else {
       handleSubmit();
     }
@@ -79,13 +91,13 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
 
   const handleBack = () => {
     setError(null);
-    if (currentStep > 0) setCurrentStep((prev) => prev - 1);
+    if (currentStep > 0) goToStep(currentStep - 1);
   };
 
   const handleSkip = () => {
     setError(null);
     if (currentStep < totalSteps - 1) {
-      setCurrentStep((prev) => prev + 1);
+      goToStep(currentStep + 1);
     } else {
       handleSubmit();
     }
@@ -120,6 +132,10 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       // Notify parent of analysis ID for project tracking
       onAnalysisStart?.(result.analysis_id);
 
+      // Clear saved progress now that submission succeeded
+      localStorage.removeItem(answersKey);
+      localStorage.removeItem(stepKey);
+
       // Per-project storage
       if (projectId) {
         localStorage.setItem(getProjectKey(projectId, "analysisId"), result.analysis_id);
@@ -153,8 +169,40 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
   const [currentKey, currentSchema] = sortedSignals[currentStep];
   const progressPercent = ((currentStep + 1) / totalSteps) * 100;
 
+  const handleStartOver = () => {
+    localStorage.removeItem(answersKey);
+    localStorage.removeItem(stepKey);
+    setAnswers({});
+    setCurrentStep(0);
+    setResumed(false);
+    setError(null);
+  };
+
   return (
     <div className="w-full flex flex-col items-center max-w-2xl mx-auto px-4">
+
+      {/* Resume banner */}
+      <AnimatePresence>
+        {resumed && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="w-full mb-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-[color:var(--surface)] border border-[color:var(--border)] text-sm"
+          >
+            <span className="text-[color:var(--text-secondary)] font-medium">
+              Resuming from question {currentStep + 1}
+            </span>
+            <button
+              onClick={handleStartOver}
+              className="text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors shrink-0"
+            >
+              Start over
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Compact Progress Bar */}
       <div className="w-full mb-4">
         <div className="flex justify-between items-center mb-1 text-[10px] font-bold uppercase tracking-widest text-[color:var(--text-secondary)]">
