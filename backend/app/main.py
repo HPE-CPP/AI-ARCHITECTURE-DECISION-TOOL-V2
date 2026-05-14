@@ -82,8 +82,21 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.error(f"Redis connection failed: {e}")
 
-        logger.info("Creating database tables (if not exist)...")
-        Base.metadata.create_all(bind=engine)
+        logger.info("Running Alembic migrations (upgrade head)...")
+        try:
+            from alembic.config import Config as AlembicConfig
+            from alembic import command as alembic_command
+            alembic_ini = Path(__file__).resolve().parent.parent / "alembic.ini"
+            alembic_cfg = AlembicConfig(str(alembic_ini))
+            alembic_command.upgrade(alembic_cfg, "head")
+            logger.info("Migrations complete.")
+        except Exception as e:
+            # Non-fatal in dev — tables may already exist via create_all from a
+            # previous run.  In production, fix the migration before deploying.
+            logger.error("Alembic migration failed: %s", e)
+            logger.warning("Falling back to create_all (dev only — do not use in production)")
+            Base.metadata.create_all(bind=engine)
+
         faiss_path = Path(settings.FAISS_INDEX_PATH)
         faiss_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"FAISS index directory ready at: {faiss_path.resolve()}")
