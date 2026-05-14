@@ -100,8 +100,8 @@ HOW TO PICK THE RIGHT VALUE — infer from context even if not stated word-for-w
   query_volume:          hundreds of daily users / internal tool → "low"; thousands req/day → "medium"; high-traffic / >1000 QPS → "high"
   latency_requirement:   "under 2 seconds" or ">1s acceptable" → "relaxed"; "under 1 second" → "moderate"; "real-time / <100ms" → "strict"; "<50ms" → "ultra_low"
   data_volatility:       "updated daily" or continuous data → "moderate"; "updated weekly/monthly" → "low"; "real-time streaming" → "high"; "historical archive" → "static"
-  accuracy_requirement:  "avoid hallucination / cite sources" → "very_high"; medical/legal/financial compliance → "critical"; customer-facing production → "high"; internal prototype → "moderate"
-  domain_specificity:    internal company docs, procedures, support tickets → "specialized"; general Q&A chatbot → "general"; highly niche/proprietary domain → "highly_specialized"
+  accuracy_requirement:  "avoid hallucination / cite sources / no wrong answers" → "very_high"; ONLY use "critical" for regulated clinical (FDA/HIPAA), financial-trading (SEC/MiFID), or safety-of-life systems where errors have legal/medical consequences. Customer-facing production → "high"; internal prototype → "moderate". Do NOT pick "critical" just because the doc mentions "compliance" or "reputational risk" — that is "very_high".
+  domain_specificity:    Internal company knowledge, support tickets, product manuals, internal procedures, standard industry vocabulary → "specialized" (RAG can retrieve this; no need to over-classify). General Q&A → "general". "highly_specialized" is reserved for domains with PROPRIETARY VOCABULARIES that general LLMs cannot reason over without training: clinical radiology codes, quantitative-finance derivatives terminology, specialised legal precedent. Most "specialized" business domains are NOT "highly_specialized".
   security_level:        "internal procedures / on-premise required" → "elevated"; HIPAA/GDPR/PCI/classified → "high" or "critical"; public data → "standard"
   cost_sensitivity:      "cost efficiency important / budget conscious" → "high"; "strict budget constraints" → "very_high"; unlimited budget → "low"
   deployment_preference: "on-premise / private cloud / self-hosted" → "on_premise"; AWS/GCP/Azure → "cloud"; "both cloud and on-prem" → "hybrid"; IoT/edge devices → "edge"
@@ -584,11 +584,25 @@ class SignalExtractor:
             (r"tens?\s+of\s+thousands?\s+of\s+\w+", "medium", 0.58),
             (r"thousands?\s+of\s+\w+", "small", 0.55),
             (r"hundreds?\s+of\s+\w+", "small", 0.50),
+            # Bounded-corpus indicators — strong CAG signal.
+            (r"\bfits?\s+(?:in|within|comfortably\s+(?:in|within))\s+(?:the\s+)?context", "small", 0.78),
+            (r"\bbounded\s+corpus\b|\bclosed\s+corpus\b|\bsmall\s+(?:and\s+)?(?:bounded|fixed|well[\s-]?defined)\s+(?:corpus|dataset|knowledge)", "small", 0.75),
+            # Numeric template/article counts (typical for legal/SOP docs).
+            (r"\b(\d{1,3})\s+(?:standard\s+)?(?:templates?|contracts?|playbooks?|policies)\b", "small", 0.65),
+            # Numeric page counts — useful for compact knowledge bases.
+            (r"\b(\d+)\s+pages?\b", "NUM_PAGES", 0.60),
         ],
         "query_volume": [
             (r"\d[\d,]*\s*(?:qps|queries?\s+per\s+second|req(?:uests?)?\s+per\s+second)", "NUM_QPS", 0.80),
-            (r"\bhigh\s+(?:traffic|throughput|load|volume|concurren)", "high", 0.62),
+            # "N queries per minute" — convert to qps via factor 60.
+            (r"\b(\d[\d,]*)\s+(?:queries?|requests?|req\w*)\s+per\s+minute\b", "NUM_QPM", 0.78),
+            # "N queries/requests/scans per day" (word order: number-noun-perday).
+            (r"\b(\d[\d,]*)\s+(?:queries?|requests?|req\w*|scans?|transactions?)\s+per\s+day\b", "NUM_DAILY", 0.72),
+            # Original: "per day queries" (less common).
             (r"\b\d[\d,]*\s+(?:daily|per\s+day)\s+(?:users?|queries?|req\w*)", "NUM_DAILY", 0.70),
+            (r"\b(?:query\s+)?volume\s+is\s+low\b|\blow[\s-]?volume\b", "low", 0.70),
+            (r"\bhigh[\s-]?volume\b", "high", 0.65),
+            (r"\bhigh\s+(?:traffic|throughput|load|concurren)", "high", 0.62),
             (r"\bconcurrent\s+(?:users?|sessions?|requests?)", "high", 0.55),
             (r"\bsmall\s+team\b|\binternal\s+(?:tool|use\s+only)\b", "low", 0.58),
             (r"\bfew\s+(?:users?|employees?)\b", "low", 0.55),
@@ -605,13 +619,17 @@ class SignalExtractor:
             (r"\bbatch\s+process(?:ing)?\b|\boffline\b|\basynchronous\b", "relaxed", 0.68),
         ],
         "data_volatility": [
-            (r"\breal[\s-]?time\s+(?:streaming|data|feed|updates?|ingestion)\b", "high", 0.78),
+            # "feed" → "feeds?" so plural "feeds" matches (was the doc 04 bug).
+            (r"\breal[\s-]?time\s+(?:streaming|data|feeds?|updates?|ingestion|market\s+data)\b", "high", 0.78),
             (r"\b(?:continuously?|constantly|frequently)\s+(?:updat|chang|refresh)", "high", 0.68),
+            (r"\bstream(?:ing|ed)\s+(?:data|feeds?|updates?)\b", "high", 0.74),
             (r"\b(?:add|updat|refresh)\w*\s+(?:daily|every\s+day)\b", "moderate", 0.72),
             (r"\b(?:add|updat|refresh)\w*\s+(?:hourly|every\s+hour)\b", "moderate", 0.75),
             (r"\b(?:add|updat|refresh)\w*\s+(?:weekly|every\s+week|each\s+week)\b", "low", 0.72),
             (r"\b(?:add|updat|refresh)\w*\s+(?:monthly|every\s+month)\b", "low", 0.68),
-            (r"\bstatic\b|\barchiv\w*\b|\bhistorical\b|\brarely\s+chang", "static", 0.70),
+            (r"\b(?:updated|reviewed)\s+(?:and\s+\w+\s+)?(?:annually|yearly|once\s+(?:per|a)\s+year)\b", "static", 0.74),
+            (r"\b(?:add|updat|refresh)\w*\s+quarterly\b", "low", 0.68),
+            (r"\bstatic\b|\barchiv\w*\b|\bhistorical\s+(?:archive|record|data)\b|\brarely\s+chang", "static", 0.74),
             (r"\bimmutable\b|\bno\s+updates?\b", "static", 0.72),
         ],
         "accuracy_requirement": [
@@ -661,6 +679,7 @@ class SignalExtractor:
         ],
         "user_scale": [
             (r"\b(\d[\d,]*)\s*k?\s+(?:daily\s+)?(?:active\s+)?users?\b", "NUM_USERS", 0.78),
+            (r"\b(\d[\d,]*)\s+(?:enterprise\s+)?(?:analysts?|associates?|radiologists?|agents?|managers?|specialists?|consultants?|operators?|employees?)\b", "NUM_USERS", 0.72),
             (r"\benterprise[\s-]?wide\b|\bcompany[\s-]?wide\b|\borganization[\s-]?wide\b", "enterprise", 0.75),
             (r"\bFortune\s+500\b|\bmultinational\b|\bglobal\s+(?:org|organization|company|workforce)\b", "enterprise", 0.78),
             (r"\blarge\s+(?:organization|company|enterprise|corporation)\b", "large", 0.65),
@@ -681,6 +700,23 @@ class SignalExtractor:
             }
         return cls._COMPILED_HEURISTICS
 
+    # Words that, when appearing within NEGATION_WINDOW chars before a
+    # matched pattern, invalidate that match. Without this guard the extractor
+    # converts "no real-time streaming requirement" into volatility=high and
+    # "no expectation of high concurrency" into query_volume=high.
+    _NEGATION_PREFIXES = re.compile(
+        r"\b(?:no|not|never|without|zero|none|n['o]t|nor|cannot|can'?t|won'?t)\s+"
+        r"(?:\w+\s+){0,3}$",
+        re.IGNORECASE,
+    )
+    _NEGATION_WINDOW = 60  # chars to look back
+
+    def _is_negated(self, text: str, match_start: int) -> bool:
+        """True if a negation word appears within the lookback window."""
+        window_start = max(0, match_start - self._NEGATION_WINDOW)
+        prefix = text[window_start:match_start]
+        return bool(self._NEGATION_PREFIXES.search(prefix))
+
     def _heuristic_extraction(self, text: str, pages: list[dict]) -> dict[str, dict]:
         """
         Regex/pattern-based signal extraction — runs as a fallback when the LLM
@@ -699,7 +735,14 @@ class SignalExtractor:
             matched_src: str = ""
 
             for pattern, value_template, conf in rules:
-                m = pattern.search(text)
+                # Find first non-negated match. A raw .search() ignores
+                # surrounding context, so "no real-time" still matches
+                # "real-time" — we iterate and skip negated occurrences.
+                m = None
+                for candidate in pattern.finditer(text):
+                    if not self._is_negated(text, candidate.start()):
+                        m = candidate
+                        break
                 if not m:
                     continue
 
@@ -720,11 +763,27 @@ class SignalExtractor:
                     except ValueError:
                         continue
 
-                elif value_template == "NUM_DAILY":
-                    num_str = re.sub(r"[,\s]", "", m.group(0).split()[0])
+                elif value_template == "NUM_QPM":
+                    raw = re.sub(r",", "", m.group(1)) if m.lastindex and m.group(1) else "0"
                     try:
-                        daily = float(num_str)
-                        # daily queries → rough QPS = daily / 86400
+                        qpm = float(raw)
+                        qps = qpm / 60.0
+                        if qps >= 1000:
+                            value = "very_high"
+                        elif qps >= 100:
+                            value = "high"
+                        elif qps >= 10:
+                            value = "medium"
+                        else:
+                            value = "low"
+                    except ValueError:
+                        continue
+
+                elif value_template == "NUM_DAILY":
+                    raw = re.sub(r",", "", m.group(1)) if m.lastindex and m.group(1) else re.sub(r"[,\s]", "", m.group(0).split()[0])
+                    try:
+                        daily = float(raw)
+                        # daily volume → bucket on absolute daily count.
                         if daily >= 1_000_000:
                             value = "very_high"
                         elif daily >= 10_000:
@@ -733,6 +792,19 @@ class SignalExtractor:
                             value = "medium"
                         else:
                             value = "low"
+                    except ValueError:
+                        continue
+
+                elif value_template == "NUM_PAGES":
+                    raw = re.sub(r",", "", m.group(1)) if m.lastindex and m.group(1) else ""
+                    try:
+                        pages_count = int(raw) if raw else 0
+                        if pages_count <= 2000:
+                            value = "small"
+                        elif pages_count <= 50_000:
+                            value = "medium"
+                        else:
+                            value = "large"
                     except ValueError:
                         continue
 
