@@ -807,6 +807,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         </div>
 
       </div>
+        </>
+      )}
 
       {/* Floating chat widget */}
       {result.recommended && (
