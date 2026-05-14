@@ -131,7 +131,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             </h2>
             <div className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tighter text-[var(--text-primary)] mb-3 sm:mb-4">
               {fmtRange(recArch.monthly_total)}
-              <span className="text-xl text-[var(--text-secondary)] font-medium">/month</span>
+              <span className="text-xl text-[var(--text-secondary)] font-medium">{" / month"}</span>
             </div>
             <p className="text-lg text-[var(--text-secondary)] font-medium">
               Annual estimate (incl. setup): {fmtRange(recArch.annual_total)}
@@ -149,8 +149,9 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             {/* Setup Cost Widget */}
             <div className="lg:w-44 p-6 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl">
               <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">Setup Cost</span>
-              <div className="text-3xl font-black text-[var(--primary)]">
-                {fmtInrShort(fmtAvg(recArch.setup_cost))}
+              <div className="text-3xl font-black text-[var(--primary)] flex flex-col items-center leading-tight">
+                <span>Rs.</span>
+                <span>{fmtInrShort(fmtAvg(recArch.setup_cost)).replace('Rs. ', '')}</span>
               </div>
               <span className="text-xs text-[var(--text-secondary)] mt-1">one-time</span>
             </div>
@@ -158,8 +159,9 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             {/* Cost Per Query Widget */}
             <div className="lg:w-44 p-6 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl">
               <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">Per Query</span>
-              <div className="text-3xl font-black text-[var(--accent)]">
-                {`Rs. ${recArch.cost_per_query[0].toFixed(3)}`}
+              <div className="text-3xl font-black text-[var(--primary)] flex flex-col items-center leading-tight">
+                <span>Rs.</span>
+                <span>{recArch.cost_per_query[0].toFixed(3)}</span>
               </div>
               <span className="text-xs text-[var(--text-secondary)] mt-1">estimated avg</span>
             </div>

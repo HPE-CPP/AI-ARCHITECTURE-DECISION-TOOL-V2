@@ -84,7 +84,7 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-3">Confidence</span>
             <div className="text-4xl sm:text-5xl font-black text-[var(--primary)]">
               {/* FIX FE-003: Use (confidence ?? 0) instead of confidence! to prevent crash */}
-              {(((confidence ?? 0) * 100).toFixed(0))}<span className="text-2xl text-[var(--text-secondary)]">%</span>
+              {(((confidence ?? 0) * 100).toFixed(0))}<span className="text-2xl">%</span>
             </div>
             <div className="w-full h-px border border-[var(--border)] bg-[var(--background)] relative mt-6 overflow-hidden">
               <motion.div 
@@ -99,8 +99,8 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           {/* Overall Score Widget */}
           <div className="flex-1 lg:w-48 p-5 sm:p-8 rounded-[2rem] bg-[var(--surface)] border border-[var(--border)] flex flex-col items-center justify-center text-center shadow-xl transition-colors">
             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-3">Overall Score</span>
-            <div className="text-4xl sm:text-5xl font-black text-[var(--accent)]">
-              {scores[recommended].toFixed(1)}<span className="text-2xl text-[var(--text-secondary)]">/100</span>
+            <div className="text-4xl sm:text-5xl font-black text-[var(--primary)]">
+              {scores[recommended].toFixed(1)}<span className="text-2xl">/100</span>
             </div>
           </div>
         </div>
@@ -128,17 +128,22 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
                 <PolarRadiusAxis angle={30} domain={[0, 1]} tick={false} axisLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', borderRadius: '16px', color: 'var(--text-primary)', fontWeight: 'bold' }} />
                 <Legend wrapperStyle={{ paddingTop: '16px', fontSize: '12px' }} />
-                {ranking?.slice(0, 3).map((arch, i) => (
-                  <Radar
-                    key={arch}
-                    name={arch}
-                    dataKey={arch}
-                    stroke={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"}
-                    fill={i === 0 ? "var(--primary)" : i === 1 ? "var(--accent)" : "var(--text-secondary)"}
-                    fillOpacity={i === 0 ? 0.3 : 0.1}
-                    strokeWidth={i === 0 ? 3 : 2}
-                  />
-                ))}
+                {ranking?.slice(0, 3).map((arch, i) => {
+                  const opacities = [1, 0.75, 0.5];
+                  const opacity = opacities[i] || 0.25;
+                  return (
+                    <Radar
+                      key={arch}
+                      name={arch}
+                      dataKey={arch}
+                      stroke="var(--primary)"
+                      strokeOpacity={opacity}
+                      fill="var(--primary)"
+                      fillOpacity={opacity * 0.3}
+                      strokeWidth={i === 0 ? 3 : 2}
+                    />
+                  );
+                })}
               </RadarChart>
             </ResponsiveContainer>
           </div>
@@ -164,13 +169,16 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
                   : suit.toLowerCase().includes("moderate")
                   ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
                   : "text-[var(--primary)] bg-[var(--primary)]/10 border-[var(--primary)]/20";
-                const barColor = index === 0 ? "var(--primary)" : index === 1 ? "var(--accent)" : "var(--text-secondary)";
+                const opacities = [100, 80, 60, 40];
+                const bgOpacity = opacities[index] || 20;
+                const barColor = `color-mix(in srgb, var(--primary) ${bgOpacity}%, transparent)`;
+                const textColor = index > 1 ? "var(--primary)" : "var(--background)";
                 const fullName = architecture_details?.[entry.name]?.full_name || entry.name;
                 return (
                   <div key={entry.name} className={`p-3 rounded-xl border transition-colors ${isRec ? "border-[var(--primary)]/30 bg-[var(--primary)]/5" : "border-[var(--border)] bg-[var(--surface)]"}`}>
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white flex-shrink-0"
-                        style={{ backgroundColor: barColor }}>
+                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                        style={{ backgroundColor: barColor, color: textColor }}>
                         {index + 1}
                       </span>
                       <span className="text-sm font-bold text-[var(--text-primary)] flex-1 truncate">{fullName}</span>

@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth, onAuthStateChanged, signInWithGoogle, signOutUser, User } from "@/lib/firebase";
+import { getApiBase } from "@/lib/api-base";
 
 interface AuthContextValue {
   user: User | null;
@@ -41,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         displayName: u.displayName,
         photoURL: u.photoURL,
       };
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const apiUrl = getApiBase();
       const MAX_RETRIES = 3;
       let lastError: unknown;
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
