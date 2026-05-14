@@ -17,9 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 def _signals_to_db(db: DBSession, session_id_str: str, signals: dict) -> None:
-    """Persist extracted signal dicts as Signal ORM rows."""
+    """Persist extracted signal dicts as Signal ORM rows.
+
+    Deletes any existing rows for this session first to stay idempotent —
+    safe to call multiple times without creating duplicates.
+    """
     import uuid
     session_uuid = uuid.UUID(session_id_str)
+    # Delete stale rows so re-runs don't accumulate duplicates
+    db.query(Signal).filter(Signal.session_id == session_uuid).delete(synchronize_session=False)
     for signal_name, data in signals.items():
         row = Signal(
             session_id=session_uuid,
@@ -180,30 +186,33 @@ def get_signals(db: DBSession, session_id: str) -> dict:
 def update_signals(db: DBSession, session_id: str, updates: dict[str, str]) -> dict:
     """
     Apply follow-up answer overrides to existing signals.
-    Deletes old rows for updated signals and inserts new ones.
+    All deletes and inserts happen inside a single transaction so a concurrent
+    reader never sees a window where the signal row is absent.
     """
     import uuid
     session_uuid = uuid.UUID(session_id)
 
-    for signal_name, value in updates.items():
-        if signal_name not in SIGNAL_SCHEMA:
-            continue
-        # Delete existing row for this signal
-        db.query(Signal).filter(
-            Signal.session_id == session_uuid,
-            Signal.signal_name == signal_name,
-        ).delete(synchronize_session=False)
-        # Insert updated row
-        db.add(Signal(
-            session_id=session_uuid,
-            signal_name=signal_name,
-            value=value,
-            confidence=1.0,
-            source_text="Follow-up answer from user",
-            page_number=0,
-            source_verified=True,
-        ))
-    db.commit()
+    try:
+        for signal_name, value in updates.items():
+            if signal_name not in SIGNAL_SCHEMA:
+                continue
+            db.query(Signal).filter(
+                Signal.session_id == session_uuid,
+                Signal.signal_name == signal_name,
+            ).delete(synchronize_session=False)
+            db.add(Signal(
+                session_id=session_uuid,
+                signal_name=signal_name,
+                value=value,
+                confidence=1.0,
+                source_text="Follow-up answer from user",
+                page_number=0,
+                source_verified=True,
+            ))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     # Invalidate cache so next read gets fresh DB data
     cache_service.delete("signals", session_id)

@@ -18,7 +18,7 @@ from app.db.models import Session as SessionModel
 from app.services import vector_service, signal_service, recommendation_service
 from app.schemas.session import AnalysisResponse
 from app.core.security import verify_firebase_token
-from services.document_parser import DocumentParser, detect_sections
+from services.document_parser import DocumentParser, detect_sections, validate_document_relevance
 from config import settings
 
 router = APIRouter()
@@ -53,9 +53,6 @@ async def upload_document(
     valid, msg = doc_parser.validate_file(safe_filename, file_size)
     if not valid:
         raise HTTPException(400, msg)
-
-    if file_size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(400, f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit")
 
     p_uuid = None
     if project_id:
@@ -108,6 +105,21 @@ async def upload_document(
             _mark_session_error(db, session_row, "Document is empty or contains too little text.")
             raise HTTPException(422, "Document is empty or contains too little text.")
 
+        # Stage 1b: Document relevance gate
+        # Rejects random PDFs (cost reports, screenshots, invoices, etc.) before
+        # spending LLM tokens on them.
+        trace.append({"step": "relevance_check", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
+        is_relevant, issue_type, relevance_msg = validate_document_relevance(
+            doc_data["full_text"], doc_data.get("pages", [])
+        )
+        if not is_relevant:
+            trace[-1]["status"] = "rejected"
+            trace[-1]["details"] = relevance_msg
+            _mark_session_error(db, session_row, relevance_msg)
+            raise HTTPException(422, relevance_msg)
+        trace[-1]["status"] = "complete"
+        trace[-1]["details"] = f"Document passes relevance check ({doc_data['word_count']} words)"
+
         # Stage 2: Section detection (unchanged)
         trace.append({"step": "section_detection", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
         sections = detect_sections(doc_data["full_text"])
@@ -128,7 +140,7 @@ async def upload_document(
         except Exception as exc:
             logger.warning(f"Vector indexing failed (non-fatal): {exc}")
             trace[-1]["status"] = "skipped"
-            trace[-1]["details"] = str(exc)
+            trace[-1]["details"] = "Vector indexing unavailable — analysis will continue without semantic retrieval."
 
         # Stage 4: Signal extraction (DB + Redis)
         trace.append({"step": "signal_extraction", "status": "in_progress", "timestamp": datetime.now(timezone.utc).isoformat()})
@@ -144,13 +156,63 @@ async def upload_document(
         if extracted_count == 0:
             trace[-1]["status"] = "error"
             trace[-1]["details"] = (
-                "LLM returned 0 signals. "
-                f"Provider: {provider}. "
-                "Check that Ollama is running (`ollama serve`) and the model is loaded (`ollama pull llama3.2`)."
+                "No architecture signals could be extracted from this document. "
+                "Ensure the document contains requirements, specifications, or use-case descriptions."
             )
         else:
             trace[-1]["status"] = "complete"
             trace[-1]["details"] = f"Extracted {extracted_count}/10 signals"
+
+        # Post-extraction quality gate ─────────────────────────────────────────
+        # 1. Confidence gate: if fewer than 3 signals extracted with real
+        #    confidence, the document almost certainly wasn't a requirements doc
+        #    that slipped past the keyword gate (e.g. a glossary or FAQ page
+        #    that happens to mention "data" and "users").
+        confident_signals = [
+            s for s in signals.values()
+            if s.get("value") and s.get("confidence", 0) >= 0.35
+        ]
+        if len(confident_signals) < 3:
+            _mark_session_error(
+                db, session_row,
+                "Insufficient signal confidence — document does not appear to be a requirements specification."
+            )
+            raise HTTPException(
+                422,
+                f"Only {len(confident_signals)} architecture signal(s) could be extracted with sufficient "
+                f"confidence (minimum 3 required). This document may not be a system requirements or "
+                f"specification document. Please upload a document describing an AI/software system's "
+                f"requirements, data sources, scale, latency needs, and deployment constraints."
+            )
+
+        # 2. Signal concentration warning: if the document has multiple pages
+        #    but all extracted signals point to a single page, the recommendation
+        #    is based on one paragraph — flag this to the user.
+        total_pages = doc_data.get("total_pages", 1)
+        if total_pages > 2:
+            signal_pages = [
+                s.get("page_number", 0) for s in signals.values()
+                if s.get("value") and s.get("page_number", 0) > 0
+            ]
+            if signal_pages:
+                unique_pages = set(signal_pages)
+                if len(unique_pages) == 1:
+                    sole_page = next(iter(unique_pages))
+                    trace.append({
+                        "step": "signal_concentration_warning",
+                        "status": "warning",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "details": (
+                            f"All {extracted_count} signals were extracted from a single page "
+                            f"(page {sole_page} of {total_pages}). "
+                            f"The recommendation is based on limited context. "
+                            f"Consider uploading a more detailed requirements document."
+                        ),
+                    })
+                    logger.warning(
+                        "Signal concentration: all signals from page %d of %d-page document (session %s)",
+                        sole_page, total_pages, session_id,
+                    )
 
         # Stage 4b: Report missing signals
         if missing_count > 0:
@@ -192,9 +254,10 @@ async def upload_document(
     except Exception as exc:
         logger.error(f"Document processing failed: {exc}")
         _mark_session_error(db, session_row, str(exc))
-        if "Failed to parse" in str(exc) or "Unsupported" in str(exc):
-            raise HTTPException(422, f"Invalid or unreadable document: {str(exc)}")
-        raise HTTPException(500, f"Processing failed: {str(exc)}")
+        msg = str(exc)
+        if "Unable to read" in msg or "Unsupported" in msg or "corrupt" in msg.lower():
+            raise HTTPException(422, msg)
+        raise HTTPException(500, "Document processing failed. Please try again or contact support.")
     finally:
         # SEC-3.9 FIX: use shutil.rmtree to ensure complete cleanup even if parser created subfiles
         shutil.rmtree(temp_dir, ignore_errors=True)

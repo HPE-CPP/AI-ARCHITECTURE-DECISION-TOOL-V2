@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Optional
 
@@ -17,10 +18,16 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# B-05 FIX: In-memory cache to prevent reloading the entire FAISS index
+# Maximum number of sessions to keep in memory. When exceeded, the least
+# recently used entry is evicted (data stays safely on disk).
+_CACHE_MAX_SIZE = 50
+
+# B-05 FIX: In-memory LRU cache to prevent reloading the entire FAISS index
 # and metadata from disk on every search query.
-_index_cache: dict[str, faiss.IndexFlatL2] = {}
-_meta_cache: dict[str, list[dict]] = {}
+# Using OrderedDict so we can do O(1) LRU eviction without a third-party lib.
+_index_cache: OrderedDict[str, faiss.IndexFlatL2] = OrderedDict()
+_meta_cache: OrderedDict[str, list[dict]] = OrderedDict()
+_cache_lock = threading.Lock()  # protects both caches
 
 # P7-004 FIX: Per-session write locks.
 # Concurrent uploads to the same session can race on faiss.write_index(),
@@ -28,6 +35,42 @@ _meta_cache: dict[str, list[dict]] = {}
 # The _locks_lock protects the _session_locks dict itself from concurrent creation.
 _session_locks: dict[str, threading.Lock] = {}
 _locks_lock = threading.Lock()
+
+
+def _cache_put(session_id: str, index: "faiss.IndexFlatL2", meta: list[dict]) -> None:
+    """Insert/update both caches under _cache_lock, evicting LRU if needed."""
+    with _cache_lock:
+        # Move to end (most recently used)
+        _index_cache.pop(session_id, None)
+        _meta_cache.pop(session_id, None)
+        _index_cache[session_id] = index
+        _meta_cache[session_id] = meta
+        while len(_index_cache) > _CACHE_MAX_SIZE:
+            evicted, _ = _index_cache.popitem(last=False)
+            _meta_cache.pop(evicted, None)
+            logger.debug("FAISS LRU evicted session %s from memory cache", evicted)
+
+
+def _cache_get_index(session_id: str) -> "Optional[faiss.IndexFlatL2]":
+    with _cache_lock:
+        if session_id in _index_cache:
+            _index_cache.move_to_end(session_id)
+            return _index_cache[session_id]
+    return None
+
+
+def _cache_get_meta(session_id: str) -> "Optional[list[dict]]":
+    with _cache_lock:
+        if session_id in _meta_cache:
+            _meta_cache.move_to_end(session_id)
+            return _meta_cache[session_id]
+    return None
+
+
+def _cache_evict(session_id: str) -> None:
+    with _cache_lock:
+        _index_cache.pop(session_id, None)
+        _meta_cache.pop(session_id, None)
 
 
 def _get_session_lock(session_id: str) -> threading.Lock:
@@ -83,9 +126,14 @@ def _load_or_create(session_id: str, dim: int) -> faiss.IndexFlatL2:
     if ip.exists() and dp.exists():
         stored_dim = int(dp.read_text().strip())
         if stored_dim == dim:
-            if session_id not in _index_cache:
-                _index_cache[session_id] = faiss.read_index(str(ip))
-            return _index_cache[session_id]
+            cached = _cache_get_index(session_id)
+            if cached is not None:
+                return cached
+            idx = faiss.read_index(str(ip))
+            # Load meta in tandem so cache stays consistent
+            meta = _load_meta(session_id)
+            _cache_put(session_id, idx, meta)
+            return idx
         else:
             logger.warning(
                 "FAISS dimension mismatch for session %s: stored=%d, requested=%d. "
@@ -95,28 +143,28 @@ def _load_or_create(session_id: str, dim: int) -> faiss.IndexFlatL2:
             ip.unlink(missing_ok=True)
             dp.unlink(missing_ok=True)
             _save_meta(session_id, [])  # clear stale metadata
-            _index_cache.pop(session_id, None)
+            _cache_evict(session_id)
 
     # Write the dimension so future calls can validate it
     dp.write_text(str(dim))
     idx = faiss.IndexFlatL2(dim)
-    _index_cache[session_id] = idx
+    _cache_put(session_id, idx, [])
     return idx
 
 
 def _load_meta(session_id: str) -> list[dict]:
-    if session_id in _meta_cache:
-        return _meta_cache[session_id]
-    
+    cached = _cache_get_meta(session_id)
+    if cached is not None:
+        return cached
     mp = _meta_path(session_id)
     if mp.exists():
         with open(mp, "r", encoding="utf-8") as f:
-            _meta_cache[session_id] = json.load(f)
-            return _meta_cache[session_id]
+            meta = json.load(f)
+        return meta
     return []
 
+
 def _save_meta(session_id: str, meta: list[dict]) -> None:
-    _meta_cache[session_id] = meta
     mp = _meta_path(session_id)
     with open(mp, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False)
@@ -172,6 +220,7 @@ def add_embeddings(
 
         faiss.write_index(index, str(_index_path(session_id)))
         _save_meta(session_id, meta)
+        _cache_put(session_id, index, meta)
     logger.info(f"FAISS: added {len(embeddings)} vectors for session {session_id}")
 
 
@@ -220,8 +269,7 @@ def delete_session_index(session_id: str) -> None:
         session_dir = _session_dir(session_id)
         if session_dir.exists():
             shutil.rmtree(session_dir)
-        _index_cache.pop(session_id, None)
-        _meta_cache.pop(session_id, None)
+        _cache_evict(session_id)
     # Clean up the lock itself to prevent unbounded growth
     with _locks_lock:
         _session_locks.pop(session_id, None)
