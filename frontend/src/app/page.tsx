@@ -25,7 +25,14 @@ export default function LandingPage() {
   const { scrollYProgress } = useScroll({ target: containerRef, offset: ["start start", "end end"] });
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    if (window.location.hash) {
+      setTimeout(() => {
+        const id = window.location.hash.substring(1);
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } else {
+      window.scrollTo(0, 0);
+    }
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
     }
