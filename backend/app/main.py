@@ -87,6 +87,35 @@ def create_app() -> FastAPI:
         faiss_path = Path(settings.FAISS_INDEX_PATH)
         faiss_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"FAISS index directory ready at: {faiss_path.resolve()}")
+
+        # Recover orphaned sessions: any session stuck in "processing" after a
+        # server crash or OOM kill will never self-heal. Mark them as "error" on
+        # startup so users get a clear failure rather than an infinite spinner.
+        try:
+            from datetime import datetime, timedelta, timezone
+            from app.db.session import SessionLocal
+            from app.db.models import Session as SessionModel
+            db = SessionLocal()
+            try:
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+                stale = (
+                    db.query(SessionModel)
+                    .filter(
+                        SessionModel.status == "processing",
+                        SessionModel.created_at < cutoff,
+                    )
+                    .all()
+                )
+                if stale:
+                    for s in stale:
+                        s.status = "error"
+                    db.commit()
+                    logger.warning("Recovered %d orphaned processing session(s) → error", len(stale))
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error("Failed to recover orphaned sessions: %s", e)
+
         logger.info("Startup complete.")
 
     # Health check
