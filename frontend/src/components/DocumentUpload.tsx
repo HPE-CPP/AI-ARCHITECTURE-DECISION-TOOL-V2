@@ -296,7 +296,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
             {...getRootProps()}
             className={`
               w-full relative group cursor-pointer transition-all duration-300
-              rounded-3xl border-2 border-dashed p-12 text-center overflow-hidden
+              rounded-3xl border-2 border-dashed p-6 sm:p-12 text-center overflow-hidden
               ${isDragActive
                 ? "border-[color:var(--primary)] bg-[color:var(--primary)]/5 scale-[1.02]"
                 : "border-[color:var(--border)] hover:border-[color:var(--primary)]/50 bg-[color:var(--surface)] hover:bg-[color:var(--surface)]/80"
@@ -306,17 +306,17 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-[0.02] transition-opacity" />
             <input {...getInputProps()} />
 
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 ${
+            <div className={`w-16 h-16 sm:w-24 sm:h-24 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 transition-all duration-500 ${
               isDragActive
                 ? "bg-[color:var(--primary)] text-[color:var(--background)] scale-110"
                 : "bg-[color:var(--background)] group-hover:scale-110 shadow-inner group-hover:bg-[color:var(--primary)] group-hover:text-[color:var(--background)]"
             }`}>
-              <UploadCloud size={40} className={`transition-colors duration-300 ${
+              <UploadCloud size={28} className={`sm:w-10 sm:h-10 transition-colors duration-300 ${
                 isDragActive ? "" : "text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)]"
               }`} />
             </div>
 
-            <p className="text-2xl font-bold mb-3 text-[color:var(--text-primary)]">
+            <p className="text-lg sm:text-2xl font-bold mb-2 sm:mb-3 text-[color:var(--text-primary)]">
               {isDragActive ? "Drop your file here" : "Click or drag & drop"}
             </p>
             <p className="text-[color:var(--text-secondary)] font-medium mb-5">

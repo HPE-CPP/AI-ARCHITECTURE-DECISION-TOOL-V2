@@ -117,7 +117,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.6, delay: 0.1 }}
-        className="glass-panel p-8 md:p-12 relative overflow-hidden group"
+        className="glass-panel p-6 sm:p-8 md:p-12 relative overflow-hidden group"
       >
         <div className="absolute -top-32 -right-32 w-[600px] h-[600px] rounded-full blur-[120px] bg-white/[0.03] pointer-events-none group-hover:bg-white/[0.05] transition-colors duration-700" />
 
@@ -129,7 +129,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             <h2 className="text-[var(--text-secondary)] font-bold tracking-widest uppercase mb-3 text-sm opacity-80">
               Estimated Cost for {summary.recommended_name}
             </h2>
-            <div className="text-5xl md:text-6xl font-black tracking-tighter text-[var(--text-primary)] mb-4">
+            <div className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tighter text-[var(--text-primary)] mb-3 sm:mb-4">
               {fmtRange(recArch.monthly_total)}
               <span className="text-xl text-[var(--text-secondary)] font-medium">/month</span>
             </div>
@@ -138,7 +138,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             </p>
             <button
               onClick={() => exportCostAnalysis(result)}
-              className="mt-8 flex items-center gap-3 px-8 py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn"
+              className="mt-6 sm:mt-8 flex items-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn text-sm sm:text-base"
             >
               <Download size={20} className="group-hover/btn:text-[var(--background)] text-[var(--text-primary)] transition-colors" />
               Download Cost Report

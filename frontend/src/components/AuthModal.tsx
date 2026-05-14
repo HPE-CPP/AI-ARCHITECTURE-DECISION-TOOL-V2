@@ -141,7 +141,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                   <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-white/5 blur-3xl pointer-events-none" />
                   <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-white/3 blur-3xl pointer-events-none" />
 
-                  <div className="relative z-10 p-8 sm:p-10">
+                  <div className="relative z-10 p-5 sm:p-8 lg:p-10">
                     {/* Close button */}
                     <button
                       id="auth-modal-close-btn"
@@ -159,7 +159,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       </svg>
                     </div>
 
-                    <h2 className="text-2xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
+                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
                       {mode === "project-limit" ? "Sign In Required" : "Save Your Progress"}
                     </h2>
                     <p className="text-[color:var(--text-secondary)] font-medium mb-8 leading-relaxed">

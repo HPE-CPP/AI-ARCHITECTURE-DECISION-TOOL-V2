@@ -355,7 +355,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
   // --- SUCCESS RESULTS STATE ---
   return (
-    <div className="w-full max-w-screen-2xl mx-auto pt-24 pb-20 px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="w-full max-w-screen-xl mx-auto pt-24 pb-20 px-4 sm:px-6 lg:px-8 space-y-8">
 
       {/* Back / Edit Button */}
       <div className="flex items-center justify-between w-full">
@@ -560,7 +560,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                       {q.options.map(opt => {
                         const isSelected = followUpAnswers[q.signal] === opt.value;
                         return (

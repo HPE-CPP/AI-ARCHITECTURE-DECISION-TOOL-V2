@@ -121,7 +121,7 @@ export default function LandingPage() {
 
           {/* HEADER */}
           <div className="mb-20 flex flex-col items-center text-center">
-            <h2 className="text-4xl md:text-6xl font-black tracking-tighter mb-6 leading-[1.2] flex flex-col">
+            <h2 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tighter mb-6 leading-[1.2] flex flex-col">
 
               <span className="block overflow-hidden">
                 <motion.span
@@ -169,7 +169,7 @@ export default function LandingPage() {
                 viewport={{ once: true, margin: "-10% 0px" }}
                 transition={{ duration: 1, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] as const }}
 
-                className="relative z-10 p-10 text-left group transition-all h-full
+                className="relative z-10 p-6 sm:p-10 text-left group transition-all h-full
                      bg-gradient-to-br from-[color:var(--surface)]/90 via-[color:var(--surface)]/70 to-[color:var(--surface)]/40
                      backdrop-blur-[80px] backdrop-saturate-[1.8]
                      
@@ -191,7 +191,7 @@ export default function LandingPage() {
                 </div>
 
                 {/* TITLE */}
-                <h3 className="relative z-10 text-3xl font-black mb-4 tracking-tighter overflow-hidden">
+                <h3 className="relative z-10 text-2xl sm:text-3xl font-black mb-4 tracking-tighter overflow-hidden">
                   <motion.span
                     initial={{ y: "100%" }}
                     whileInView={{ y: 0 }}
@@ -221,7 +221,7 @@ export default function LandingPage() {
         className="w-full py-24 min-h-screen flex flex-col justify-center items-center z-30"
       >
         <div className="max-w-4xl mx-auto px-6 w-full">
-          <h2 className="text-5xl md:text-7xl font-black tracking-tighter mb-16 text-center leading-[1.1] flex flex-col items-center">
+          <h2 className="text-3xl sm:text-5xl md:text-7xl font-black tracking-tighter mb-10 sm:mb-16 text-center leading-[1.1] flex flex-col items-center">
             <span className="block overflow-hidden">
               <motion.span
                 className="block"
@@ -247,7 +247,7 @@ export default function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-5% 0px" }}
                 transition={{ duration: 1, delay: i * 0.1 }}
-                className="flex flex-col md:flex-row items-start md:items-center gap-8 p-10 md:p-12 rounded-[3.5rem] border border-[color:var(--border)] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all duration-500 group cursor-default shadow-xl"
+                className="flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-8 p-6 sm:p-10 md:p-12 rounded-[2rem] sm:rounded-[3.5rem] border border-[color:var(--border)] bg-[color:var(--surface)] hover:bg-[color:var(--text-primary)] hover:text-[color:var(--background)] transition-all duration-500 group cursor-default shadow-xl"
               >
                 <div className="text-5xl font-black text-[color:var(--text-secondary)] opacity-10 group-hover:opacity-100 group-hover:text-[color:var(--background)] transition-all duration-500 font-mono tracking-tighter min-w-[80px]">
                   {step.step}
@@ -256,7 +256,7 @@ export default function LandingPage() {
                   <step.icon size={28} className="text-[color:var(--text-primary)] group-hover:text-[color:var(--text-primary)]" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-3xl font-black mb-2 tracking-tighter overflow-hidden">
+                  <h3 className="text-xl sm:text-3xl font-black mb-2 tracking-tighter overflow-hidden">
                     <motion.span
                       className="block"
                       initial={{ y: "100%" }}
