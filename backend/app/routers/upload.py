@@ -37,10 +37,12 @@ async def upload_document(
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token),
 ):
-    """Upload a document for architecture analysis."""
-    if not uid:
-        raise HTTPException(401, "Authentication required to upload documents.")
+    """Upload a document for architecture analysis.
 
+    Guest uploads are allowed: if no Firebase token is provided, the session
+    is created without a project owner and remains accessible to anyone with
+    the analysis_id (matching the questionnaire guest-run behaviour).
+    """
     # --- Validate ---
     if not file.filename:
         raise HTTPException(400, "No filename provided")
