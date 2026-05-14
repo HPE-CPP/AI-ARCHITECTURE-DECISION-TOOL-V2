@@ -35,6 +35,7 @@ export default function ProjectsPage() {
     project: Project;
     secondsLeft: number;
   } | null>(null);
+  const pendingDeleteRef = React.useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   // Load projects on mount
   useEffect(() => {
@@ -44,7 +45,9 @@ export default function ProjectsPage() {
     const loadProjects = async () => {
       setLoadingProjects(true);
       const data = await getProjects(userId);
-      setProjects(data);
+      // Filter out any project currently in the undo countdown (still in backend but hidden)
+      const pendingId = pendingDeleteRef.current?.id;
+      setProjects(pendingId ? data.filter(p => p.id !== pendingId) : data);
       setLoadingProjects(false);
     };
     loadProjects();
@@ -107,57 +110,60 @@ export default function ProjectsPage() {
     }
   }, [editTarget, projects]);
 
-  const handleDelete = useCallback(async (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     const projectToDelete = projects.find(p => p.id === id);
     if (!projectToDelete) return;
 
-    // Remove from UI immediately
+    // Cancel any previous pending delete first
+    if (pendingDeleteRef.current) {
+      clearTimeout(pendingDeleteRef.current.timer);
+      deleteProject(pendingDeleteRef.current.id).catch(() => {});
+    }
+
+    // Hide from UI immediately
     setProjects(prev => prev.filter(p => p.id !== id));
 
-    try {
-      // Commit to API immediately — don't defer. Deferring caused the delete to
-      // never fire if the user navigated away before the countdown finished.
-      await deleteProject(id);
-      // Show undo toast — undo will recreate the project
-      setUndoInfo({ id, project: projectToDelete, secondsLeft: 5 });
-    } catch (e) {
-      // Delete failed — restore the project in the list
-      console.error("Failed to delete project", e);
-      setProjects(prev =>
-        [...prev, projectToDelete].sort(
-          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        )
-      );
-    }
+    // Defer actual backend delete by 5 s so undo can cancel it
+    const timer = setTimeout(async () => {
+      pendingDeleteRef.current = null;
+      setUndoInfo(null);
+      try { await deleteProject(id); } catch (e) { console.error("Failed to delete project", e); }
+    }, 5000);
+
+    pendingDeleteRef.current = { id, timer };
+    setUndoInfo({ id, project: projectToDelete, secondsLeft: 5 });
   }, [projects]);
 
-  const handleUndo = useCallback(async () => {
-    if (!undoInfo) return;
-    setUndoInfo(null);
-    try {
-      // Project is already deleted from backend — recreate it with same name/description
-      const restored = await createProject({
-        name: undoInfo.project.name,
-        description: undoInfo.project.description,
-        userId: user?.uid ?? null,
-      });
-      setProjects(prev =>
-        [...prev, restored].sort(
-          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        )
-      );
-    } catch (e) {
-      console.error("Failed to restore project", e);
-    }
-  }, [undoInfo, user]);
+  // If user navigates away mid-countdown, fire the delete immediately
+  useEffect(() => {
+    return () => {
+      if (pendingDeleteRef.current) {
+        clearTimeout(pendingDeleteRef.current.timer);
+        deleteProject(pendingDeleteRef.current.id).catch(() => {});
+      }
+    };
+  }, []);
 
-  // Countdown tick — only for display, delete already committed
+  const handleUndo = useCallback(() => {
+    if (!undoInfo || !pendingDeleteRef.current) return;
+
+    // Cancel the scheduled delete — project still exists in backend
+    clearTimeout(pendingDeleteRef.current.timer);
+    pendingDeleteRef.current = null;
+
+    // Restore full project (original object with all data intact)
+    setProjects(prev =>
+      [...prev, undoInfo.project].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )
+    );
+    setUndoInfo(null);
+  }, [undoInfo]);
+
+  // Countdown tick
   useEffect(() => {
     if (!undoInfo) return;
-    if (undoInfo.secondsLeft <= 0) {
-      setUndoInfo(null);
-      return;
-    }
+    if (undoInfo.secondsLeft <= 0) { setUndoInfo(null); return; }
     const t = setTimeout(
       () => setUndoInfo(prev => prev ? { ...prev, secondsLeft: prev.secondsLeft - 1 } : null),
       1000,
