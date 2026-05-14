@@ -6,6 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { GlobalBackground } from "@/components/GlobalBackground";
 import { Footer } from "@/components/Footer";
 import { AuthProvider } from "@/lib/auth-context";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export const metadata: Metadata = {
   title: {
@@ -32,7 +33,9 @@ export default function RootLayout({
               <Navbar />
 
               <main className="flex-1 w-full">
-                {children}
+                <ErrorBoundary>
+                  {children}
+                </ErrorBoundary>
               </main>
 
               <Footer />
