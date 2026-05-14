@@ -8,7 +8,7 @@ import { AnimatedSection } from "@/components/AnimatedScroll";
 import { AuthModal } from "@/components/AuthModal";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
 import { useAuth } from "@/lib/auth-context";
-import { getProject, updateProject, getProjectKey } from "@/lib/projects-store";
+import { getProject, updateProject, getProjectKey, addToAnalysisHistory } from "@/lib/projects-store";
 import { useSearchParams, useRouter } from "next/navigation";
 
 function AnalyzePageInner({ projectId }: { projectId: string }) {
@@ -112,12 +112,17 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
     setPendingAction(null);
   };
 
-  // Mark project as in_progress once analysis starts
+  // Mark project as in_progress once analysis starts and append to history
   const handleAnalysisStart = useCallback((analysisId: string) => {
     if (projectId) {
       updateProject(projectId, {
         status: "in_progress",
         analysisId,
+        mode: mode ?? undefined,
+      });
+      addToAnalysisHistory(projectId, {
+        analysis_id: analysisId,
+        created_at: new Date().toISOString(),
         mode: mode ?? undefined,
       });
     }
