@@ -1,21 +1,24 @@
 "use client";
-import React, { useEffect, useState, useRef, use, Suspense } from "react";
-import { getAnalysis, submitFollowUp, AnalysisResult } from "@/lib/api";
+import React, { useEffect, useState, useRef, use, Suspense, useMemo } from "react";
+import { getAnalysis, submitFollowUp, AnalysisResult, getQuestionnaireOptions, QuestionnaireOptions } from "@/lib/api";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionPipeline } from "@/components/DecisionPipeline";
 import { DecisionTrace } from "@/components/DecisionTrace";
-import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle } from "lucide-react";
-import { motion } from "framer-motion";
+import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject, updateAnalysisHistoryEntry, getAnalysisHistory, AnalysisHistoryEntry } from "@/lib/projects-store";
+import { useAuth } from "@/lib/auth-context";
 import { AnalysisHistory } from "@/components/AnalysisHistory";
+import { ArchGuideChat } from "@/components/ArchGuideChat";
 
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+// Stages for document upload flow
 const ANALYSIS_STAGES = [
   {
     statuses: ["queued", "detecting_sections", "parsing"],
@@ -47,27 +50,50 @@ const ANALYSIS_STAGES = [
   },
 ] as const;
 
-function getStageIndex(status: string): number {
-  const idx = ANALYSIS_STAGES.findIndex(s =>
-    (s.statuses as readonly string[]).includes(status)
+// Stages for guided questionnaire flow (synchronous — no document parsing)
+const QUESTIONNAIRE_STAGES = [
+  {
+    statuses: ["queued", "processing"],
+    label: "Processing Answers",
+    shortLabel: "Processing",
+    desc: "Converting your responses into analysis signals",
+    Icon: BookOpen,
+  },
+  {
+    statuses: ["scoring"],
+    label: "Scoring Architectures",
+    shortLabel: "Scoring",
+    desc: "Running deterministic scoring engine",
+    Icon: Activity,
+  },
+  {
+    statuses: ["validating"],
+    label: "Validating Results",
+    shortLabel: "Validating",
+    desc: "Verifying consistency and confidence levels",
+    Icon: ShieldCheck,
+  },
+] as const;
+
+type StageList = typeof ANALYSIS_STAGES | typeof QUESTIONNAIRE_STAGES;
+
+function getStageIndex(status: string, stages: StageList): number {
+  const idx = (stages as readonly { statuses: readonly string[] }[]).findIndex(s =>
+    s.statuses.includes(status)
   );
   return idx === -1 ? 0 : idx;
 }
 
-// Time thresholds (seconds) at which each stage should visually begin,
-// regardless of what the backend last reported. These mirror realistic
-// processing times so the indicator never looks frozen.
-const STAGE_TIME_THRESHOLDS = [0, 14, 38, 54]; // Parsing / Extracting / Scoring / Validating
+// Time thresholds for document flow (seconds per stage: Parsing/Extracting/Scoring/Validating)
+const STAGE_TIME_THRESHOLDS = [0, 14, 38, 54];
 
-function getDisplayStageIndex(backendStatus: string, elapsedSeconds: number): number {
-  const backendIndex = getStageIndex(backendStatus);
-  // Walk thresholds in reverse to find the highest time-based stage reached
+function getDisplayStageIndex(backendStatus: string, elapsedSeconds: number, stages: StageList): number {
+  const backendIndex = getStageIndex(backendStatus, stages);
   let timeIndex = 0;
   for (let i = STAGE_TIME_THRESHOLDS.length - 1; i >= 0; i--) {
     if (elapsedSeconds >= STAGE_TIME_THRESHOLDS[i]) { timeIndex = i; break; }
   }
-  // Never go backwards — always show whichever is further along
-  return Math.max(backendIndex, timeIndex);
+  return Math.max(backendIndex, Math.min(timeIndex, stages.length - 1));
 }
 
 function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> }) {
@@ -75,6 +101,14 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId");
+  const isQuestionnaire = searchParams.get("mode") === "questionnaire";
+  const activeStages: StageList = isQuestionnaire ? QUESTIONNAIRE_STAGES : ANALYSIS_STAGES;
+
+  // Wait for Firebase auth to finish restoring its state before the first
+  // API call. Without this guard, a page refresh fires getAnalysis() while
+  // auth.currentUser is still null (lazy Firebase not yet initialised),
+  // causing the backend to return 401 → "Analysis Failed" error screen.
+  const { loading: authLoading } = useAuth();
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +120,26 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const [resultReady, setResultReady] = useState(false);
   const [forcedStageIndex, setForcedStageIndex] = useState<number | null>(null);
 
+  const [isEditingInputs, setIsEditingInputs] = useState(false);
+  const [questionnaireOptions, setQuestionnaireOptions] = useState<QuestionnaireOptions | null>(null);
+  const [editAnswers, setEditAnswers] = useState<Record<string, string>>({});
+  const [currentEditStep, setCurrentEditStep] = useState(0);
+
+  const sortedEditSignals = useMemo(() => {
+    if (!questionnaireOptions) return [];
+    return Object.entries(questionnaireOptions.signals).sort((a, b) => {
+      const aReq = a[1].required ? 1 : 0;
+      const bReq = b[1].required ? 1 : 0;
+      return bReq - aReq;
+    });
+  }, [questionnaireOptions]);
+
+  useEffect(() => {
+    getQuestionnaireOptions()
+      .then(setQuestionnaireOptions)
+      .catch(err => console.error("Failed to load questionnaire options", err));
+  }, []);
+
   // Load history on mount so returning to a completed result shows the panel immediately
   useEffect(() => {
     if (projectId) setAnalysisHistory(getAnalysisHistory(projectId));
@@ -96,6 +150,12 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   // for stuck sessions. Now uses exponential backoff: 1.5s → 3s → 6s → max 15s,
   // and hard-stops after MAX_POLLS attempts (~3 minutes).
   useEffect(() => {
+    // Don't start polling until Firebase auth has finished initialising.
+    // On a hard refresh, auth.currentUser is null for ~200-500ms while
+    // Firebase restores the session — firing the API call during this window
+    // sends no token and the backend returns 401.
+    if (authLoading) return;
+
     const MAX_POLLS = 40;
     let pollCount = 0;
     let timeoutRef: NodeJS.Timeout;
@@ -110,6 +170,10 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
         if (data.status === "complete" || data.status === "error") {
           if (data.status === "error") {
+            setLoading(false);
+          } else if (isQuestionnaire) {
+            // Questionnaire is synchronous — backend is already done.
+            // Skip the stage animation and show results immediately.
             setLoading(false);
           } else {
             setResultReady(true); // trigger stage fast-forward before revealing results
@@ -138,22 +202,20 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
     fetchResult();
     return () => clearTimeout(timeoutRef);
-  }, [resolvedParams.analysisId]);
+  }, [resolvedParams.analysisId, authLoading]);
 
   // 2. When result is ready, fast-forward through any unseen stages (700ms each) then reveal
   useEffect(() => {
     if (!resultReady) return;
-    const currentStage = forcedStageIndex ?? getDisplayStageIndex(result?.status || "queued", elapsedSeconds);
-    const lastStage = ANALYSIS_STAGES.length - 1;
+    const currentStage = forcedStageIndex ?? getDisplayStageIndex(result?.status || "queued", elapsedSeconds, activeStages);
+    const lastStage = activeStages.length - 1;
     if (currentStage >= lastStage) {
-      // Already at final stage — short pause then reveal
       const t = setTimeout(() => setLoading(false), 600);
       return () => clearTimeout(t);
     }
-    // Advance one stage, then this effect re-runs
     const t = setTimeout(() => setForcedStageIndex(currentStage + 1), 700);
     return () => clearTimeout(t);
-  }, [resultReady, forcedStageIndex, result?.status, elapsedSeconds]);
+  }, [resultReady, forcedStageIndex, result?.status, elapsedSeconds, activeStages]);
 
   // 3. Scroll to top + mark project completed + update history when results arrive
   useEffect(() => {
@@ -203,11 +265,70 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     }
   };
 
+  const handleEditInputsClick = () => {
+    if (!isQuestionnaire) {
+      // Document upload flow — go back to the analyze page so the user
+      // can re-upload a document. Showing questionnaire questions here
+      // makes no sense since no answers were given originally.
+      if (projectId) {
+        router.push(`/projects/${projectId}/analyze?mode=upload`);
+      } else {
+        router.back();
+      }
+      return;
+    }
+
+    // Questionnaire flow — open the inline signal editor as normal.
+    if (!result?.signals) return;
+    const initialAnswers: Record<string, string> = {};
+    Object.entries(result.signals).forEach(([k, v]) => {
+      if (v.value) initialAnswers[k] = v.value;
+    });
+    setEditAnswers(initialAnswers);
+    setCurrentEditStep(0);
+    setIsEditingInputs(true);
+  };
+
+  const handleEditChange = (key: string, val: string) => {
+    setEditAnswers(prev => ({ ...prev, [key]: prev[key] === val ? "" : val }));
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      setSubmittingFollowUp(true);
+      setError(null);
+      const data = await submitFollowUp(resolvedParams.analysisId, editAnswers);
+      setResult(data);
+      setIsEditingInputs(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setError(err.message || "Failed to update inputs");
+    } finally {
+      setSubmittingFollowUp(false);
+    }
+  };
+
+  const handleEditNext = () => {
+    if (currentEditStep < sortedEditSignals.length - 1) {
+      setCurrentEditStep(prev => prev + 1);
+    } else {
+      handleEditSubmit();
+    }
+  };
+
+  const handleEditBack = () => {
+    if (currentEditStep > 0) {
+      setCurrentEditStep(prev => prev - 1);
+    } else {
+      setIsEditingInputs(false);
+    }
+  };
+
   // --- LOADING STATE ---
-  if (loading || ["queued", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
+  if (loading || ["queued", "processing", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
     const currentStatus = result?.status || "queued";
-    const activeIndex = forcedStageIndex ?? getDisplayStageIndex(currentStatus, elapsedSeconds);
-    const activeStage = ANALYSIS_STAGES[activeIndex];
+    const activeIndex = forcedStageIndex ?? getDisplayStageIndex(currentStatus, elapsedSeconds, activeStages);
+    const activeStage = activeStages[activeIndex];
     const ActiveIcon = activeStage.Icon;
 
     return (
@@ -233,23 +354,23 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
               <p className="text-[color:var(--text-secondary)] text-base sm:text-lg font-medium">{activeStage.desc}</p>
             </div>
 
-            {/* Reassurance message after 35 s — tells the user the backend is alive */}
-            {elapsedSeconds >= 35 && (
+            {/* Reassurance message — only for document flow which can take minutes */}
+            {!isQuestionnaire && elapsedSeconds >= 35 && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-semibold"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                Still running — complex documents can take up to 3 minutes
+                Still running - complex documents can take up to 3 minutes
               </motion.div>
             )}
           </div>
 
-          {/* 4-step progress pipeline */}
+          {/* Progress pipeline — steps match the active flow (document or questionnaire) */}
           <div className="w-full px-2">
             <div className="flex items-start w-full">
-              {ANALYSIS_STAGES.map((stage, index) => {
+              {activeStages.map((stage, index) => {
                 const isCompleted = index < activeIndex;
                 const isActive = index === activeIndex;
                 const isPending = index > activeIndex;
@@ -295,7 +416,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                     </div>
 
                     {/* Connector line */}
-                    {index < ANALYSIS_STAGES.length - 1 && (
+                    {index < activeStages.length - 1 && (
                       <div className={`
                         flex-1 h-px mx-2 sm:mx-3 mt-5 transition-colors duration-500
                         ${index < activeIndex ? "bg-[color:var(--text-primary)]" : "bg-[color:var(--border)]"}
@@ -360,32 +481,11 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       {/* Back / Edit Button */}
       <div className="flex items-center justify-between w-full">
         <button
-          onClick={() => {
-            const modeKey = projectId ? `project_${projectId}_mode` : "analyze_mode";
-            const currentMode = localStorage.getItem(modeKey);
-            const base = projectId ? `/projects/${projectId}/analyze` : "/projects";
-            const q = "?";
-
-            if (currentMode === "upload") {
-              router.push(`${base}${q}mode=upload`);
-            } else {
-              // Pre-fill questionnaire answers
-              const answersKey = projectId ? `project_${projectId}_answers` : "questionnaire_answers";
-              if (result?.signals) {
-                const answers: Record<string, string> = {};
-                Object.entries(result.signals).forEach(([key, sig]) => {
-                  if (sig.value) answers[key] = sig.value;
-                });
-                localStorage.setItem(answersKey, JSON.stringify(answers));
-              }
-              if (!projectId) localStorage.setItem("analyze_mode", "questionnaire");
-              router.push(`${base}${q}mode=questionnaire`);
-            }
-          }}
+          onClick={handleEditInputsClick}
           className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
         >
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          Edit Inputs
+          {isQuestionnaire ? "Edit Inputs" : "Re-upload Document"}
         </button>
 
         {projectId && (
@@ -399,7 +499,141 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         )}
       </div>
 
-      <ResultsDashboard result={result} />
+      {isEditingInputs && questionnaireOptions && sortedEditSignals.length > 0 ? (
+        <div className="w-full flex flex-col items-center max-w-2xl mx-auto">
+          {/* Progress Bar */}
+          <div className="w-full mb-6">
+            <div className="flex justify-between items-center mb-1 text-[10px] font-bold uppercase tracking-widest text-[color:var(--text-secondary)]">
+              <span>{currentEditStep + 1} / {sortedEditSignals.length}</span>
+              <span>{Math.round(((currentEditStep + 1) / sortedEditSignals.length) * 100)}%</span>
+            </div>
+            <div className="w-full h-1 bg-[color:var(--surface)] rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-[color:var(--text-primary)]"
+                initial={{ width: 0 }}
+                animate={{ width: `${((currentEditStep + 1) / sortedEditSignals.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="w-full glass-panel p-6 md:p-10 rounded-[2.5rem] shadow-xl flex flex-col min-h-fit">
+            <AnimatePresence mode="wait">
+              {(() => {
+                const [key, schema] = sortedEditSignals[currentEditStep];
+                const originalSignal = result.signals?.[key];
+                const isMissing = !originalSignal?.value;
+                const currentValue = editAnswers[key];
+                const isSuccessfullyExtracted = originalSignal?.value && !isMissing;
+
+                return (
+                  <motion.div
+                    key={currentEditStep}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="flex flex-col"
+                  >
+                    <div className="mb-6">
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className={`px-3 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
+                          schema.required
+                            ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-[color:var(--text-primary)]"
+                            : "bg-[color:var(--surface)] text-[color:var(--text-secondary)] border-[color:var(--border)]"
+                        }`}>
+                          {schema.required ? "Required" : "Optional"}
+                        </span>
+                        
+                        {isMissing && !currentValue && (
+                          <span className="px-3 py-0.5 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] font-bold uppercase flex items-center gap-1">
+                            <AlertCircle size={10} /> Missing
+                          </span>
+                        )}
+                        {isSuccessfullyExtracted && (
+                          <span className="px-3 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold uppercase flex items-center gap-1">
+                            <ShieldCheck size={10} /> Extracted
+                          </span>
+                        )}
+                        <span className="text-[color:var(--text-secondary)] text-[9px] font-bold uppercase tracking-widest ml-auto">
+                          Signal {currentEditStep + 1}
+                        </span>
+                      </div>
+
+                      <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">
+                        {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                      </h2>
+                      <p className="text-sm md:text-base text-[color:var(--text-secondary)] leading-relaxed">
+                        {schema.description}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3 mb-8">
+                      {schema.options.map((opt) => {
+                        const isSelected = currentValue === opt.value;
+                        const [title, desc] = opt.label.split(" (");
+                        return (
+                          <motion.button
+                            key={opt.value}
+                            whileTap={{ scale: 0.99 }}
+                            onClick={() => handleEditChange(key, opt.value)}
+                            className={`
+                              w-full px-6 py-4 rounded-full border text-left transition-all duration-200
+                              ${isSelected
+                                ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-[color:var(--text-primary)] shadow-md"
+                                : "bg-transparent border-[color:var(--border)] text-[color:var(--text-primary)] hover:border-[color:var(--text-secondary)] hover:bg-[color:var(--surface)]"
+                              }
+                            `}
+                          >
+                            <div className="flex flex-col">
+                              <span className="text-base font-bold leading-tight">{title}</span>
+                              {desc && (
+                                <span className={`text-xs mt-0.5 leading-tight opacity-70 ${isSelected ? "text-[color:var(--background)]" : "text-[color:var(--text-secondary)]"}`}>
+                                  {desc.replace(")", "")}
+                                </span>
+                              )}
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                );
+              })()}
+            </AnimatePresence>
+
+            <div className="flex items-center justify-between pt-6 border-t border-[color:var(--border)] mt-auto">
+              <button
+                onClick={handleEditBack}
+                disabled={submittingFollowUp}
+                className="flex items-center gap-1 text-xs font-bold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] p-2 transition-colors"
+              >
+                <ChevronLeft size={16} /> {currentEditStep === 0 ? "Cancel" : "Back"}
+              </button>
+
+              <button
+                onClick={handleEditNext}
+                disabled={submittingFollowUp}
+                className={`
+                  flex items-center gap-2 px-8 py-3 rounded-full font-bold text-xs transition-all shadow-lg
+                  ${submittingFollowUp
+                    ? "bg-[color:var(--surface)] text-[color:var(--text-secondary)] cursor-not-allowed border border-[color:var(--border)]"
+                    : "bg-[color:var(--text-primary)] text-[color:var(--background)] hover:scale-105"
+                  }
+                `}
+              >
+                {submittingFollowUp ? (
+                  <><Loader2 className="animate-spin" size={14} /> Recalculating</>
+                ) : currentEditStep === sortedEditSignals.length - 1 ? (
+                  <>Recalculate <Activity size={14} /></>
+                ) : (
+                  <>Next Signal <ChevronRight size={14} /></>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <ResultsDashboard result={result} />
 
       {/* Analysis History strip — shown when project has 2+ runs */}
       {projectId && analysisHistory.length >= 2 && (
@@ -627,6 +861,16 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         </div>
 
       </div>
+        </>
+      )}
+
+      {/* Floating chat widget */}
+      {result.recommended && (
+        <ArchGuideChat
+          analysisId={resolvedParams.analysisId}
+          result={result}
+        />
+      )}
     </div>
   );
 }

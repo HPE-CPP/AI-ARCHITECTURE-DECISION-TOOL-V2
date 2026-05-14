@@ -57,16 +57,6 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
         "moderate":           {"RAG": 0.8, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
         "specialized":        {"RAG": 0.85, "FineTuning": 0.75, "CAG": 0.45, "Hybrid": 0.6},
         "highly_specialized": {"RAG": 0.68, "FineTuning": 0.95, "CAG": 0.25, "Hybrid": 0.65},
-        "moderate": {"RAG": 0.6, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.5},
-        "high": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.4, "Hybrid": 0.7},
-        "very_high": {"RAG": 0.7, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.8},
-        "critical": {"RAG": 0.5, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.9},
-    },
-    "domain_specificity": {
-        "general": {"RAG": 0.7, "FineTuning": 0.3, "CAG": 0.8, "Hybrid": 0.4},
-        "moderate": {"RAG": 0.8, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.6},
-        "specialized": {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.2, "Hybrid": 0.7},
-        "highly_specialized": {"RAG": 0.4, "FineTuning": 1.0, "CAG": 0.1, "Hybrid": 0.8},
     },
     "security_level": {
         "standard": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.7, "Hybrid": 0.6},

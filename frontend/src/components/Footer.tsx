@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { Hexagon } from "lucide-react";
-import { motion, Variants } from "framer-motion";
+import { m, Variants } from "framer-motion";
 
 export function Footer() {
   const router = useRouter();
@@ -102,7 +102,7 @@ export function Footer() {
 
         {/* Hero Text Section - Optimized for Single Line & No Wrap */}
         <div className="relative w-full overflow-hidden pb-4">
-          <motion.h1
+          <m.h1
             variants={containerVariants}
             initial="hidden"
             whileInView="visible"
@@ -115,15 +115,15 @@ export function Footer() {
                 key={index}
                 className="inline-block overflow-hidden"
               >
-                <motion.span
+                <m.span
                   variants={letterVariants}
                   style={{ display: "inline-block" }}
                 >
                   {char}
-                </motion.span>
+                </m.span>
               </span>
             ))}
-          </motion.h1>
+          </m.h1>
         </div>
       </div>
 

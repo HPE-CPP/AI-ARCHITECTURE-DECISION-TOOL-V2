@@ -118,7 +118,7 @@ async function uploadWithProgress(
   file: File,
   provider: string,
   projectId: string | undefined,
-  onProgress: (pct: number) => void,
+  onProgress: (pct: number, msg: string) => void,
 ): Promise<{ analysis_id: string; status: string }> {
   return new Promise(async (resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -130,14 +130,67 @@ async function uploadWithProgress(
     const token = await getCachedAuthToken();
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
-    // Cap at 90 so the "processing" phase has room to animate to 100
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 90));
+    let currentPct = 0;
+    let interval: ReturnType<typeof setInterval> | undefined = undefined;
+    // Guards against the race where xhr.onload fires before xhr.upload.onload
+    // (fast network / localhost). Without this flag, the interval would be
+    // started AFTER the XHR is already done and would run forever.
+    let xhrDone = false;
+
+    const stopInterval = () => {
+      xhrDone = true;
+      if (interval !== undefined) {
+        clearInterval(interval);
+        interval = undefined;
       }
     };
 
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const uploadPct = Math.round((e.loaded / e.total) * 10);
+        if (uploadPct > currentPct) {
+          currentPct = uploadPct;
+          onProgress(currentPct, "Uploading document");
+        }
+      }
+    };
+
+    xhr.upload.onload = () => {
+      // If xhr.onload already fired (very fast upload), don't start interval
+      if (xhrDone) return;
+
+      let currentPctFloat = currentPct;
+      interval = setInterval(() => {
+        if (xhrDone) {
+          stopInterval();
+          return;
+        }
+        if (currentPctFloat < 99) {
+          if (currentPctFloat > 85) {
+            currentPctFloat += 0.2;
+          } else if (currentPctFloat > 60) {
+            currentPctFloat += 0.5;
+          } else {
+            currentPctFloat += 1;
+          }
+
+          const displayPct = Math.floor(currentPctFloat);
+
+          let msg = "Uploading document";
+          if (displayPct >= 90) msg = "Finalizing results";
+          else if (displayPct >= 75) msg = "Computing scores";
+          else if (displayPct >= 60) msg = "Running analysis";
+          else if (displayPct >= 45) msg = "Generating embeddings";
+          else if (displayPct >= 30) msg = "Chunking content";
+          else if (displayPct >= 15) msg = "Extracting text";
+
+          onProgress(displayPct, msg);
+        }
+      }, 300);
+    };
+
     xhr.onload = () => {
+      stopInterval();
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText));
@@ -154,8 +207,14 @@ async function uploadWithProgress(
       }
     };
 
-    xhr.onerror = () => reject(new Error("Network error — check your connection and try again"));
-    xhr.ontimeout = () => reject(new Error("Upload timed out"));
+    xhr.onerror = () => {
+      stopInterval();
+      reject(new Error("Network error - check your connection and try again"));
+    };
+    xhr.ontimeout = () => {
+      stopInterval();
+      reject(new Error("Upload timed out"));
+    };
 
     const formData = new FormData();
     formData.append("file", file);
@@ -169,6 +228,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
   const [uploading, setUploading] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<"uploading" | "processing">("uploading");
   const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -209,13 +269,18 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
       setUploadPhase("uploading");
       setError(null);
       setProgress(0);
+      setStatusMessage("Preparing upload...");
 
       const provider = localStorage.getItem("llm_provider") || "ollama";
 
-      const res = await uploadWithProgress(file, provider, projectId, setProgress);
+      const res = await uploadWithProgress(file, provider, projectId, (pct, msg) => {
+        setProgress(pct);
+        setStatusMessage(msg);
+      });
 
       setUploadPhase("processing");
       setProgress(100);
+      setStatusMessage("Analysis complete");
 
       onAnalysisStart?.(res.analysis_id);
 
@@ -232,15 +297,11 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
       setError(err.message || "Failed to upload document");
       setUploading(false);
       setProgress(0);
+      setStatusMessage("");
     }
   };
 
   const isLargeFile = file && file.size > WARN_SIZE_BYTES;
-
-  const uploadStatusLabel =
-    uploadPhase === "processing" ? "Starting analysis..." :
-    progress < 5 ? "Preparing upload..." :
-    `Uploading... ${progress}%`;
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -249,7 +310,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
           const { title, body, action, Icon, variant } = parseUploadError(error);
           const isGuidance = variant === "guidance";
           const colors = isGuidance
-            ? { border: "border-amber-500/25", bg: "bg-amber-500/8", icon: "bg-amber-500/15 text-amber-400", title: "text-amber-400", body: "text-amber-400/75", divider: "bg-amber-500/15", action: "text-amber-500/80" }
+            ? { border: "border-red-500/25", bg: "bg-red-500/8", icon: "bg-red-500/15 text-red-400", title: "text-red-400", body: "text-red-400/75", divider: "bg-red-500/15", action: "text-red-400/80" }
             : { border: "border-red-500/25", bg: "bg-red-500/8", icon: "bg-red-500/15 text-red-400", title: "text-red-400", body: "text-red-400/75", divider: "bg-red-500/15", action: "text-red-400/70" };
 
           return (
@@ -376,7 +437,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                 {isLargeFile && !uploading && (
                   <div className="flex items-center gap-1.5 mt-2 text-amber-500 text-xs font-semibold">
                     <AlertTriangle size={12} />
-                    Large file — analysis may take a few extra minutes
+                    Large file - analysis may take a few extra minutes
                   </div>
                 )}
 
@@ -389,7 +450,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                       <Loader2 size={14} className="animate-spin text-[color:var(--primary)] shrink-0" />
                     )}
                     <span className={`text-xs font-bold ${uploadPhase === "processing" ? "text-emerald-500" : "text-[color:var(--text-secondary)]"}`}>
-                      {uploadStatusLabel}
+                      {statusMessage}
                     </span>
                   </div>
                 )}
@@ -405,7 +466,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
             <div className="flex gap-4">
               <button
                 id="cancel-upload-btn"
-                onClick={() => { setFile(null); setError(null); setProgress(0); }}
+                onClick={() => { setFile(null); setError(null); setProgress(0); setStatusMessage(""); }}
                 disabled={uploading}
                 className="flex-1 py-4 px-6 rounded-full font-semibold border border-[color:var(--border)] hover:bg-[color:var(--background)] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-[color:var(--text-primary)]"
               >
@@ -420,7 +481,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                 {uploading ? (
                   <>
                     <Loader2 className="animate-spin" size={20} />
-                    {uploadStatusLabel}
+                    {uploadPhase === "processing" ? "Redirecting..." : `Processing... ${progress}%`}
                   </>
                 ) : (
                   "Begin Analysis"

@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
-import { motion, MotionValue } from 'framer-motion';
+import { m, MotionValue } from 'framer-motion';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -10,7 +9,7 @@ import { cn } from '@/lib/utils';
 
 // --- Magnetic Component ---
 const Magnetic = ({ children }: { children: React.ReactNode }) => {
-    return <motion.div whileHover={{ scale: 1.05 }}>{children}</motion.div>;
+    return <m.div whileHover={{ scale: 1.05 }}>{children}</m.div>;
 };
 
 // --- DottedSurface Component ---
@@ -21,117 +20,139 @@ type DottedSurfaceProps = {
 export function DottedSurface({ className }: DottedSurfaceProps) {
     const { theme } = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
-    const sceneRef = useRef<{
-        scene: THREE.Scene;
-        renderer: THREE.WebGLRenderer;
-        animationId: number;
-    } | null>(null);
 
     useEffect(() => {
-        if (!containerRef.current) return;
+        const container = containerRef.current;
+        if (!container) return;
 
-        const SEPARATION = 140;
-        const AMOUNTX = 50;
-        const AMOUNTY = 50;
+        let animationId = 0;
+        let renderer: any = null;
+        let geometry: any = null;
+        let material: any = null;
+        let cancelled = false;
 
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
-        camera.position.set(0, 300, 1000);
+        const init = async () => {
+            // Skip heavy WebGL particles on mobile
+            if (window.innerWidth < 768) return;
+            const THREE = await import("three");
+            if (cancelled || !container) return;
 
-        const renderer = new THREE.WebGLRenderer({
-            alpha: false,
-            antialias: true
-        });
+            const SEPARATION = 140;
+            const AMOUNTX = 50;
+            const AMOUNTY = 50;
 
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.setSize(containerRef.current.offsetWidth, containerRef.current.offsetHeight);
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
+            camera.position.set(0, 300, 1000);
 
-        const bgColor = theme === 'dark' ? 0xffffff : 0x000000;
-        renderer.setClearColor(bgColor, 1);
+            renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            renderer.setSize(container.offsetWidth, container.offsetHeight);
 
-        containerRef.current.appendChild(renderer.domElement);
+            const bgColor = theme === 'dark' ? 0xffffff : 0x000000;
+            renderer.setClearColor(bgColor, 1);
+            container.appendChild(renderer.domElement);
 
-        const numParticles = AMOUNTX * AMOUNTY;
-        const positions = new Float32Array(numParticles * 3);
-        const colors = new Float32Array(numParticles * 3);
+            const numParticles = AMOUNTX * AMOUNTY;
+            const positions = new Float32Array(numParticles * 3);
+            const colors = new Float32Array(numParticles * 3);
 
-        const dotColor = theme === 'dark' ? new THREE.Color(0, 0, 0) : new THREE.Color(1, 1, 1);
-
-        let i = 0;
-        for (let ix = 0; ix < AMOUNTX; ix++) {
-            for (let iy = 0; iy < AMOUNTY; iy++) {
-                positions[i * 3] = ix * SEPARATION - (AMOUNTX * SEPARATION) / 2;
-                positions[i * 3 + 1] = 0;
-                positions[i * 3 + 2] = iy * SEPARATION - (AMOUNTY * SEPARATION) / 2;
-
-                colors[i * 3] = dotColor.r;
-                colors[i * 3 + 1] = dotColor.g;
-                colors[i * 3 + 2] = dotColor.b;
-                i++;
-            }
-        }
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-        const material = new THREE.PointsMaterial({
-            size: 8,
-            vertexColors: true,
-            transparent: true,
-            opacity: 0.8,
-        });
-
-        const particles = new THREE.Points(geometry, material);
-        scene.add(particles);
-
-        let count = 0;
-        let animationId: number = 0;
-
-        const animate = () => {
-            animationId = requestAnimationFrame(animate);
-            const positionAttribute = geometry.attributes.position;
-            const posArray = positionAttribute.array as Float32Array;
+            const dotColor = theme === 'dark'
+                ? new THREE.Color(0, 0, 0)
+                : new THREE.Color(1, 1, 1);
 
             let i = 0;
             for (let ix = 0; ix < AMOUNTX; ix++) {
                 for (let iy = 0; iy < AMOUNTY; iy++) {
-                    posArray[i * 3 + 1] = Math.sin((ix + count) * 0.3) * 60 + Math.sin((iy + count) * 0.5) * 60;
+                    positions[i * 3]     = ix * SEPARATION - (AMOUNTX * SEPARATION) / 2;
+                    positions[i * 3 + 1] = 0;
+                    positions[i * 3 + 2] = iy * SEPARATION - (AMOUNTY * SEPARATION) / 2;
+                    colors[i * 3]     = dotColor.r;
+                    colors[i * 3 + 1] = dotColor.g;
+                    colors[i * 3 + 2] = dotColor.b;
                     i++;
                 }
             }
-            positionAttribute.needsUpdate = true;
-            renderer.render(scene, camera);
-            count += 0.04;
+
+            geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+
+            material = new THREE.PointsMaterial({
+                size: 8,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+            });
+
+            const particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            let count = 0;
+
+            const animate = () => {
+                if (cancelled) return;
+                animationId = requestAnimationFrame(animate);
+                const positionAttribute = geometry.attributes.position;
+                const posArray = positionAttribute.array as Float32Array;
+
+                let j = 0;
+                for (let ix = 0; ix < AMOUNTX; ix++) {
+                    for (let iy = 0; iy < AMOUNTY; iy++) {
+                        posArray[j * 3 + 1] =
+                            Math.sin((ix + count) * 0.3) * 60 +
+                            Math.sin((iy + count) * 0.5) * 60;
+                        j++;
+                    }
+                }
+                positionAttribute.needsUpdate = true;
+                renderer.render(scene, camera);
+                count += 0.04;
+            };
+
+            const handleResize = () => {
+                if (!container) return;
+                const w = container.offsetWidth;
+                const h = container.offsetHeight;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            };
+
+            window.addEventListener('resize', handleResize);
+            animate();
+
+            // Store resize handler so we can remove it on cleanup
+            (renderer as any).__handleResize = handleResize;
         };
 
-        const handleResize = () => {
-            if (!containerRef.current) return;
-            const width = containerRef.current.offsetWidth;
-            const height = containerRef.current.offsetHeight;
-            camera.aspect = width / height;
-            camera.updateProjectionMatrix();
-            renderer.setSize(width, height);
-        };
-
-        window.addEventListener('resize', handleResize);
-        animate();
-
-        sceneRef.current = { scene, renderer, animationId };
+        // Defer so it never blocks LCP
+        const timeout = setTimeout(init, 300);
 
         return () => {
-            window.removeEventListener('resize', handleResize);
-            cancelAnimationFrame(animationId);
-            geometry.dispose();
-            material.dispose();
-            renderer.dispose();
-            if (containerRef.current?.contains(renderer.domElement)) {
-                containerRef.current.removeChild(renderer.domElement);
+            cancelled = true;
+            clearTimeout(timeout);
+            if (animationId) cancelAnimationFrame(animationId);
+            if (renderer?.__handleResize) {
+                window.removeEventListener('resize', renderer.__handleResize);
+            }
+            geometry?.dispose();
+            material?.dispose();
+            if (renderer) {
+                renderer.dispose();
+                if (container.contains(renderer.domElement)) {
+                    container.removeChild(renderer.domElement);
+                }
             }
         };
     }, [theme]);
 
-    return <div ref={containerRef} className={cn('absolute inset-0 pointer-events-none', className)} />;
+    return (
+        <div
+            ref={containerRef}
+            className={cn('absolute inset-0 pointer-events-none', className)}
+        />
+    );
 }
 
 // --- Main CTA Component ---
@@ -151,7 +172,7 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
 
     return (
         <div className="w-full px-4 md:px-6 py-12 md:py-20">
-            <motion.section
+            <m.section
                 style={{ opacity: ctaOpacity }}
                 className={cn(
                     "relative max-w-6xl mx-auto min-h-[600px] md:min-h-[500px] flex flex-col justify-center items-center text-center",
@@ -161,14 +182,12 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                         : "bg-black text-white border-white/10"
                 )}
             >
-                {/* BACKGROUND EFFECT */}
                 <DottedSurface className="z-[-1]" />
 
                 <div className="max-w-4xl mx-auto w-full px-6 md:px-8 py-16 md:py-20 flex flex-col items-center relative z-10">
                     <h2 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 md:mb-8 leading-[1.1] flex flex-col">
-                        {/* Wrapper for "Stop Guessing" */}
                         <span className="block overflow-hidden h-auto md:h-[1.2em] py-1">
-                            <motion.span
+                            <m.span
                                 className="block"
                                 initial={{ y: "100%" }}
                                 whileInView={{ y: 0 }}
@@ -176,12 +195,11 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                                 transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
                             >
                                 Stop Guessing.
-                            </motion.span>
+                            </m.span>
                         </span>
 
-                        {/* Wrapper for "Start Building" */}
                         <span className="block overflow-hidden h-auto md:h-[1.2em] py-1">
-                            <motion.span
+                            <m.span
                                 className="block opacity-30 text-[0.85em]"
                                 initial={{ y: "100%" }}
                                 whileInView={{ y: 0 }}
@@ -189,7 +207,7 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                                 transition={{ duration: 1.2, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
                             >
                                 Start Building.
-                            </motion.span>
+                            </m.span>
                         </span>
                     </h2>
 
@@ -205,12 +223,13 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                                     ? "bg-black text-white hover:bg-zinc-800"
                                     : "bg-white text-black hover:bg-zinc-200"
                             )}>
-                                Begin Analysis <ArrowRight size={mounted && window.innerWidth < 768 ? 18 : 22} />
+                                Begin Analysis{" "}
+                                <ArrowRight size={22} />
                             </button>
                         </Link>
                     </Magnetic>
                 </div>
-            </motion.section>
+            </m.section>
         </div>
     );
 }

@@ -1,6 +1,6 @@
 "use client";
-import React, { useRef, useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import React, { useRef, useState } from "react";
+import { m } from "framer-motion";
 
 export function Magnetic({ children, className }: { children: React.ReactNode, className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -20,7 +20,7 @@ export function Magnetic({ children, className }: { children: React.ReactNode, c
   };
 
   return (
-    <motion.div
+    <m.div
       className={className || "magnetic-wrap"}
       ref={ref}
       onMouseMove={handleMouse}
@@ -29,6 +29,6 @@ export function Magnetic({ children, className }: { children: React.ReactNode, c
       transition={{ type: "spring", stiffness: 150, damping: 15, mass: 0.1 }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

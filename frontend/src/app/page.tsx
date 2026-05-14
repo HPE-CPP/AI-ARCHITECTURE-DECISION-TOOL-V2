@@ -1,48 +1,45 @@
 "use client";
-import React, { useRef, useEffect } from "react";
-import { motion, useScroll, useTransform, useIsPresent } from "framer-motion";
+import React, { useRef, useEffect, useState } from "react";
+import { m, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight, Sparkles, Database, Layers, Cpu, Zap, Fingerprint } from "lucide-react";
 import { AnimatedSection } from "@/components/AnimatedScroll";
 import { Magnetic } from "@/components/Magnetic";
 import { ReadyToArchitect } from "@/components/CTA";
 
-// Refined "Rise Up" variant for the Hero to ensure smoothness
-const heroRiseVariant = {
-  initial: { y: "110%", opacity: 0 },
-  animate: {
-    y: 0,
-    opacity: 1,
-    transition: {
-      duration: 1.4,
-      ease: [0.16, 1, 0.3, 1], // Custom cubic-bezier for luxury feel
-    }
-  }
-} as const;
 
 export default function LandingPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: containerRef, offset: ["start start", "end end"] });
 
+  // Detect desktop after mount — avoids SSR mismatch and skips scroll
+  // transforms on mobile where they add JS overhead without visual benefit.
+  const [isDesktop, setIsDesktop] = useState(false);
+
   useEffect(() => {
-    window.scrollTo(0, 0);
+    if (window.location.hash) {
+      setTimeout(() => {
+        const id = window.location.hash.substring(1);
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } else {
+      window.scrollTo(0, 0);
+    }
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
     }
+    setIsDesktop(window.matchMedia('(min-width: 768px)').matches);
   }, []);
 
   // Scroll Transforms
   const heroOpacity = useTransform(scrollYProgress, [0, 0.75, 0.82], [1, 1, 0]);
   const heroScale = useTransform(scrollYProgress, [0, 0.75, 0.82], [1, 1, 0.98]);
-  const heroBlur = useTransform(scrollYProgress, [0, 0.78, 0.82], ["blur(0px)", "blur(0px)", "blur(20px)"]);
 
   const featuresOpacity = useTransform(scrollYProgress, [0.2, 0.65, 0.72], [1, 1, 0]);
   const featuresScale = useTransform(scrollYProgress, [0.2, 0.65, 0.72], [1, 1, 0.98]);
-  const featuresBlur = useTransform(scrollYProgress, [0.2, 0.68, 0.72], ["blur(0px)", "blur(0px)", "blur(20px)"]);
 
   const processOpacity = useTransform(scrollYProgress, [0.55, 0.88, 0.92], [1, 1, 0]);
   const processScale = useTransform(scrollYProgress, [0.55, 0.88, 0.92], [1, 1, 0.98]);
-  const processBlur = useTransform(scrollYProgress, [0.55, 0.9, 0.92], ["blur(0px)", "blur(0px)", "blur(20px)"]);
 
   const ctaOpacity = useTransform(scrollYProgress, [0.6, 0.7], [0, 1]);
 
@@ -50,9 +47,9 @@ export default function LandingPage() {
     <div className="w-full relative min-h-screen flex flex-col items-center overflow-x-hidden pt-0" ref={containerRef}>
 
       {/* HERO SECTION */}
-      <motion.section
+      <m.section
         id="home"
-        style={{ opacity: heroOpacity, scale: heroScale, filter: heroBlur }}
+        style={isDesktop ? { opacity: heroOpacity, scale: heroScale } : undefined}
         className="min-h-screen flex flex-col items-center justify-center pt-24 px-4 w-full max-w-5xl mx-auto text-center z-10"
       >
         <AnimatedSection delay={0.1}>
@@ -63,41 +60,31 @@ export default function LandingPage() {
         </AnimatedSection>
 
         <div className="mb-10 text-[min(12vw,6rem)] leading-[1.15] font-black tracking-[-0.04em] text-[color:var(--text-primary)] relative">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[color:var(--text-primary)]/5 blur-[120px] rounded-full -z-10 pointer-events-none" />
+          <div className="hidden md:block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[color:var(--text-primary)]/5 blur-[120px] rounded-full -z-10 pointer-events-none" />
 
           <h1 className="flex flex-col items-center">
+            {/* CSS animation — visible immediately from SSR, no JS required for LCP */}
             <span className="block overflow-hidden h-[1.2em] -mb-[0.1em]">
-              <motion.span
-                className="block"
-                variants={heroRiseVariant}
-                initial="initial"
-                animate="animate"
-              >
+              <span className="block hero-rise">
                 Design Your
-              </motion.span>
+              </span>
             </span>
             <span className="block overflow-hidden h-[1.2em]">
-              <motion.span
-                className="block text-[color:var(--text-secondary)]"
-                variants={heroRiseVariant}
-                initial="initial"
-                animate="animate"
-                transition={{ ...heroRiseVariant.animate.transition, delay: 0.15 }}
-              >
+              <span className="block text-[color:var(--text-secondary)] hero-rise-delay">
                 Architecture.
-              </motion.span>
+              </span>
             </span>
           </h1>
         </div>
 
-        <AnimatedSection delay={1.4} className="mt-4">
+        <AnimatedSection delay={0.2} className="mt-4">
           <p className="text-lg sm:text-xl text-[color:var(--text-secondary)] max-w-xl mx-auto font-medium leading-relaxed tracking-tight">
             Stop guessing between RAG, Fine-Tuning, or CAG. <br className="hidden md:block" />
             Let our deterministic intelligence validate your use case instantly.
           </p>
         </AnimatedSection>
 
-        <AnimatedSection delay={1.6} className="mt-12">
+        <AnimatedSection delay={0.4} className="mt-12">
           <Magnetic>
             <Link href="/projects">
               <button className="px-10 py-5 rounded-full text-[color:var(--background)] bg-[color:var(--primary)] font-bold text-sm hover:invert transition-all flex items-center justify-center gap-3 shadow-2xl active:scale-95">
@@ -106,15 +93,15 @@ export default function LandingPage() {
             </Link>
           </Magnetic>
         </AnimatedSection>
-      </motion.section>
+      </m.section>
 
       {/* LUXURY SCROLL GAP */}
       <div className="h-[20vh] w-full" />
 
       {/* FEATURES SECTION */}
-      <motion.section
+      <m.section
         id="features"
-        style={{ opacity: featuresOpacity, scale: featuresScale, filter: featuresBlur }}
+        style={isDesktop ? { opacity: featuresOpacity, scale: featuresScale } : undefined}
         className="w-full py-24 min-h-screen flex flex-col justify-center items-center z-20 isolate"
       >
         <div className="max-w-6xl mx-auto px-6 w-full">
@@ -124,7 +111,7 @@ export default function LandingPage() {
             <h2 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tighter mb-6 leading-[1.2] flex flex-col">
 
               <span className="block overflow-hidden">
-                <motion.span
+                <m.span
                   className="block"
                   initial={{ y: "100%" }}
                   whileInView={{ y: 0 }}
@@ -132,11 +119,11 @@ export default function LandingPage() {
                   transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] as const }}
                 >
                   Unparalleled
-                </motion.span>
+                </m.span>
               </span>
 
               <span className="block overflow-hidden">
-                <motion.span
+                <m.span
                   className="block opacity-30"
                   initial={{ y: "100%" }}
                   whileInView={{ y: 0 }}
@@ -144,7 +131,7 @@ export default function LandingPage() {
                   transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] as const }}
                 >
                   Precision.
-                </motion.span>
+                </m.span>
               </span>
 
             </h2>
@@ -162,7 +149,7 @@ export default function LandingPage() {
               { title: "CAG", desc: "Context caching and multi-tier architectures for enterprise scale.", icon: Layers }
             ].map((feature, i) => (
 
-              <motion.div
+              <m.div
                 key={i}
                 initial={{ opacity: 0, y: 50 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -171,7 +158,7 @@ export default function LandingPage() {
 
                 className="relative z-10 p-6 sm:p-10 text-left group transition-all h-full
                      bg-gradient-to-br from-[color:var(--surface)]/90 via-[color:var(--surface)]/70 to-[color:var(--surface)]/40
-                     backdrop-blur-[80px] backdrop-saturate-[1.8]
+                     md:backdrop-blur-[80px] md:backdrop-saturate-[1.8]
                      
                      border border-black/40 dark:border-white/40
                      
@@ -192,7 +179,7 @@ export default function LandingPage() {
 
                 {/* TITLE */}
                 <h3 className="relative z-10 text-2xl sm:text-3xl font-black mb-4 tracking-tighter overflow-hidden">
-                  <motion.span
+                  <m.span
                     initial={{ y: "100%" }}
                     whileInView={{ y: 0 }}
                     viewport={{ once: true }}
@@ -200,7 +187,7 @@ export default function LandingPage() {
                     transition={{ duration: 0.8, ease: "circOut" }}
                   >
                     {feature.title}
-                  </motion.span>
+                  </m.span>
                 </h3>
 
                 {/* DESCRIPTION */}
@@ -208,22 +195,22 @@ export default function LandingPage() {
                   {feature.desc}
                 </p>
 
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
-      </motion.section>
+      </m.section>
 
       {/* HOW IT WORKS SECTION */}
-      <motion.section
+      <m.section
         id="how-it-works"
-        style={{ opacity: processOpacity, scale: processScale, filter: processBlur }}
+        style={isDesktop ? { opacity: processOpacity, scale: processScale } : undefined}
         className="w-full py-24 min-h-screen flex flex-col justify-center items-center z-30"
       >
         <div className="max-w-4xl mx-auto px-6 w-full">
           <h2 className="text-3xl sm:text-5xl md:text-7xl font-black tracking-tighter mb-10 sm:mb-16 text-center leading-[1.1] flex flex-col items-center">
             <span className="block overflow-hidden">
-              <motion.span
+              <m.span
                 className="block"
                 initial={{ y: "100%" }}
                 whileInView={{ y: 0 }}
@@ -231,17 +218,17 @@ export default function LandingPage() {
                 transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] as const }}
               >
                 The <span className="opacity-20">Process.</span>
-              </motion.span>
+              </m.span>
             </span>
           </h2>
 
           <div className="grid grid-cols-1 gap-5">
             {[
-              { step: "01", title: "Requirements Understanding", desc: "We analyze your inputs — whether through documents or guided questions — to identify key factors like data size, update frequency, and complexity.", icon: Fingerprint },
+              { step: "01", title: "Requirements Understanding", desc: "We analyze your inputs, whether through documents or guided questions, to identify key factors like data size, update frequency, and complexity.", icon: Fingerprint },
               { step: "02", title: "Signal Extraction & Evaluation", desc: "Your inputs are converted into structured signals and evaluated using deterministic logic to assess suitability across different AI architectures.", icon: Zap },
               { step: "03", title: "Architecture Recommendation", desc: "Based on the analysis, we provide a clear recommendation with rankings, confidence scores, and detailed reasoning for each option.", icon: Layers }
             ].map((step, i) => (
-              <motion.div
+              <m.div
                 key={i}
                 initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -257,7 +244,7 @@ export default function LandingPage() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-xl sm:text-3xl font-black mb-2 tracking-tighter overflow-hidden">
-                    <motion.span
+                    <m.span
                       className="block"
                       initial={{ y: "100%" }}
                       whileInView={{ y: 0 }}
@@ -265,17 +252,17 @@ export default function LandingPage() {
                       transition={{ duration: 0.8, ease: "circOut" }}
                     >
                       {step.title}
-                    </motion.span>
+                    </m.span>
                   </h3>
                   <p className="text-lg font-medium text-[color:var(--text-secondary)] group-hover:text-[color:var(--background)] transition-colors duration-500">
                     {step.desc}
                   </p>
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
-      </motion.section>
+      </m.section>
       {/* CTA SECTION - Renders only on Home */}
       <ReadyToArchitect />
 

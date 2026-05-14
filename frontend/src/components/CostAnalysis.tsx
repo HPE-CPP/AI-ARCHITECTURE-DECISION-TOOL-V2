@@ -41,6 +41,34 @@ function fmtAvg(r: [number, number]): number {
 
 const COLORS = ["var(--primary)", "var(--accent)", "var(--text-secondary)", "#f59e0b"];
 
+const CustomYAxisTick = (props: any) => {
+  const { x, y, payload, isNarrow } = props;
+  const name = payload.value || "";
+  let line1 = name;
+  let line2 = "";
+
+  if (name.length > 15) {
+    const spaceIdx = name.indexOf(" ");
+    if (spaceIdx > 0 && spaceIdx < 22) {
+      line1 = name.slice(0, spaceIdx);
+      line2 = name.slice(spaceIdx + 1);
+    }
+  }
+
+  return (
+    <g transform={`translate(${x - 8},${y})`}>
+      <text x={0} y={0} dy={line2 ? -4 : 4} textAnchor="end" fill="var(--text-primary)" fontSize={isNarrow ? 9 : 11} fontWeight={600}>
+        {line1}
+      </text>
+      {line2 && (
+        <text x={0} y={0} dy={isNarrow ? 8 : 10} textAnchor="end" fill="var(--text-primary)" fontSize={isNarrow ? 9 : 11} fontWeight={600}>
+          {line2}
+        </text>
+      )}
+    </g>
+  );
+};
+
 export function CostAnalysis({ data, result }: { data: CostAnalysisData; result: AnalysisResult }) {
   const { architectures, summary, cost_recommendations } = data;
 
@@ -102,10 +130,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
 
   const isNarrow = chartWidth < 420;
   // YAxis label column width: wide enough to read on desktop, minimal on mobile
-  const yAxisWidth = isNarrow ? 72 : 144;
-  // Truncate arch names to fit the label column
-  const yTickFormatter = (v: string) =>
-    isNarrow ? v.split(" ")[0] : v.length > 22 ? v.slice(0, 20) + "…" : v;
+  const yAxisWidth = isNarrow ? 90 : 160;
   // Only render the right-side cost labels when there's room for them
   const showBarLabels = chartWidth > 380;
 
@@ -203,8 +228,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
                   width={yAxisWidth}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: 'var(--text-primary)', fontWeight: 600, fontSize: isNarrow ? 10 : 11 }}
-                  tickFormatter={yTickFormatter}
+                  tick={(props) => <CustomYAxisTick {...props} isNarrow={isNarrow} />}
                 />
                 <Tooltip
                   formatter={(value) => [fmtInr(Number(value)), 'Avg Monthly']}
@@ -222,12 +246,17 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
                     fontWeight: 600,
                   } : false}
                 >
-                  {comparisonData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.is_recommended ? "var(--primary)" : index === 0 ? "var(--accent)" : "var(--text-secondary)"}
-                    />
-                  ))}
+                  {comparisonData.map((entry, index) => {
+                    const rank = comparisonData.length - 1 - index;
+                    const opacities = [100, 75, 50, 25];
+                    const opacity = opacities[rank] || 15;
+                    return (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={`color-mix(in srgb, var(--primary) ${opacity}%, transparent)`}
+                      />
+                    );
+                  })}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -263,7 +292,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
                     transition={{ duration: 0.8, delay: 0.1 * i }}
                     className="h-full rounded-full"
                     style={{
-                      backgroundColor: item.pct >= 30 ? 'var(--primary)' : item.pct >= 15 ? 'var(--accent)' : 'var(--text-secondary)'
+                      backgroundColor: `color-mix(in srgb, var(--primary) ${[100, 85, 70, 55, 40, 25][i] || 15}%, transparent)`
                     }}
                   />
                 </div>

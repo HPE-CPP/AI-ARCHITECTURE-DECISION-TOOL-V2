@@ -121,9 +121,6 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
   const handleSubmit = async () => {
     if (!optionsData) return;
     try {
-      // Show auth gate before submitting
-      if (requireAuth) await requireAuth();
-
       setSubmitting(true);
       setError(null);
       const provider = localStorage.getItem("llm_provider") || "ollama";
@@ -143,7 +140,9 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       }
 
       setTimeout(() => {
-        router.push(`/results/${result.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
+        const qs = new URLSearchParams({ mode: "questionnaire" });
+        if (projectId) qs.append("projectId", projectId);
+        router.push(`/results/${result.analysis_id}?${qs.toString()}`);
       }, 800);
 
     } catch (err: any) {

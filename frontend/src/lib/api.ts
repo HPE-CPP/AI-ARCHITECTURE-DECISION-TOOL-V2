@@ -146,8 +146,9 @@ export async function submitQuestionnaire(answers: Record<string, string | null>
   const res = await fetchWithApiFallback(`/api/v1/questionnaire?${qs.toString()}`, {
     method: "POST",
     headers,
-    // FIX FE-005: Backend expects { answers: {...} } not raw answers dict
-    body: JSON.stringify({ answers }),
+    // QuestionnaireInput is a flat Pydantic model — send answers directly,
+    // NOT wrapped in { answers: {...} } which causes all fields to be None.
+    body: JSON.stringify(answers),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -215,6 +216,76 @@ export async function exportAnalysis(result: AnalysisResult): Promise<void> {
   if (!res.ok) throw new Error("Export failed");
   const url = URL.createObjectURL(await res.blob());
   _triggerDownload(url, `ArchGuide_Report_${result.analysis_id}.pdf`);
+}
+
+export interface ChatMessageItem {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function sendChatMessage(
+  analysisId: string,
+  message: string,
+  history: ChatMessageItem[],
+): Promise<string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getCachedAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetchWithApiFallback("/api/v1/chat", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ analysis_id: analysisId, message, history }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Chat failed");
+  }
+  const data = await res.json();
+  return data.response as string;
+}
+
+export async function streamChatMessage(
+  analysisId: string,
+  message: string,
+  history: ChatMessageItem[],
+  onToken: (token: string) => void,
+): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getCachedAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const { getApiBase } = await import("./api-base");
+  const res = await fetch(`${getApiBase()}/api/v1/chat/stream`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ analysis_id: analysisId, message, history }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Chat failed");
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    for (const line of chunk.split("\n")) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.error) throw new Error(data.error);
+        if (data.done) return;
+        if (data.t) onToken(data.t);
+      } catch (e: any) {
+        if (e.message && !e.message.includes("JSON")) throw e;
+      }
+    }
+  }
 }
 
 export async function exportCostAnalysis(result: AnalysisResult): Promise<void> {

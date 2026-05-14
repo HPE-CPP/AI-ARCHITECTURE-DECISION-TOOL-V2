@@ -267,7 +267,11 @@ class SignalExtractor:
             if key in answers and answers[key]:
                 signals[key] = {
                     "value": answers[key],
-                    "confidence": 1.0,
+                    # 0.85 rather than 1.0: the user picks the closest option,
+                    # not their exact requirement. This lets overall confidence
+                    # vary meaningfully with coverage (answered questions).
+                    # e.g. 10/10 answered → ~89%, 7/10 → ~80%, 5/10 → ~74%
+                    "confidence": 0.85,
                     "source_text": "User questionnaire response",
                     "page_number": 0,
                     "source_verified": True,

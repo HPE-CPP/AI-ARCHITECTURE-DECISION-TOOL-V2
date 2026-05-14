@@ -52,7 +52,7 @@ export function AnalysisHistory({ entries, currentAnalysisId, projectId }: Props
           const runNumber = entries.length - idx;
           const archShort = entry.recommended
             ? (ARCH_SHORT[entry.recommended] ?? entry.recommended)
-            : "—";
+            : "-";
           const ModeIcon = entry.mode === "upload" ? UploadCloud : PenTool;
 
           return (
@@ -60,7 +60,7 @@ export function AnalysisHistory({ entries, currentAnalysisId, projectId }: Props
               key={entry.analysis_id}
               disabled={isCurrent}
               onClick={() =>
-                router.push(`/results/${entry.analysis_id}?projectId=${projectId}`)
+                router.push(`/results/${entry.analysis_id}?projectId=${projectId}${entry.mode === "questionnaire" ? "&mode=questionnaire" : ""}`)
               }
               className={`flex-shrink-0 flex flex-col gap-1.5 px-4 py-3 rounded-2xl border transition-all text-left min-w-[120px] ${
                 isCurrent
