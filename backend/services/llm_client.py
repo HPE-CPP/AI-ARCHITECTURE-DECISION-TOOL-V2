@@ -221,6 +221,62 @@ class LLMClient:
         except Exception as e:
             raise RuntimeError(f"Ollama chat failed: {e!r}")
 
+    async def stream_chat(
+        self,
+        messages: list[dict],
+        temperature: float = 0.2,
+        max_tokens: int = 300,
+    ):
+        """Stream chat tokens one by one. Yields str tokens as they arrive."""
+        if self.provider == "openai":
+            if not self._openai_client:
+                raise RuntimeError("OpenAI API key not configured.")
+            stream = await self._openai_client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True,
+            )
+            async for chunk in stream:
+                token = chunk.choices[0].delta.content or ""
+                if token:
+                    yield token
+            return
+
+        # Ollama streaming path
+        payload: dict[str, Any] = {
+            "model": settings.OLLAMA_MODEL,
+            "messages": messages,
+            "stream": True,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        client = get_ollama_http_client()
+        try:
+            async with client.stream(
+                "POST",
+                f"{settings.OLLAMA_BASE_URL}/api/chat",
+                json=payload,
+                timeout=httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0),
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    token = data.get("message", {}).get("content", "")
+                    if token:
+                        yield token
+                    if data.get("done"):
+                        break
+        except httpx.HTTPError as he:
+            raise RuntimeError(f"Ollama stream error: {he!r}")
+        except Exception as e:
+            raise RuntimeError(f"Ollama stream failed: {e!r}")
+
     async def generate_json(
         self,
         prompt: str,

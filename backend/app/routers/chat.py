@@ -2,11 +2,15 @@
 Chat router — POST /api/v1/chat
 Answers user questions about a completed analysis using the full result context.
 """
+import json
 import logging
+import re
+import unicodedata
 import uuid
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -108,105 +112,124 @@ def _build_context(session: SessionModel, result: Result, signals: list[Signal])
     return "\n".join(lines)
 
 
+def _clean(text: str) -> str:
+    """Strip markdown and bad unicode from LLM output."""
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r'[‒–—―﹘﹣－]', '-', text)
+    text = re.sub(r'\*+', '', text)
+    text = re.sub(r'(?m)^#{1,6}\s*', '', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _build_messages(body: ChatRequest, system_prompt: str) -> list[dict]:
+    msgs: list[dict] = [{"role": "system", "content": system_prompt}]
+    for msg in body.history[-6:]:   # last 6 turns is plenty; fewer = faster
+        msgs.append({"role": msg.role, "content": msg.content})
+    msgs.append({"role": "user", "content": body.message})
+    return msgs
+
+
+def _build_system_prompt(session, result, signals) -> str:
+    """Build a compact system prompt — shorter prompt = faster first token."""
+    rec   = result.recommended_architecture
+    conf  = round(result.confidence_score * 100)
+    scores = result.scores or {}
+    score_line = ", ".join(
+        f"{k}:{round(v)}" for k, v in sorted(scores.items(), key=lambda x: -x[1])
+    )
+    sig_map = {s.signal_name: s.value for s in signals if s.value}
+    sig_line = ", ".join(f"{k}={v}" for k, v in sig_map.items())
+
+    suitability = (result.suitability or {}).get(rec, "")
+    why_not_lines = "; ".join(
+        f"{k}: {v[:80]}" for k, v in (result.why_not or {}).items() if k != rec
+    )
+
+    return (
+        f"You are ArchGuide. Answer in 2-3 plain sentences. No markdown, no asterisks, no em-dashes.\n"
+        f"Recommended: {rec} ({conf}% confidence). Scores: {score_line}.\n"
+        f"Signals: {sig_line}.\n"
+        f"Why {rec}: {suitability[:120]}\n"
+        f"Why not others: {why_not_lines[:200]}"
+    )
+
+
+def _get_session(body: ChatRequest, db: DBSession):
+    try:
+        session_uuid = uuid.UUID(body.analysis_id)
+    except ValueError:
+        raise HTTPException(404, "Analysis not found")
+    session = db.query(SessionModel).filter(SessionModel.id == session_uuid).first()
+    if not session:
+        raise HTTPException(404, "Analysis not found")
+    if session.status != "completed":
+        raise HTTPException(400, "Analysis is not yet complete")
+    if not session.result:
+        raise HTTPException(404, "No result found for this analysis")
+    return session
+
+
+# ── Streaming endpoint (primary — used by frontend) ───────────────────────────
+
+@router.post("/chat/stream")
+async def chat_stream(
+    body: ChatRequest,
+    uid: Optional[str] = Depends(verify_firebase_token),
+    db: DBSession = Depends(get_db),
+):
+    from services.llm_client import LLMClient
+
+    session = _get_session(body, db)
+    system_prompt = _build_system_prompt(session, session.result, session.signals or [])
+    messages = _build_messages(body, system_prompt)
+    llm = LLMClient()
+
+    async def token_stream() -> AsyncGenerator[str, None]:
+        try:
+            async for token in llm.stream_chat(messages, temperature=0.2, max_tokens=300):
+                # Only replace bad unicode chars per-token — never strip/filter whitespace
+                token = unicodedata.normalize("NFKC", token)
+                token = re.sub(r'[‒–—―﹘﹣－]', '-', token)
+                token = re.sub(r'\*+', '', token)
+                token = re.sub(r'(?m)^#{1,6}\s*', '', token)
+                yield f"data: {json.dumps({'t': token})}\n\n"
+        except Exception as e:
+            logger.error("Stream chat error: %s", e, exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        finally:
+            yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(
+        token_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── Non-streaming fallback ────────────────────────────────────────────────────
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,
     uid: Optional[str] = Depends(verify_firebase_token),
     db: DBSession = Depends(get_db),
 ):
-    try:
-        session_uuid = uuid.UUID(body.analysis_id)
-    except ValueError:
-        raise HTTPException(404, "Analysis not found")
-
-    session = db.query(SessionModel).filter(
-        SessionModel.id == session_uuid
-    ).first()
-    if not session:
-        raise HTTPException(404, "Analysis not found")
-    if session.status != "completed":
-        raise HTTPException(400, "Analysis is not yet complete")
-
-    result = session.result
-    if not result:
-        raise HTTPException(404, "No result found for this analysis")
-
-    signals = session.signals or []
-    context = _build_context(session, result, signals)
-
-    system_prompt = f"""You are ArchGuide, an expert AI architecture advisor. A user is asking about their specific project analysis. \
-You have the full analysis context below. Every answer MUST cite concrete values from this context — never give generic advice.
-
-ANALYSIS CONTEXT:
-{context}
-
-HOW TO ANSWER:
-- Always reference the actual signal values (e.g. "your dataset is large at ~500GB", "your strict latency requirement of <200ms", "your critical accuracy need").
-- When explaining WHY, trace it back to 2-3 specific signals from the context above.
-- When comparing architectures, use the actual scores (e.g. "RAG scored 78 vs FineTuning's 91 because...").
-- For cost questions, reference cost_sensitivity and the suitability descriptions if available.
-- Be direct and specific — 3-6 sentences is ideal. No bullet points unless listing more than 3 items.
-- Never say "I don't know" - use the context to give the best answer possible.
-- Never invent data not in the context.
-- Write plain prose only. No asterisks, no bold, no italic, no markdown of any kind.
-- No em dashes or en dashes. Use a plain hyphen (-) or comma if you need a pause.
-- No bullet points, no numbered lists, no headers. Just clear sentences and paragraphs."""
-
     from services.llm_client import LLMClient
-    from fastapi import HTTPException as _HTTPException
 
+    session = _get_session(body, db)
+    system_prompt = _build_system_prompt(session, session.result, session.signals or [])
+    messages = _build_messages(body, system_prompt)
     llm = LLMClient()
 
-    # Build a proper multi-turn messages list so the model tracks full conversation context.
-    # history already contains all previous turns (NOT the current message — frontend
-    # sends messages state before appending the new userMsg).
-    ollama_messages: list[dict] = [{"role": "system", "content": system_prompt}]
-    for msg in body.history[-12:]:          # keep last 12 turns (6 exchanges) for context
-        ollama_messages.append({"role": msg.role, "content": msg.content})
-    ollama_messages.append({"role": "user", "content": body.message})
-
     try:
-        response_text = await llm.generate_chat(
-            messages=ollama_messages,
-            temperature=0.25,
-            max_tokens=768,
-        )
-    except _HTTPException:
-        raise
+        response_text = await llm.generate_chat(messages, temperature=0.2, max_tokens=300)
     except Exception as e:
         logger.error("LLM chat error: %s", e, exc_info=True)
-        detail = str(e)
-        if "connection" in detail.lower() or "connect" in detail.lower():
-            raise HTTPException(503, "Cannot reach the LLM service. Make sure Ollama is running.")
-        raise HTTPException(503, f"Chat failed: {detail}")
+        raise HTTPException(503, f"Chat failed: {e}")
 
-    # Strip any role prefix the LLM might echo back
-    response_text = response_text.strip()
     for prefix in ("ArchGuide:", "Assistant:", "AI:"):
         if response_text.startswith(prefix):
             response_text = response_text[len(prefix):].strip()
 
-    import re, unicodedata
-
-    # Normalise unicode so fancy dashes (U+2014, U+2013, U+2012, etc.) are caught
-    response_text = unicodedata.normalize("NFKC", response_text)
-
-    # Remove every kind of dash that isn't a plain hyphen-minus
-    response_text = re.sub(r'[‒–—―﹘﹣－]', '-', response_text)
-
-    # Strip ALL asterisks (bold/italic markers) — no paired matching needed
-    response_text = re.sub(r'\*+', '', response_text)
-
-    # Strip markdown headers (##, ###, etc.)
-    response_text = re.sub(r'(?m)^#{1,6}\s*', '', response_text)
-
-    # Strip trailing colons left behind after header removal, e.g. "Mitigation:"
-    # — keep them if they're mid-sentence; only strip lone "Word:" at line start
-    # (don't over-strip — colons in context like "RAG: 91/100" are fine)
-
-    # Collapse 3+ consecutive newlines to 2
-    response_text = re.sub(r'\n{3,}', '\n\n', response_text)
-
-    response_text = response_text.strip()
-
-    return ChatResponse(response=response_text, analysis_id=body.analysis_id)
+    return ChatResponse(response=_clean(response_text), analysis_id=body.analysis_id)
