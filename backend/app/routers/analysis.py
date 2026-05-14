@@ -7,13 +7,14 @@ import uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
-from app.db.models import Session as SessionModel
+from app.db.models import Session as SessionModel, Project
 from app.services import signal_service, recommendation_service, cache_service
+from app.core.security import verify_firebase_token
 from app.services.pdf_report import generate_pdf
 from app.services.cost_analysis import generate_cost_analysis
 from app.services.cost_report_pdf import generate_cost_pdf
@@ -24,6 +25,37 @@ from services.followup_generator import SIGNAL_OPTIONS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _check_session_ownership(
+    session_row: SessionModel,
+    uid: Optional[str],
+    db: DBSession,
+) -> None:
+    """Raise 401/403 if the caller does not own this session.
+
+    Rules:
+    - Sessions with no project: accessible by anyone (questionnaire guest runs).
+    - Sessions whose project is owned by a guest_ user: accessible by anyone.
+    - Sessions whose project is owned by an authenticated user: require a
+      matching Firebase JWT. Wrong token -> 403. No token -> 401.
+    """
+    if not session_row.project_id:
+        return  # no project attached — allow through
+
+    project = db.query(Project).filter(Project.id == session_row.project_id).first()
+    if not project:
+        return  # orphaned session — allow through
+
+    owner = project.user_id or ""
+    if owner.startswith("guest_"):
+        return  # guest project — allow through
+
+    # Authenticated user's project — enforce ownership
+    if not uid:
+        raise HTTPException(401, "Authentication required to view this analysis")
+    if uid != owner:
+        raise HTTPException(403, "You do not have permission to view this analysis")
 
 
 # ---------------------------------------------------------------------------
@@ -65,27 +97,38 @@ class ExportRequest(BaseModel):
 # GET /api/v1/analysis/{session_id}
 # ---------------------------------------------------------------------------
 @router.get("/analysis/{session_id}", response_model=AnalysisResponse)
-def get_analysis(session_id: str, db: DBSession = Depends(get_db)):
-    """Get analysis status and results."""
-    # First check Redis
-    cached = cache_service.get_result(session_id)
-    if cached:
-        # Attach cost analysis on the fly (not stored in cache)
-        if cached.get("status") == "complete" and cached.get("recommended"):
-            cached["cost_analysis"] = generate_cost_analysis(cached)
-        return cached
+def get_analysis(
+    session_id: str,
+    db: DBSession = Depends(get_db),
+    uid: Optional[str] = Depends(verify_firebase_token),
+):
+    """Get analysis status and results.
 
-    # Check if session exists at all
+    SEC-008 FIX: Ownership is now verified before returning any data.
+    The DB session lookup always runs first so we can check project ownership,
+    even when the result is cached in Redis (cache does not store user_id).
+    """
     try:
         session_uuid = uuid.UUID(session_id)
     except ValueError:
         raise HTTPException(404, "Analysis not found")
 
+    # Always load the session row first — needed for ownership check
     session_row = db.query(SessionModel).filter(SessionModel.id == session_uuid).first()
     if not session_row:
         raise HTTPException(404, "Analysis not found")
 
-    # Session exists but may still be processing
+    # Ownership gate — raises 401/403 for unauthorized callers
+    _check_session_ownership(session_row, uid, db)
+
+    # Ownership confirmed — now serve from Redis cache if available
+    cached = cache_service.get_result(session_id)
+    if cached:
+        if cached.get("status") == "complete" and cached.get("recommended"):
+            cached["cost_analysis"] = generate_cost_analysis(cached)
+        return cached
+
+    # Session still processing or errored
     if session_row.status in ("draft", "processing"):
         return {"analysis_id": session_id, "status": session_row.status}
 
@@ -98,7 +141,6 @@ def get_analysis(session_id: str, db: DBSession = Depends(get_db)):
     if not result:
         raise HTTPException(404, "Analysis result not found")
 
-    # Attach cost analysis on the fly
     if result.get("status") == "complete" and result.get("recommended"):
         result["cost_analysis"] = generate_cost_analysis(result)
 
@@ -109,7 +151,11 @@ def get_analysis(session_id: str, db: DBSession = Depends(get_db)):
 # POST /api/v1/followup
 # ---------------------------------------------------------------------------
 @router.post("/followup", response_model=AnalysisResponse)
-def submit_followup(data: FollowUpAnswers, db: DBSession = Depends(get_db)):
+def submit_followup(
+    data: FollowUpAnswers,
+    db: DBSession = Depends(get_db),
+    uid: Optional[str] = Depends(verify_firebase_token),
+):
     """Submit follow-up answers and re-score."""
     try:
         uuid.UUID(data.analysis_id)
@@ -121,6 +167,8 @@ def submit_followup(data: FollowUpAnswers, db: DBSession = Depends(get_db)):
     ).first()
     if not session_row:
         raise HTTPException(404, "Analysis not found")
+
+    _check_session_ownership(session_row, uid, db)
 
     # Update signals in DB
     updated_signals = signal_service.update_signals(db, data.analysis_id, data.answers)
