@@ -7,8 +7,10 @@ import sys
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 # Ensure backend root is on the path so `services/` and `config` are importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -29,6 +31,9 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
+from app.limiter import limiter
+
+
 # ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
@@ -38,6 +43,19 @@ def create_app() -> FastAPI:
         version=settings.APP_VERSION,
         docs_url="/docs",
         redoc_url="/redoc",
+    )
+
+    # Attach limiter state and register the 429 handler
+    app.state.limiter = limiter
+    app.add_exception_handler(
+        RateLimitExceeded,
+        lambda req, exc: JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Too many requests. Please wait a moment before trying again.",
+                "retry_after": str(exc.retry_after) if hasattr(exc, "retry_after") else "60",
+            },
+        ),
     )
 
     # CORS — SEC-006 FIX: Replaced allow_origin_regex='.*' with explicit origin

@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.db.models import Session as SessionModel, Project
 from app.services import signal_service, recommendation_service, cache_service
 from app.core.security import verify_firebase_token
+from app.limiter import limiter
 from app.services.pdf_report import generate_pdf
 from app.services.cost_analysis import generate_cost_analysis
 from app.services.cost_report_pdf import generate_cost_pdf
@@ -97,7 +98,9 @@ class ExportRequest(BaseModel):
 # GET /api/v1/analysis/{session_id}
 # ---------------------------------------------------------------------------
 @router.get("/analysis/{session_id}", response_model=AnalysisResponse)
+@limiter.limit("30/minute")  # polling loop — generous limit, blocks bots
 def get_analysis(
+    request: Request,
     session_id: str,
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token),
@@ -151,7 +154,9 @@ def get_analysis(
 # POST /api/v1/followup
 # ---------------------------------------------------------------------------
 @router.post("/followup", response_model=AnalysisResponse)
+@limiter.limit("10/minute")
 def submit_followup(
+    request: Request,
     data: FollowUpAnswers,
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token),
