@@ -83,6 +83,13 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const loadingStartRef = useRef<number>(Date.now());
   const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryEntry[]>([]);
+  const [resultReady, setResultReady] = useState(false);
+  const [forcedStageIndex, setForcedStageIndex] = useState<number | null>(null);
+
+  // Load history on mount so returning to a completed result shows the panel immediately
+  useEffect(() => {
+    if (projectId) setAnalysisHistory(getAnalysisHistory(projectId));
+  }, [projectId]);
 
   // 1. Fetch data with exponential backoff and a maximum retry cap
   // FIX FE-009: The flat 1.5s interval with no retry cap caused infinite polling
@@ -102,7 +109,11 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         setResult(data);
 
         if (data.status === "complete" || data.status === "error") {
-          setLoading(false);
+          if (data.status === "error") {
+            setLoading(false);
+          } else {
+            setResultReady(true); // trigger stage fast-forward before revealing results
+          }
           return; // stop polling
         }
       } catch (err: any) {
@@ -129,7 +140,22 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     return () => clearTimeout(timeoutRef);
   }, [resolvedParams.analysisId]);
 
-  // 2. Scroll to top + mark project completed + update history when results arrive
+  // 2. When result is ready, fast-forward through any unseen stages (700ms each) then reveal
+  useEffect(() => {
+    if (!resultReady) return;
+    const currentStage = forcedStageIndex ?? getDisplayStageIndex(result?.status || "queued", elapsedSeconds);
+    const lastStage = ANALYSIS_STAGES.length - 1;
+    if (currentStage >= lastStage) {
+      // Already at final stage — short pause then reveal
+      const t = setTimeout(() => setLoading(false), 600);
+      return () => clearTimeout(t);
+    }
+    // Advance one stage, then this effect re-runs
+    const t = setTimeout(() => setForcedStageIndex(currentStage + 1), 700);
+    return () => clearTimeout(t);
+  }, [resultReady, forcedStageIndex, result?.status, elapsedSeconds]);
+
+  // 3. Scroll to top + mark project completed + update history when results arrive
   useEffect(() => {
     if (!loading && result?.status === "complete") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -180,7 +206,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   // --- LOADING STATE ---
   if (loading || ["queued", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
     const currentStatus = result?.status || "queued";
-    const activeIndex = getDisplayStageIndex(currentStatus, elapsedSeconds);
+    const activeIndex = forcedStageIndex ?? getDisplayStageIndex(currentStatus, elapsedSeconds);
     const activeStage = ANALYSIS_STAGES[activeIndex];
     const ActiveIcon = activeStage.Icon;
 
@@ -374,6 +400,15 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       </div>
 
       <ResultsDashboard result={result} />
+
+      {/* Analysis History strip — shown when project has 2+ runs */}
+      {projectId && analysisHistory.length >= 2 && (
+        <AnalysisHistory
+          entries={analysisHistory}
+          currentAnalysisId={resolvedParams.analysisId}
+          projectId={projectId}
+        />
+      )}
 
       {/* Cost Analysis Section */}
       {result.cost_analysis && (
@@ -586,13 +621,6 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
         <div className="lg:col-span-4 w-full relative">
           <div className="sticky top-24 w-full space-y-8">
-            {projectId && analysisHistory.length >= 2 && (
-              <AnalysisHistory
-                entries={analysisHistory}
-                currentAnalysisId={resolvedParams.analysisId}
-                projectId={projectId}
-              />
-            )}
             <DecisionPipeline result={result} />
             <DecisionTrace trace={result.decision_trace || []} />
           </div>
