@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException, Request
 from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
@@ -20,6 +20,7 @@ from app.schemas.session import AnalysisResponse
 from app.core.security import verify_firebase_token
 from services.document_parser import DocumentParser, detect_sections, validate_document_relevance
 from config import settings
+from app.limiter import limiter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -27,7 +28,9 @@ doc_parser = DocumentParser()
 
 
 @router.post("/upload", response_model=AnalysisResponse)
+@limiter.limit("4/minute")  # 1 upload every 15 s — unlimited total, just not rapid-fire
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), pattern="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
