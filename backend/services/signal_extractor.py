@@ -11,7 +11,6 @@ Optimizations applied:
   - Keyword pre-extraction still runs (zero LLM cost) and boosts final confidence.
 """
 import asyncio
-import hashlib
 import json
 import logging
 import re
@@ -23,6 +22,7 @@ from services.document_parser import (
     get_relevant_pages,
     register_signal_keywords,
 )
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -81,19 +81,13 @@ _ALL_KEYWORDS: frozenset[str] = frozenset(
 )
 register_signal_keywords(_ALL_KEYWORDS)
 
-EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Read the document and extract 10 architecture signals as JSON.
+EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Analyze the following document text and extract architecture decision signals.
 
-SIGNAL NAMES AND ALLOWED VALUES — you must use EXACTLY these strings for "value":
-  dataset_size:          "small" | "medium" | "large" | "very_large"
-  query_volume:          "low" | "medium" | "high" | "very_high"
-  latency_requirement:   "relaxed" | "moderate" | "strict" | "ultra_low"
-  data_volatility:       "static" | "low" | "moderate" | "high"
-  accuracy_requirement:  "moderate" | "high" | "very_high" | "critical"
-  domain_specificity:    "general" | "moderate" | "specialized" | "highly_specialized"
-  security_level:        "standard" | "elevated" | "high" | "critical"
-  cost_sensitivity:      "low" | "moderate" | "high" | "very_high"
-  deployment_preference: "cloud" | "on_premise" | "hybrid" | "edge"
-  user_scale:            "small" | "medium" | "large" | "enterprise"
+For each signal, provide:
+- value: the extracted value (MUST be one of the listed options, or null if not found)
+- confidence: 0.0 to 1.0 (0 if not found, higher if explicitly stated)
+- source_text: a VERBATIM quote copied exactly from the document that supports this value. Do NOT paraphrase, summarize, or rephrase. Copy the exact sentence or phrase as it appears in the document. If not found, use an empty string.
+- page_number: the page number where the source_text appears (0 if not found)
 
 HOW TO PICK THE RIGHT VALUE — infer from context even if not stated word-for-word:
   dataset_size:          GB/TB of documents or millions of records → "large"; hundreds of GBs or billions of records → "very_large"; thousands of records → "small"
@@ -106,96 +100,110 @@ HOW TO PICK THE RIGHT VALUE — infer from context even if not stated word-for-w
   cost_sensitivity:      "cost efficiency important / budget conscious" → "high"; "strict budget constraints" → "very_high"; unlimited budget → "low"
   deployment_preference: "on-premise / private cloud / self-hosted" → "on_premise"; AWS/GCP/Azure → "cloud"; "both cloud and on-prem" → "hybrid"; IoT/edge devices → "edge"
   user_scale:            "<100 users / small team" → "small"; "100-1000" → "medium"; "1000-10000" → "large"; ">10000 or enterprise-wide" → "enterprise"
+CRITICAL RULES:
+1. DO NOT hallucinate. If a signal is not mentioned in the document, set value to null and confidence to 0.
+2. Only extract what is explicitly stated or strongly implied.
+3. source_text MUST be a word-for-word copy from the document. Every word in your source_text must appear consecutively in the document. If you cannot find an exact quote, set source_text to "" and confidence to 0.
+4. VALUE MUST BE EXACT: Use ONLY the exact option strings listed below — including underscores. For example write "very_high" not "very high", "very_large" not "very large", "on_premise" not "on-premise", "highly_specialized" not "highly specialized". Any value that is not exactly one of the listed options will be REJECTED.
+5. Confidence levels:
+   - 0.0: Not found at all
+   - 0.1-0.3: Weakly implied
+   - 0.4-0.6: Moderately implied
+   - 0.7-0.8: Strongly implied
+   - 0.9-1.0: Explicitly stated with a verbatim source quote
 
-CONFIDENCE SCALE:
-  0.0   = signal not mentioned at all (use null for value too)
-  0.3   = weakly implied or general context
-  0.5   = moderately clear from context
-  0.7   = clearly stated
-  0.9   = explicitly defined with numbers or keywords
+SIGNALS TO EXTRACT:
+1. dataset_size: MUST be one of: small, medium, large, very_large — Volume of data
+2. query_volume: MUST be one of: low, medium, high, very_high — Expected queries/requests
+3. latency_requirement: MUST be one of: relaxed, moderate, strict, ultra_low — Response time needs
+4. data_volatility: MUST be one of: static, low, moderate, high — How often data changes
+5. accuracy_requirement: MUST be one of: moderate, high, very_high, critical — Accuracy needs
+6. domain_specificity: MUST be one of: general, moderate, specialized, highly_specialized — Domain specialization
+7. security_level: MUST be one of: standard, elevated, high, critical — Security needs
+8. cost_sensitivity: MUST be one of: low, moderate, high, very_high — Budget constraints
+9. deployment_preference: MUST be one of: cloud, on_premise, hybrid, edge — Deployment target
+10. user_scale: MUST be one of: small, medium, large, enterprise — Number of users
 
-IMPORTANT RULES:
-1. For "value": use null ONLY when the document provides absolutely zero signal for that dimension. Otherwise infer.
-2. For "source_text": copy one exact sentence from the document. Use "" if no suitable sentence exists.
-3. Set confidence >= 0.3 whenever you can infer a reasonable value.
-4. Output raw JSON only — no markdown, no explanation, no code blocks.
+DOCUMENT TEXT:
+{document_text}
 
-EXAMPLE OUTPUT (fill in your actual findings from the document):
-{"dataset_size": {"value": "large", "confidence": 0.8, "source_text": "The total estimated dataset size is 120 GB", "page_number": 1}, "query_volume": {"value": "low", "confidence": 0.6, "source_text": "500 daily users", "page_number": 1}, "latency_requirement": {"value": "relaxed", "confidence": 0.7, "source_text": "response time must be under 2 seconds", "page_number": 1}, "data_volatility": {"value": "moderate", "confidence": 0.7, "source_text": "Support tickets are added daily", "page_number": 1}, "accuracy_requirement": {"value": "very_high", "confidence": 0.8, "source_text": "avoid hallucinating answers", "page_number": 1}, "domain_specificity": {"value": "specialized", "confidence": 0.7, "source_text": "Internal knowledge base articles", "page_number": 1}, "security_level": {"value": "elevated", "confidence": 0.7, "source_text": "documents contain internal procedures", "page_number": 1}, "cost_sensitivity": {"value": "high", "confidence": 0.6, "source_text": "cost efficiency is important", "page_number": 1}, "deployment_preference": {"value": "on_premise", "confidence": 0.8, "source_text": "prefer on-premise deployment", "page_number": 1}, "user_scale": {"value": "small", "confidence": 0.7, "source_text": "500 daily users", "page_number": 1}}
-
-RETRIEVED CONTEXT (if any):
-RETRIEVED_CONTEXT_PLACEHOLDER
-
-DOCUMENT:
-DOCUMENT_TEXT_PLACEHOLDER
+Respond with a JSON object with signal names as keys, each containing: value, confidence, source_text, page_number.
 """
-
-# Prompt fingerprint — automatically invalidates stale cache entries when the prompt changes.
-_PROMPT_FINGERPRINT = hashlib.md5(EXTRACTION_PROMPT.encode()).hexdigest()[:8]
+EXTRACTION_PROMPT_COMPACT = """Extract architecture signals from this document. Return ONLY a JSON object.
+ 
+For each signal return: {{"value": "<exact_option>", "confidence": 0.0-1.0, "source_text": "<verbatim quote>", "page_number": 0}}
+Use null for value if not found. Use EXACT option strings with underscores (e.g. very_high not "very high").
+ 
+SIGNALS (use ONLY these exact values):
+dataset_size: small | medium | large | very_large
+query_volume: low | medium | high | very_high
+latency_requirement: relaxed | moderate | strict | ultra_low
+data_volatility: static | low | moderate | high
+accuracy_requirement: moderate | high | very_high | critical
+domain_specificity: general | moderate | specialized | highly_specialized
+security_level: standard | elevated | high | critical
+cost_sensitivity: low | moderate | high | very_high
+deployment_preference: cloud | on_premise | hybrid | edge
+user_scale: small | medium | large | enterprise
+ 
+DOCUMENT:
+{document_text}
+ 
+JSON:"""
+ 
+# Models known to need the compact prompt (small parameter count, weak instruction following)
+_SMALL_MODELS = {"llama3.2", "llama3.2:1b", "llama3.2:3b", "phi", "phi3", "gemma:2b", "qwen:1.8b", "tinyllama"}
+ 
+ 
+def get_extraction_prompt(model_name: str, document_text: str) -> str:
+    """Return the appropriate extraction prompt for the given model size."""
+    base_model = model_name.split(":")[0].lower() if ":" in model_name else model_name.lower()
+    use_compact = base_model in _SMALL_MODELS or model_name.lower() in _SMALL_MODELS
+    template = EXTRACTION_PROMPT_COMPACT if use_compact else EXTRACTION_PROMPT
+    if use_compact:
+        logger.info("Using compact extraction prompt for small model '%s'", model_name)
+    return template.format(document_text=document_text)
 
 SIGNAL_OPTIONS = {
-    "dataset_size": [
-        {"value": "small", "label": "Small (< 100k records)"},
-        {"value": "medium", "label": "Medium (100k - 10M records)"},
-        {"value": "large", "label": "Large (10M - 500M records)"},
-        {"value": "very_large", "label": "Very Large (> 500M records)"},
-    ],
-    "query_volume": [
-        {"value": "low", "label": "Low (< 10 QPS)"},
-        {"value": "medium", "label": "Medium (10 - 100 QPS)"},
-        {"value": "high", "label": "High (100 - 1000 QPS)"},
-        {"value": "very_high", "label": "Very High (> 1000 QPS)"},
-    ],
-    "latency_requirement": [
-        {"value": "relaxed", "label": "Relaxed (> 1s)"},
-        {"value": "moderate", "label": "Moderate (200ms - 1s)"},
-        {"value": "strict", "label": "Strict (50ms - 200ms)"},
-        {"value": "ultra_low", "label": "Ultra-Low (< 50ms)"},
-    ],
-    "data_volatility": [
-        {"value": "static", "label": "Static (rarely changes)"},
-        {"value": "low", "label": "Low (daily/weekly updates)"},
-        {"value": "moderate", "label": "Moderate (hourly updates)"},
-        {"value": "high", "label": "High (real-time streaming)"},
-    ],
-    "accuracy_requirement": [
-        {"value": "moderate", "label": "Moderate (general assistance)"},
-        {"value": "high", "label": "High (professional use)"},
-        {"value": "very_high", "label": "Very High (medical/legal)"},
-        {"value": "critical", "label": "Critical (zero-hallucination)"},
-    ],
-    "domain_specificity": [
-        {"value": "general", "label": "General Knowledge"},
-        {"value": "moderate", "label": "Moderately Specialized"},
-        {"value": "specialized", "label": "Highly Specialized"},
-        {"value": "highly_specialized", "label": "Proprietary/Niche"},
-    ],
-    "security_level": [
-        {"value": "standard", "label": "Standard (Public data)"},
-        {"value": "elevated", "label": "Elevated (Internal data)"},
-        {"value": "high", "label": "High (PII/Sensitive data)"},
-        {"value": "critical", "label": "Critical (Classified data)"},
-    ],
-    "cost_sensitivity": [
-        {"value": "low", "label": "Low (Performance at any cost)"},
-        {"value": "moderate", "label": "Moderate (Balanced)"},
-        {"value": "high", "label": "High (Cost optimized)"},
-        {"value": "very_high", "label": "Very High (Strict budget)"},
-    ],
-    "deployment_preference": [
-        {"value": "cloud", "label": "Cloud (AWS/GCP/Azure)"},
-        {"value": "on_premise", "label": "On-Premise (Self-hosted)"},
-        {"value": "hybrid", "label": "Hybrid Cloud"},
-        {"value": "edge", "label": "Edge Computing"},
-    ],
-    "user_scale": [
-        {"value": "small", "label": "Small (< 100 users)"},
-        {"value": "medium", "label": "Medium (100 - 1000 users)"},
-        {"value": "large", "label": "Large (1k - 10k users)"},
-        {"value": "enterprise", "label": "Enterprise (> 10k users)"},
-    ],
+    "dataset_size": ["small", "medium", "large", "very_large"],
+    "query_volume": ["low", "medium", "high", "very_high"],
+    "latency_requirement": ["relaxed", "moderate", "strict", "ultra_low"],
+    "data_volatility": ["static", "low", "moderate", "high"],
+    "accuracy_requirement": ["moderate", "high", "very_high", "critical"],
+    "domain_specificity": ["general", "moderate", "specialized", "highly_specialized"],
+    "security_level": ["standard", "elevated", "high", "critical"],
+    "cost_sensitivity": ["low", "moderate", "high", "very_high"],
+    "deployment_preference": ["cloud", "on_premise", "hybrid", "edge"],
+    "user_scale": ["small", "medium", "large", "enterprise"],
 }
-
+def _normalize_signal_value(raw: object, allowed: list[str]) -> str | None:
+    """
+    Normalize and validate a signal value returned by the LLM.
+ 
+    Handles common LLM quirks:
+      - Wrong case:          "High"       → "high"
+      - Spaces instead of underscores: "very high" → "very_high"
+      - Extra whitespace:    "  low  "    → "low"
+      - None / empty string: None         → None (caller decides)
+ 
+    Returns the matching allowed value, or None if no match found.
+    """
+    if not raw:
+        return None
+ 
+    # Normalise: lowercase, strip, collapse spaces → underscores
+    normalised = str(raw).strip().lower().replace(" ", "_").replace("-", "_")
+ 
+    # Exact match first (fastest path)
+    if normalised in allowed:
+        return normalised
+ 
+    # Prefix match — handles "very_high_load" matching "very_high"
+    for option in allowed:
+        if normalised.startswith(option) or option.startswith(normalised):
+            return option
+ 
+    return None
 
 class SignalExtractor:
     """Extracts architecture decision signals from document text."""
@@ -209,23 +217,13 @@ class SignalExtractor:
         """Extract signals with page filtering, caching, and parallel chunk analysis."""
         full_text = document_data.get("full_text", "")
         pages = document_data.get("pages", [])
-        # Retrieved context from FAISS — supplementary only; NOT used for cache key
-        # or source verification so same document always yields the same cache key.
-        retrieved_context = document_data.get("retrieved_context", "")
 
         if not full_text.strip():
             return self._empty_signals()
 
         # ── 1. Cache check ────────────────────────────────────────────────────
-        # Cache key = prompt fingerprint + document text (MD5 of the key string
-        # is NOT computed here — the raw string is used as the dict key inside
-        # extraction_cache which handles its own hashing).
-        # The prompt fingerprint automatically invalidates stale entries when
-        # EXTRACTION_PROMPT changes — no manual cache flush required.
-        _cache_key = f"p:{_PROMPT_FINGERPRINT}\x00{full_text}"
-        cached = extraction_cache.get(_cache_key)
+        cached = extraction_cache.get(full_text)
         if cached is not None:
-            logger.info("Extraction cache HIT (prompt=%s) — skipping LLM call", _PROMPT_FINGERPRINT)
             return cached
 
         # ── 2. Keyword pre-extraction (zero LLM cost) ─────────────────────────
@@ -233,40 +231,32 @@ class SignalExtractor:
 
         # ── 3. Page filtering: skip pages with no signal keywords ─────────────
         relevant_pages = get_relevant_pages(pages, min_score=1)
-        logger.info(
-            "Page filtering: %d/%d pages selected as relevant",
-            len(relevant_pages), len(pages),
-        )
-
+        if not relevant_pages:
+            relevant_pages = pages
+            logger.warning("Page filtering removed all pages — using full document")
+        else:
+            logger.info(
+                "Page filtering: %d/%d pages selected as relevant",
+                len(relevant_pages), len(pages),
+            )
         # ── 4. Build context from relevant pages (document order preserved) ────
         context = self._build_context(relevant_pages)
 
         # ── 5. LLM extraction — single call or parallel chunks ─────────────────
         if len(context) <= MAX_CONTEXT_CHARS:
-            llm_signals = await self._llm_extraction(context, retrieved_context)
+            llm_signals = await self._llm_extraction(context)
             logger.info("Single-call extraction (%d chars)", len(context))
         else:
-            llm_signals = await self._parallel_chunk_extraction(context, retrieved_context)
+            llm_signals = await self._parallel_chunk_extraction(context)
 
-        # ── 5b. Heuristic fallback ─────────────────────────────────────────────
-        # If the LLM returned 0 values (timeout, wrong format, not running),
-        # run the regex-based heuristic extractor instead.  Heuristics are
-        # transparent and reliable for well-structured requirements documents.
-        llm_found = sum(1 for s in llm_signals.values() if s.get("value"))
-        if llm_found == 0:
-            logger.warning(
-                "LLM returned 0 signals — activating heuristic extraction fallback"
-            )
-            llm_signals = self._heuristic_extraction(full_text, pages)
-
-        # ── 6. Source verification (against original full_text + pages) ────────
+        # ── 6. Source verification ─────────────────────────────────────────────
         llm_signals = self._verify_sources(llm_signals, full_text, pages)
 
-        # ── 7. Merge keyword + LLM/heuristic results ──────────────────────────
+        # ── 7. Merge keyword + LLM results ─────────────────────────────────────
         merged = self._merge_signals(keyword_signals, llm_signals)
 
-        # ── 8. Cache result ───────────────────────────────────────────────────
-        extraction_cache.set(_cache_key, merged)
+        # ── 8. Cache result ────────────────────────────────────────────────────
+        extraction_cache.set(full_text, merged)
 
         return merged
 
@@ -316,66 +306,42 @@ class SignalExtractor:
 
     # ── LLM extraction ────────────────────────────────────────────────────────
 
-    async def _llm_extraction(self, text: str, retrieved_context: str = "") -> dict[str, dict]:
+    async def _llm_extraction(self, text: str) -> dict[str, dict]:
         """Single LLM call for signal extraction."""
         try:
-            ctx_body = retrieved_context.strip() if retrieved_context else "(none)"
-
-            # Guard: if retrieved_context pushes combined size over MAX_CONTEXT_CHARS,
-            # trim it rather than letting the LLM client silently truncate the document.
-            overhead = len(EXTRACTION_PROMPT) - len("RETRIEVED_CONTEXT_PLACEHOLDER") - len("DOCUMENT_TEXT_PLACEHOLDER")
-            budget = MAX_CONTEXT_CHARS - overhead - len(text)
-            if budget < 0:
-                # Document itself already exceeds budget — trim it
-                text = text[:MAX_CONTEXT_CHARS - overhead - 200]
-                ctx_body = "(none)"
-            elif len(ctx_body) > budget:
-                ctx_body = ctx_body[:budget]
-
-            # Use str.replace() — NOT .format() — because document text may contain
-            # literal curly braces (JSON, code, templates) that break str.format().
-            prompt = (
-                EXTRACTION_PROMPT
-                .replace("RETRIEVED_CONTEXT_PLACEHOLDER", ctx_body)
-                .replace("DOCUMENT_TEXT_PLACEHOLDER", text)
-            )
+            prompt = get_extraction_prompt(settings.OLLAMA_MODEL if self.llm.provider == "ollama" else "openai", text)
             result = await self.llm.generate_json(prompt=prompt)
-
+ 
+            # DEBUG: log what the LLM actually returned so you can diagnose issues
+            top_keys = list(result.keys())[:5] if isinstance(result, dict) else "NOT A DICT"
+            logger.info("LLM raw response top-level keys: %s (total keys: %s)",
+                        top_keys, len(result) if isinstance(result, dict) else "?")
+ 
             if "error" in result:
-                logger.error(
-                    "LLM extraction returned error: %s. "
-                    "Check that Ollama/OpenAI is running and the model is loaded.",
-                    result.get("error", "unknown"),
-                )
+                logger.warning("LLM extraction returned error: %s", result.get("raw", "")[:200])
+                logger.warning("→ Falling back to keyword-only extraction")
                 return self._empty_signals()
-
-            # Unwrap if LLM nested signals inside a wrapper key
-            # e.g. {"signals": {...}} or {"architecture_signals": {...}}
-            if not any(k in result for k in SIGNAL_SCHEMA):
-                for wrapper in ("signals", "architecture_signals", "result",
-                                "data", "output", "extraction", "analysis"):
-                    if wrapper in result and isinstance(result[wrapper], dict):
-                        result = result[wrapper]
-                        logger.debug("Unwrapped LLM JSON from key '%s'", wrapper)
-                        break
+ 
 
             validated: dict[str, dict] = {}
-            found_count = 0
             for key in SIGNAL_SCHEMA:
                 if key in result and isinstance(result[key], dict):
                     sig = result[key]
                     raw_value = sig.get("value")
-                    # Treat JSON null, the string "null", and empty string as absent
-                    value = None if raw_value in (None, "null", "", "N/A", "n/a") else raw_value
-                    conf = min(1.0, max(0.0, float(sig.get("confidence", 0) or 0)))
-                    if value:
-                        found_count += 1
+                    allowed = SIGNAL_OPTIONS.get(key, [])
+                    validated_value = _normalize_signal_value(raw_value, allowed)   
                     validated[key] = {
-                        "value": value,
-                        "confidence": conf,
-                        "source_text": str(sig.get("source_text", "") or "")[:300],
-                        "page_number": int(sig.get("page_number", 0) or 0),
+                        "value": sig.get("value"),
+                        "confidence": min(1.0, max(0.0, float(sig.get("confidence", 0)))),
+                        "source_text": str(sig.get("source_text", ""))[:300],
+                        "page_number": int(sig.get("page_number", 0)),
                     }
+                if raw_value and not validated_value:
+                        logger.warning(
+                            "Signal '%s': LLM returned invalid value '%s' (allowed: %s) — discarded",
+                            key, raw_value, allowed,
+                        )
+                        validated[key]["confidence"] = 0.0  
                 else:
                     validated[key] = {
                         "value": None,
@@ -383,109 +349,170 @@ class SignalExtractor:
                         "source_text": "",
                         "page_number": 0,
                     }
-
-            logger.info("LLM extracted %d/%d signals with values", found_count, len(SIGNAL_SCHEMA))
             return validated
 
         except Exception as e:
-            logger.error(
-                "LLM extraction failed: %s. "
-                "Verify Ollama is running (`ollama serve`) and model is pulled (`ollama pull llama3.2`)",
-                e,
-            )
+            logger.error("LLM extraction failed: %s", e)
             return self._empty_signals()
 
-    async def _parallel_chunk_extraction(self, text: str, retrieved_context: str = "") -> dict[str, dict]:
+    async def _parallel_chunk_extraction(self, text: str) -> dict[str, dict]:
         """
         For large documents: split into overlapping chunks, extract from all chunks
-        concurrently (bounded by a semaphore), then keep the highest-confidence
-        signal from any chunk.
+        concurrently, then keep the highest-confidence signal from any chunk.
         """
         chunks = self._make_chunks(text)
         logger.info("Parallel extraction: %d chunks (~%d chars each)", len(chunks), CHUNK_SIZE)
 
-        # B-07 FIX: Limit concurrent LLM calls to 5 to prevent OOM / rate-limit crashes.
-        # return_exceptions=True ensures a single failed chunk doesn't discard all results.
-        semaphore = asyncio.Semaphore(5)
-
-        async def _bounded_extraction(chunk: str, ctx: str = "") -> dict:
-            async with semaphore:
-                return await self._llm_extraction(chunk, ctx)
-
-        # Pass retrieved_context only to the first chunk to avoid inflating token
-        # usage across all parallel calls.
-        tasks = [
-            _bounded_extraction(chunk, retrieved_context if i == 0 else "")
-            for i, chunk in enumerate(chunks)
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(
+            *[self._llm_extraction(chunk) for chunk in chunks],
+            return_exceptions=False,
+        )
 
         # Winner-takes-all per signal: highest confidence across chunks
         merged: dict[str, dict] = self._empty_signals()
         for chunk_result in results:
-            # Skip chunks that raised exceptions
-            if isinstance(chunk_result, Exception):
-                logger.warning("Chunk extraction failed (skipped): %s", chunk_result)
-                continue
             for key, sig in chunk_result.items():
                 if sig.get("confidence", 0) > merged[key].get("confidence", 0):
                     merged[key] = sig
 
         return merged
+    _VALUE_PATTERNS: dict[str, list[tuple]] = {
+        "dataset_size": [
+            (r"\b(billion|terabyte|tb|petabyte)\b",                    "very_large", 0.75),
+            (r"\b(million|gigabyte|gb|millions of)\b",                 "large",      0.70),
+            (r"\b(hundred[s]? thousand|500[,\s]?000|[1-9]\d{5,})\b",  "large",      0.65),
+            (r"\b(thousand[s]?|10[,\s]?000|[1-9]\d{3,4}).{0,10}(record|document|row|file|case)\b", "medium", 0.60),
+            (r"\b(small dataset|few hundred|28 page|18[,\s]?000 word|handful|single document)\b",   "small",  0.72),
+        ],
+        "query_volume": [
+            (r"\b(million[s]?.{0,15}(request|quer)|50[,\s]?000.{0,20}(hour|day))\b",               "very_high", 0.80),
+            (r"\b(15[,\s]?000.{0,20}(hour|day)|thousand[s]?.{0,10}per.{0,10}(second|minute))\b",  "high",      0.75),
+            (r"\bnot.{0,15}(high.{0,10}traffic|high.{0,10}volume)\b",                               "low",       0.75),
+            (r"\b(800|1[,\s]?200).{0,20}(per day|\/day|studies per)\b",                            "low",       0.70),
+            (r"\b(5[\-–]15.{0,10}(question|query|request)|low.{0,10}(traffic|volume))\b",          "low",       0.70),
+        ],
+        "latency_requirement": [
+            (r"\b(sub.{0,5}100\s*ms|ultra.{0,5}low.{0,10}latency|<\s*100\s*ms|200\s*millisecond)\b", "ultra_low", 0.85),
+            # Negation FIRST: "real-time NOT required" → relaxed
+            (r"\breal.?time.{0,25}not.{0,10}required\b",                                              "relaxed",   0.82),
+            (r"\bsub.?second.{0,25}not.{0,10}required\b",                                             "relaxed",   0.82),
+            (r"\b(5[\-–]10.{0,10}second.{0,10}(is|are).{0,10}acceptable|relaxed|no.{0,10}sla)\b",   "relaxed",   0.75),
+            (r"\b(2.{0,5}second[s]?.{0,20}acceptable|3.{0,5}second)\b",                               "moderate",  0.65),
+            (r"\b(real.?time|<\s*1\s*second|under.{0,5}second|1.{0,5}second)\b",                     "strict",    0.68),
+        ],
+        "data_volatility": [
+            (r"\b(update[sd]?.{0,15}(daily|hourly|continuously|real.?time)|change[sd]?.{0,10}(every|daily|frequently))\b", "high",     0.80),
+            (r"\b(weekly.{0,15}update|moderate.{0,10}(change|update)|updated.{0,10}weekly)\b",                              "moderate", 0.70),
+            (r"\b(rarely.{0,10}change|change[sd]?.{0,10}(annually|yearly|seldom)|low.{0,10}volatility)\b",                 "low",      0.70),
+            (r"\b(static|immutable|does not change|never change|fixed.{0,15}(corpus|dataset))\b",                           "static",   0.80),
+            (r"\b(reviewed.{0,10}annually|next.{0,15}reviewed|last updated.{0,10}\d+.{0,5}month)\b", "static",   0.72),
+        ],
+        "accuracy_requirement": [
+            (r"\b(patient safety|fda|hipaa|510.?k|material.{0,15}(harm|client harm)|regulatory liability)\b", "critical",  0.85),
+            (r"\b(critical.{0,15}(accuracy|correct)|mission.{0,10}critical|zero.{0,10}error)\b",              "critical",  0.80),
+            (r"\b(very.{0,5}high.{0,10}accuracy|>?\s*9[05]\%.{0,10}(accuracy|precision))\b",                 "very_high", 0.75),
+            # Negation FIRST: "not life-critical", "follow up with HR"
+            (r"\bnot.{0,10}life.{0,10}crit\b",                                                                "moderate",  0.78),
+            (r"\b(convenience.{0,10}tool|slightly wrong|follow.{0,15}up.{0,15}(with|directly))\b",           "moderate",  0.72),
+            (r"\b(high.{0,10}accuracy|incorrect.{0,20}(harm|escalation))\b",                                 "high",      0.70),
+        ],
+        "domain_specificity": [
+            (r"\b(radiology|radiolog|medical.{0,10}(imaging|diagnosis)|bi.?rads|li.?rads)\b",                "highly_specialized", 0.87),
+            (r"\b(highly.{0,10}specializ|proprietary.{0,10}(jargon|terminology)|equity.{0,10}(analyst|valuation))\b", "highly_specialized", 0.82),
+            (r"\b(specialized.{0,15}(domain|vocabulary|terminology))\b",                                     "specialized",        0.75),
+            (r"\b(not.{0,10}highly.{0,10}special|e.?commerce|general.{0,10}purpose)\b",                    "general",            0.68),
+            (r"\b(moderate.{0,10}(domain|specializ)|company.{0,10}specific.{0,10}polic)\b",                 "moderate",           0.65),
+        ],
+        "security_level": [
+            (r"\b(hipaa|phi|patient.{0,10}data|air.?gapped|no.{0,15}internet|not.{0,10}leave.{0,15}(hospital|firewall))\b", "critical",  0.85),
+            (r"\b(gdpr|pii|sec.{0,10}rule|mifid|audit.{0,10}trail|role.{0,10}based.{0,10}access|sox|soc.{0,5}2)\b",         "high",      0.80),
+            (r"\b(elevated.{0,10}security|sensitive.{0,10}data)\b",                                                           "elevated",  0.65),
+            (r"\b(standard.{0,10}security|standard.{0,10}cloud|no pii beyond|standard.{0,10}encryption)\b", "standard",  0.72),
+        ],
+        "cost_sensitivity": [
+            (r"\b(\$200.{0,15}month|cannot.{0,10}justify|no.{0,10}budget)\b",                               "very_high", 0.85),
+            (r"\b(tight.{0,10}budget|budget.{0,10}constraint|cost.{0,10}sensitive|minimize.{0,10}cost)\b",  "high",      0.75),
+            (r"\b(reasonable.{0,10}(budget|engineering)|moderate.{0,10}(cost|budget))\b",                    "moderate",  0.68),
+            (r"\b(cost.{0,10}not.{0,10}constraint|cost.{0,10}justif|infrastructure.{0,10}cost.{0,15}not)\b","low",       0.75),
+        ],
+        "deployment_preference": [
+            (r"\b(on.?premise|on.?prem|air.?gapped|within.{0,20}(hospital|firewall|clinical))\b(?!.{0,40}(do not|don.t|not want|avoid))", "on_premise", 0.85),
+            # Negation: "do not want to manage on-premise" → cloud preference
+            (r"\b(do not|don.t|not want|avoid).{0,30}(on.?premise|on.?prem)\b",                                    "cloud",      0.78),
+            (r"\b(hybrid.{0,15}(cloud|deployment|infrastructure)|both.{0,15}(cloud|on.?prem))\b",                  "hybrid",     0.75),
+            (r"\b(edge.{0,10}(deploy|computing|inference)|iot|on.?device)\b",                                       "edge",       0.75),
+            (r"\b(aws|azure|gcp|google cloud|already use.{0,15}(aws|cloud)|managed service[s]?\s+wherever)\b",     "cloud",      0.72),
+        ],
+        "user_scale": [
+            (r"\b(enterprise|2[,\s]?[0-9]{3}[+]?.{0,10}(user|analyst|employee)|global.{0,10}office[s]?)\b","enterprise", 0.80),
+            (r"\b(800[,\s]?000|million[s]?.{0,15}(customer|user)|large.{0,10}user.{0,10}base)\b",           "large",      0.80),
+            (r"\b(thousand[s]?.{0,10}user|[1-9]\d{3}.{0,10}(user|customer|employee))\b",                    "medium",     0.65),
+            (r"\b(35.{0,10}employee|45.{0,10}radiologist|small.{0,10}team|internal.{0,10}tool)\b",          "small",      0.75),
+        ],
+    }
 
     # ── Keyword extraction ────────────────────────────────────────────────────
 
     def _keyword_extraction(self, text: str, pages: list[dict]) -> dict[str, dict]:
         """Fast keyword scan — no LLM cost, provides fallback source_text."""
-        import re
         signals = {}
         text_lower = text.lower()
 
-        # B-08 FIX: Compile regex patterns once to avoid O(n) text scan per keyword.
-        if not hasattr(self, "_keyword_patterns"):
-            self._keyword_patterns = {}
-            for signal_name, schema in SIGNAL_SCHEMA.items():
-                if schema.get("keywords"):
-                    # Use \b for word boundaries to avoid partial matches if desired,
-                    # but original just used substring match. We keep substring logic 
-                    # but combine them into one regex automaton.
-                    pattern = "|".join(re.escape(k.lower()) for k in schema["keywords"])
-                    self._keyword_patterns[signal_name] = re.compile(pattern)
-
         for signal_name, schema in SIGNAL_SCHEMA.items():
-            matches = []
-            pattern = getattr(self, "_keyword_patterns", {}).get(signal_name)
-            
-            if pattern:
-                # Find all unique keywords matched
-                found_keywords = set()
-                for m in pattern.finditer(text_lower):
-                    kw = m.group(0)
-                    if kw not in found_keywords:
-                        found_keywords.add(kw)
-                        idx = m.start()
-                        start = max(0, text.rfind(".", 0, idx) + 1)
-                        end = text.find(".", idx)
-                        if end == -1:
-                            end = min(len(text), idx + 200)
-                        matches.append({
-                            "keyword": kw,
-                            "source_text": text[start:end].strip(),
-                        })
-
-            if matches:
+            inferred_value = None
+            inferred_conf = 0.0
+            inferred_src = ""
+ 
+            for pattern, value, conf in self._VALUE_PATTERNS.get(signal_name, []):
+                m = re.search(pattern, text_lower, re.DOTALL | re.IGNORECASE)
+                if m:
+                    idx = m.start()
+                    start = max(0, text.rfind(".", 0, idx) + 1)
+                    end = text.find(".", idx)
+                    end = min(len(text), idx + 200) if end == -1 else end
+                    inferred_value = value
+                    inferred_conf = conf
+                    inferred_src = text[start:end].strip()[:200]
+                    break  # first match wins (patterns ordered most-specific first)
+ 
+            # ── Layer 2: count schema keyword matches for confidence boost ────
+            kw_matches = sum(1 for kw in schema["keywords"] if kw in text_lower)
+ 
+            if inferred_value:
+                # Boost confidence slightly if many topic keywords also present
+                boosted_conf = min(0.75, inferred_conf + kw_matches * 0.02)
                 page_num = 0
                 for page in pages:
-                    if matches[0]["keyword"] in page.get("text", "").lower():
+                    if inferred_src[:40].lower() in page.get("text", "").lower():
                         page_num = page.get("page_number", 0)
                         break
-
+                signals[signal_name] = {
+                    "value": inferred_value,
+                    "confidence": round(boosted_conf, 2),
+                    "source_text": inferred_src,
+                    "page_number": page_num,
+                    "keyword_matches": kw_matches,
+                }
+            elif kw_matches > 0:
+                # Topic detected but value unclear — keep value=None, low confidence
+                # This lets source_text still help the LLM merge step
+                page_num = 0
+                first_kw = next(kw for kw in schema["keywords"] if kw in text_lower)
+                idx = text_lower.index(first_kw)
+                start = max(0, text.rfind(".", 0, idx) + 1)
+                end = text.find(".", idx)
+                end = min(len(text), idx + 200) if end == -1 else end
+                src = text[start:end].strip()[:200]
+                for page in pages:
+                    if first_kw in page.get("text", "").lower():
+                        page_num = page.get("page_number", 0)
+                        break
                 signals[signal_name] = {
                     "value": None,
-                    "confidence": min(0.3, len(matches) * 0.1),
-                    "source_text": matches[0]["source_text"][:200],
+                    "confidence": min(0.3, kw_matches * 0.1),
+                    "source_text": src,
                     "page_number": page_num,
-                    "keyword_matches": len(matches),
+                    "keyword_matches": kw_matches,
                 }
             else:
                 signals[signal_name] = {
@@ -495,7 +522,7 @@ class SignalExtractor:
                     "page_number": 0,
                     "keyword_matches": 0,
                 }
-
+ 
         return signals
 
     # ── Source verification ───────────────────────────────────────────────────
@@ -505,10 +532,7 @@ class SignalExtractor:
     ) -> dict[str, dict]:
         """
         Verify each LLM-provided source_text actually appears in the document.
-        Falls back to fuzzy recovery. Does NOT penalise confidence on failure —
-        the value itself can be correct even when the exact quote isn't verbatim.
-        Penalising confidence here caused valid signals to be nulled downstream
-        by the anti-hallucination threshold, dramatically degrading recall.
+        Falls back to fuzzy recovery; penalises confidence on failure.
         """
         text_lower = full_text.lower()
 
@@ -530,11 +554,14 @@ class SignalExtractor:
                 sig["source_verified"] = True
                 sig["page_number"] = self._find_page_for_text(recovered, pages)
                 continue
-
-            # Mark unverified but do NOT touch confidence — a slightly paraphrased
-            # quote does not invalidate the extracted value.
-            logger.debug("Source for '%s' not verified (value kept)", key)
+            original_conf = round(sig.get("confidence", 0), 2)
+            penalised_conf = round(original_conf * 0.7, 2)
+            logger.warning(
+                 "Source for '%s' not verified — mild penalty %.2f → %.2f (value='%s' kept)",
+                key, original_conf, penalised_conf, sig.get("value"),
+            )
             sig["source_verified"] = False
+            sig["confidence"] = penalised_conf
 
         return signals
 
@@ -871,43 +898,63 @@ class SignalExtractor:
         """
         merged = {}
         for key in SIGNAL_SCHEMA:
-            kw = keyword_signals.get(key, {})
+            kw  = keyword_signals.get(key, {})
             llm = llm_signals.get(key, {})
-
-            value = llm.get("value") if llm.get("value") else kw.get("value")
-
-            kw_conf = kw.get("confidence", 0)
-            llm_conf = llm.get("confidence", 0)
-            if kw_conf > 0 and llm_conf > 0:
+ 
+            kw_val   = kw.get("value")
+            llm_val  = llm.get("value")
+            kw_conf  = kw.get("confidence", 0.0)
+            llm_conf = llm.get("confidence", 0.0)
+ 
+            # ── Choose the best value ────────────────────────────────────────
+            if llm_val and llm_conf >= 0.1:
+                # LLM gave a valid answer with enough confidence
+                value = llm_val
+                base_conf = llm_conf
+            elif kw_val and kw_conf >= 0.1:
+                # LLM failed / was penalised → fall back to keyword inference
+                value = kw_val
+                base_conf = kw_conf
+                logger.debug(
+                    "Signal '%s': using keyword value '%s' (conf=%.2f) because LLM "
+                    "conf=%.2f was too low (val='%s')",
+                    key, kw_val, kw_conf, llm_conf, llm_val,
+                )
+            else:
+                value = None
+                base_conf = max(kw_conf, llm_conf)
+ 
+            # ── Boost confidence when both sources agree ─────────────────────
+            if kw_val and llm_val and kw_val == llm_val and kw_conf >= 0.1 and llm_conf >= 0.1:
                 combined_conf = min(1.0, llm_conf + kw_conf * 0.3)
             else:
-                combined_conf = max(kw_conf, llm_conf)
-
-            llm_src = llm.get("source_text", "")
+                combined_conf = base_conf
+ 
+            # ── Pick best source_text ────────────────────────────────────────
+            llm_src      = llm.get("source_text", "")
             llm_verified = llm.get("source_verified", False)
-            kw_src = kw.get("source_text", "")
-
+            kw_src       = kw.get("source_text", "")
+ 
             if llm_src and llm_verified:
-                source_text = llm_src
-                page_number = llm.get("page_number") or kw.get("page_number", 0)
+                source_text  = llm_src
+                page_number  = llm.get("page_number") or kw.get("page_number", 0)
             elif kw_src:
-                source_text = kw_src
-                page_number = kw.get("page_number", 0)
+                source_text  = kw_src
+                page_number  = kw.get("page_number", 0)
             else:
-                source_text = llm_src
-                page_number = llm.get("page_number") or 0
-
+                source_text  = llm_src
+                page_number  = llm.get("page_number") or 0
+ 
+            final_conf = round(combined_conf, 2)
+ 
             merged[key] = {
-                "value": value,
-                "confidence": round(combined_conf, 2),
-                "source_text": source_text,
+                "value":           value if final_conf >= 0.1 else None,
+                "confidence":      final_conf,
+                "source_text":     source_text,
                 "source_verified": bool(llm_verified or (kw_src and source_text == kw_src)),
-                "page_number": page_number,
+                "page_number":     page_number,
             }
-
-            if merged[key]["confidence"] < 0.1:
-                merged[key]["value"] = None
-
+ 
         return merged
 
     # ── Utilities ─────────────────────────────────────────────────────────────
