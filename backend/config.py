@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # LLM - Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.2"
+    OLLAMA_MODEL: str = "gemma3:1b"
     OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
     OLLAMA_EMBEDDING_DIMENSION: int = 768
 

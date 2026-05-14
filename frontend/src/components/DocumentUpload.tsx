@@ -190,7 +190,7 @@ async function uploadWithProgress(
 
     xhr.onerror = () => {
       clearInterval(interval);
-      reject(new Error("Network error — check your connection and try again"));
+      reject(new Error("Network error - check your connection and try again"));
     };
     xhr.ontimeout = () => {
       clearInterval(interval);
@@ -418,7 +418,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                 {isLargeFile && !uploading && (
                   <div className="flex items-center gap-1.5 mt-2 text-amber-500 text-xs font-semibold">
                     <AlertTriangle size={12} />
-                    Large file — analysis may take a few extra minutes
+                    Large file - analysis may take a few extra minutes
                   </div>
                 )}
 

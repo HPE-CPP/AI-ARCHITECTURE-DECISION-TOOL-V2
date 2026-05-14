@@ -23,7 +23,7 @@ from app.db.base import Base
 from app.db.session import engine
 import app.db.models  # noqa: F401 — registers all models with Base
 
-from app.routers import upload, analysis, questionnaire, projects, users
+from app.routers import upload, analysis, questionnaire, projects, users, chat
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(questionnaire.router, prefix=prefix, tags=["Questionnaire"])
     app.include_router(projects.router, prefix=prefix, tags=["Projects"])
     app.include_router(users.router, prefix=prefix, tags=["Users"])
+    app.include_router(chat.router, prefix=prefix, tags=["Chat"])
 
     # Startup: create DB tables + FAISS directory
     @app.on_event("startup")

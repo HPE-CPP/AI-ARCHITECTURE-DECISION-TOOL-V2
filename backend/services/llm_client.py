@@ -168,6 +168,59 @@ class LLMClient:
             logger.error(f"Ollama API error: {e!r}")
             raise RuntimeError(f"Ollama API call failed: {e!r}")
 
+    async def generate_chat(
+        self,
+        messages: list[dict],
+        temperature: float = 0.25,
+        max_tokens: int = 768,
+    ) -> str:
+        """Multi-turn chat: accepts a pre-built messages list (system + alternating user/assistant).
+        Uses the same Ollama /api/chat endpoint but preserves the full conversation thread
+        so the model can track context across turns.
+        """
+        if self.provider == "openai":
+            if not self._openai_client:
+                raise RuntimeError("OpenAI API key not configured.")
+            try:
+                response = await self._openai_client.chat.completions.create(
+                    model=settings.OPENAI_MODEL,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                logger.error(f"OpenAI chat error: {e}")
+                raise RuntimeError(f"OpenAI chat failed: {e}")
+
+        # Ollama path
+        options: dict[str, Any] = {"temperature": temperature, "num_predict": max_tokens}
+        payload: dict[str, Any] = {
+            "model": settings.OLLAMA_MODEL,
+            "messages": messages,
+            "stream": False,
+            "options": options,
+        }
+        client = get_ollama_http_client()
+
+        async def _do_request() -> str:
+            response = await client.post(
+                f"{settings.OLLAMA_BASE_URL}/api/chat",
+                json=payload,
+            )
+            response.raise_for_status()
+            return response.json().get("message", {}).get("content", "")
+
+        try:
+            return await asyncio.wait_for(_do_request(), timeout=90.0)
+        except asyncio.TimeoutError:
+            raise RuntimeError("Ollama timed out after 90s.")
+        except httpx.HTTPError as he:
+            err_msg = getattr(he, "response", None)
+            raise RuntimeError(f"Ollama HTTP error: {he!r} {err_msg.text if err_msg else ''}")
+        except Exception as e:
+            raise RuntimeError(f"Ollama chat failed: {e!r}")
+
     async def generate_json(
         self,
         prompt: str,
