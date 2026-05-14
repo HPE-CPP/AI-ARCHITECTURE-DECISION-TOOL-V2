@@ -244,6 +244,49 @@ export async function sendChatMessage(
   return data.response as string;
 }
 
+export async function streamChatMessage(
+  analysisId: string,
+  message: string,
+  history: ChatMessageItem[],
+  onToken: (token: string) => void,
+): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = await getCachedAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const { getApiBase } = await import("./api-base");
+  const res = await fetch(`${getApiBase()}/api/v1/chat/stream`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ analysis_id: analysisId, message, history }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Chat failed");
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    for (const line of chunk.split("\n")) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.error) throw new Error(data.error);
+        if (data.done) return;
+        if (data.t) onToken(data.t);
+      } catch (e: any) {
+        if (e.message && !e.message.includes("JSON")) throw e;
+      }
+    }
+  }
+}
+
 export async function exportCostAnalysis(result: AnalysisResult): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = await getCachedAuthToken();

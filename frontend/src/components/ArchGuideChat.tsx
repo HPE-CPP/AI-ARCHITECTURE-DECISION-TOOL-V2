@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Bot, User, Loader2, Sparkles, ArrowRight } from "lucide-react";
-import { sendChatMessage, ChatMessageItem, AnalysisResult } from "@/lib/api";
+import { streamChatMessage, ChatMessageItem, AnalysisResult } from "@/lib/api";
 
 interface Props {
   analysisId: string;
@@ -291,17 +291,20 @@ function buildInitialSuggestions(result: AnalysisResult): string[] {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ArchGuideChat({ analysisId, result }: Props) {
-  const [open, setOpen]         = useState(false);
-  const [messages, setMessages] = useState<ChatMessageItem[]>([]);
-  const [followUps, setFollowUps] = useState<string[][]>([]);
-  const [input, setInput]       = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState<string | null>(null);
-  const [showPulse, setShowPulse] = useState(false);
-  const bottomRef      = useRef<HTMLDivElement>(null);
-  const inputRef       = useRef<HTMLTextAreaElement>(null);
-  const scrollRef      = useRef<HTMLDivElement>(null);
-  const lastBotMsgRef  = useRef<HTMLDivElement>(null);
+  const [open, setOpen]             = useState(false);
+  const [messages, setMessages]     = useState<ChatMessageItem[]>([]);
+  const [streamingText, setStreaming] = useState("");   // in-flight token buffer
+  const [followUps, setFollowUps]   = useState<string[][]>([]);
+  const [input, setInput]           = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+  const [showPulse, setShowPulse]   = useState(false);
+  const bottomRef        = useRef<HTMLDivElement>(null);
+  const inputRef         = useRef<HTMLTextAreaElement>(null);
+  const scrollRef        = useRef<HTMLDivElement>(null);
+  const lastBotMsgRef    = useRef<HTMLDivElement>(null);
+  const streamBubbleRef  = useRef<HTMLDivElement>(null);
+  const scrolledToStream = useRef(false);  // fire scroll-to-answer only once per turn
 
   const archName = ARCH_DISPLAY[result.recommended ?? ""] ?? (result.recommended ?? "");
   const initSuggestions = buildInitialSuggestions(result);
@@ -311,21 +314,27 @@ export function ArchGuideChat({ analysisId, result }: Props) {
     return () => clearTimeout(t);
   }, []);
 
-  // Scroll behaviour:
-  // - User sends a message or loading → scroll to bottom (show typing indicator)
-  // - Bot answer arrives → scroll to the TOP of the answer so user reads it from start
-  // - Follow-up questions appear below; user can scroll down to see them
+  // Scroll to bottom when user sends — shows typing dots
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.role === "assistant" && lastBotMsgRef.current) {
-      const msgTop = lastBotMsgRef.current.offsetTop - 12;
-      el.scrollTop = msgTop;
-    } else {
+    if (el && loading && messages[messages.length - 1]?.role === "user") {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, loading]);
+  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scroll to the answer bubble on first streaming token — once per turn only
+  useEffect(() => {
+    if (!streamingText) { scrolledToStream.current = false; return; }
+    if (scrolledToStream.current) return;
+    scrolledToStream.current = true;
+    const el = scrollRef.current;
+    const bubble = streamBubbleRef.current;
+    if (!el || !bubble) return;
+    // getBoundingClientRect gives position relative to viewport — subtract container top
+    const containerTop = el.getBoundingClientRect().top;
+    const bubbleTop    = bubble.getBoundingClientRect().top;
+    el.scrollTop = el.scrollTop + (bubbleTop - containerTop) - 12;
+  }, [streamingText]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 300);
@@ -336,19 +345,31 @@ export function ArchGuideChat({ analysisId, result }: Props) {
     if (!trimmed || loading) return;
 
     setFollowUps([]);
+    setStreaming("");
     const userMsg: ChatMessageItem = { role: "user", content: trimmed };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setLoading(true);
     setError(null);
 
+    let accumulated = "";
     try {
-      // Pass existing messages as history (NOT including current userMsg —
-      // the backend appends body.message as the final user turn itself).
-      const response = await sendChatMessage(analysisId, trimmed, messages);
-      setMessages(prev => [...prev, { role: "assistant", content: response }]);
+      await streamChatMessage(
+        analysisId,
+        trimmed,
+        messages,
+        (token) => {
+          accumulated += token;
+          setStreaming(accumulated);
+        },
+      );
+      // Final cleanup on the full text (catches any remaining markdown the per-token pass missed)
+      const cleaned = accumulated.replace(/\*+/g, "").replace(/#{1,6}\s*/g, "").replace(/\n{3,}/g, "\n\n").trim();
+      setMessages(prev => [...prev, { role: "assistant", content: cleaned }]);
+      setStreaming("");
       setFollowUps(buildFollowUps(trimmed, result));
     } catch (err: any) {
+      setStreaming("");
       setError(err.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
@@ -564,20 +585,39 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                 );
               })}
 
-              {/* Typing indicator */}
-              {loading && (
+              {/* Streaming answer — only while generating, never alongside a completed bubble */}
+              {loading && messages[messages.length - 1]?.role === "user" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5"
                     style={{ background: C.avatarBot }}>
                     <Bot size={12} style={{ color: C.accent }} />
                   </div>
-                  <div className="rounded-2xl rounded-tl-sm px-3.5 py-3 flex items-center gap-1.5"
-                    style={{ background: C.bubbleBot, border: `1px solid ${C.panelBorder}` }}>
-                    {[0, 1, 2].map(d => (
-                      <span key={d} className="w-1.5 h-1.5 rounded-full animate-bounce"
-                        style={{ background: C.dot, animationDelay: `${d * 0.15}s` }} />
-                    ))}
-                  </div>
+                  {streamingText ? (
+                    <div ref={streamBubbleRef} style={{ maxWidth: "84%", display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <span className="text-[10px] font-bold uppercase tracking-widest"
+                        style={{ color: C.accent, paddingLeft: "2px" }}>Answer</span>
+                      <div className="text-sm leading-relaxed whitespace-pre-wrap px-3.5 py-2.5"
+                        style={{
+                          background: C.bubbleBot,
+                          color: C.textPrimary,
+                          borderRadius: "4px 16px 16px 16px",
+                          border: `1px solid ${C.panelBorder}`,
+                          borderLeft: `3px solid ${C.accent}`,
+                        }}>
+                        {streamingText}
+                        <span className="inline-block w-0.5 h-3.5 ml-0.5 align-middle animate-pulse rounded-sm"
+                          style={{ background: C.accent }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl rounded-tl-sm px-3.5 py-3 flex items-center gap-1.5"
+                      style={{ background: C.bubbleBot, border: `1px solid ${C.panelBorder}` }}>
+                      {[0, 1, 2].map(d => (
+                        <span key={d} className="w-1.5 h-1.5 rounded-full animate-bounce"
+                          style={{ background: C.dot, animationDelay: `${d * 0.15}s` }} />
+                      ))}
+                    </div>
+                  )}
                 </motion.div>
               )}
 
