@@ -217,9 +217,11 @@ class SignalExtractor:
             return self._empty_signals()
 
         # ── 1. Cache check ────────────────────────────────────────────────────
-        # Include the prompt fingerprint so that cache entries from previous
-        # versions of the prompt are automatically invalidated when the prompt
-        # changes — no manual cache flush required.
+        # Cache key = prompt fingerprint + document text (MD5 of the key string
+        # is NOT computed here — the raw string is used as the dict key inside
+        # extraction_cache which handles its own hashing).
+        # The prompt fingerprint automatically invalidates stale entries when
+        # EXTRACTION_PROMPT changes — no manual cache flush required.
         _cache_key = f"p:{_PROMPT_FINGERPRINT}\x00{full_text}"
         cached = extraction_cache.get(_cache_key)
         if cached is not None:
@@ -318,6 +320,18 @@ class SignalExtractor:
         """Single LLM call for signal extraction."""
         try:
             ctx_body = retrieved_context.strip() if retrieved_context else "(none)"
+
+            # Guard: if retrieved_context pushes combined size over MAX_CONTEXT_CHARS,
+            # trim it rather than letting the LLM client silently truncate the document.
+            overhead = len(EXTRACTION_PROMPT) - len("RETRIEVED_CONTEXT_PLACEHOLDER") - len("DOCUMENT_TEXT_PLACEHOLDER")
+            budget = MAX_CONTEXT_CHARS - overhead - len(text)
+            if budget < 0:
+                # Document itself already exceeds budget — trim it
+                text = text[:MAX_CONTEXT_CHARS - overhead - 200]
+                ctx_body = "(none)"
+            elif len(ctx_body) > budget:
+                ctx_body = ctx_body[:budget]
+
             # Use str.replace() — NOT .format() — because document text may contain
             # literal curly braces (JSON, code, templates) that break str.format().
             prompt = (
