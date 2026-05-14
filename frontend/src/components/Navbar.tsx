@@ -255,7 +255,15 @@ export function Navbar() {
             if (variant === "top" || variant === "pill") setIsExpanded(true);
           }}
           onClick={() => {
-            if (phase === "sphere") { setIsForcedPill(true); setPhase("pill"); }
+            if (phase === "sphere") {
+              if (window.innerWidth < 768) {
+                // On mobile: tap the sphere to open the menu directly
+                setIsMobileMenuOpen(true);
+              } else {
+                setIsForcedPill(true);
+                setPhase("pill");
+              }
+            }
           }}
           className={`pointer-events-auto flex items-center justify-center mx-auto relative ${phase === "sphere" ? "cursor-pointer hover:scale-110 transition-transform active:scale-95 shadow-white/5" : ""
             } ${userMenuOpen ? "overflow-visible" : "overflow-hidden"}`}
@@ -495,8 +503,16 @@ export function Navbar() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-0 z-40 md:hidden bg-[color:var(--background)] pt-24 px-6 flex flex-col gap-4"
+            className="fixed inset-0 z-40 md:hidden bg-[color:var(--background)] pt-20 px-6 flex flex-col gap-4"
           >
+            {/* Close button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/8 border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90 transition-transform"
+            >
+              <X size={20} />
+            </button>
+
             <div className="flex flex-col gap-3">
               {navLinks.map((link, i) => {
                 const isActive = activeTab === link.id;
