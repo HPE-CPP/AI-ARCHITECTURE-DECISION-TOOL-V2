@@ -3,7 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { LenisProvider } from "@/components/LenisProvider";
 import { Navbar } from "@/components/Navbar";
-import { GlobalBackground } from "@/components/GlobalBackground";
+import { GlobalBackgroundLoader } from "@/components/GlobalBackgroundLoader";
 import { Footer } from "@/components/Footer";
 import { AuthProvider } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -24,11 +24,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased min-h-screen flex flex-col bg-[color:var(--background)] text-[color:var(--text-primary)] overflow-x-hidden">
+      <head>
+        {/* Warm up connections for Firebase Auth so lazy-loaded SDK is faster */}
+        <link rel="preconnect" href="https://securetoken.googleapis.com" />
+        <link rel="preconnect" href="https://identitytoolkit.googleapis.com" />
+        <link rel="dns-prefetch" href="https://www.googleapis.com" />
+      </head>
+      <body className="relative antialiased min-h-screen flex flex-col bg-[color:var(--background)] text-[color:var(--text-primary)] overflow-x-hidden">
         <ThemeProvider>
           <AuthProvider>
             <LenisProvider>
-              <GlobalBackground />
+              <GlobalBackgroundLoader />
 
               <Navbar />
 

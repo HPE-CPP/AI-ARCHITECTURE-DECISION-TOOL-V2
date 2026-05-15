@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { auth, onAuthStateChanged, signInWithGoogle, signOutUser, User } from "@/lib/firebase";
 import { getApiBase } from "@/lib/api-base";
+import type { User } from "firebase/auth";
 
 interface AuthContextValue {
   user: User | null;
@@ -22,19 +22,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
+    let unsubscribe: (() => void) | null = null;
+    let active = true;
+
+    // Lazy-load Firebase so it's excluded from the initial JS bundle and
+    // never blocks the first paint or LCP measurement.
+    import("@/lib/firebase").then(({ auth, onAuthStateChanged }) => {
+      if (!active) return;
+      unsubscribe = onAuthStateChanged(auth, (u) => {
+        setUser(u);
+        setLoading(false);
+      });
     });
-    return unsubscribe;
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
   }, []);
 
-  const signIn = async () => {
+  const signIn = async (): Promise<User> => {
+    const { signInWithGoogle } = await import("@/lib/firebase");
     const u = await signInWithGoogle();
     setUser(u);
-    
-    // FIX FE-004: Backend sync with retry — do NOT fire-and-forget silently
-    // If all retries fail, the user is warned. Projects will fail with FK errors otherwise.
+
+    // FIX FE-004: Backend sync with retry
     if (u) {
       const payload = {
         uid: u.uid,
@@ -52,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
-          if (res.ok) break; // success
+          if (res.ok) break;
           lastError = new Error(`HTTP ${res.status}`);
         } catch (err) {
           lastError = err;
@@ -64,16 +76,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (lastError) {
         console.warn(
           "[AuthContext] Failed to sync user to backend after all retries.",
-          "Projects created by this user may fail due to missing DB record.",
           lastError,
         );
       }
     }
-    
+
     return u;
   };
 
   const signOut = async () => {
+    const { signOutUser } = await import("@/lib/firebase");
     await signOutUser();
     setUser(null);
   };
