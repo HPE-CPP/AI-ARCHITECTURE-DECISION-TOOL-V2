@@ -9,6 +9,7 @@ import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCirc
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject, updateAnalysisHistoryEntry, getAnalysisHistory, AnalysisHistoryEntry } from "@/lib/projects-store";
+import { useAuth } from "@/lib/auth-context";
 import { AnalysisHistory } from "@/components/AnalysisHistory";
 import { ArchGuideChat } from "@/components/ArchGuideChat";
 
@@ -102,6 +103,12 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const projectId = searchParams.get("projectId");
   const isQuestionnaire = searchParams.get("mode") === "questionnaire";
   const activeStages: StageList = isQuestionnaire ? QUESTIONNAIRE_STAGES : ANALYSIS_STAGES;
+
+  // Wait for Firebase auth to finish restoring its state before the first
+  // API call. Without this guard, a page refresh fires getAnalysis() while
+  // auth.currentUser is still null (lazy Firebase not yet initialised),
+  // causing the backend to return 401 → "Analysis Failed" error screen.
+  const { loading: authLoading } = useAuth();
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +150,12 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   // for stuck sessions. Now uses exponential backoff: 1.5s → 3s → 6s → max 15s,
   // and hard-stops after MAX_POLLS attempts (~3 minutes).
   useEffect(() => {
+    // Don't start polling until Firebase auth has finished initialising.
+    // On a hard refresh, auth.currentUser is null for ~200-500ms while
+    // Firebase restores the session — firing the API call during this window
+    // sends no token and the backend returns 401.
+    if (authLoading) return;
+
     const MAX_POLLS = 40;
     let pollCount = 0;
     let timeoutRef: NodeJS.Timeout;
@@ -189,7 +202,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
     fetchResult();
     return () => clearTimeout(timeoutRef);
-  }, [resolvedParams.analysisId]);
+  }, [resolvedParams.analysisId, authLoading]);
 
   // 2. When result is ready, fast-forward through any unseen stages (700ms each) then reveal
   useEffect(() => {
