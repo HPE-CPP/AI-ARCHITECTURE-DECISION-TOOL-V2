@@ -120,6 +120,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const [resultReady, setResultReady] = useState(false);
   const [forcedStageIndex, setForcedStageIndex] = useState<number | null>(null);
 
+  const [showEditOptions, setShowEditOptions] = useState(false);
   const [isEditingInputs, setIsEditingInputs] = useState(false);
   const [questionnaireOptions, setQuestionnaireOptions] = useState<QuestionnaireOptions | null>(null);
   const [editAnswers, setEditAnswers] = useState<Record<string, string>>({});
@@ -266,19 +267,11 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   };
 
   const handleEditInputsClick = () => {
-    if (!isQuestionnaire) {
-      // Document upload flow — go back to the analyze page so the user
-      // can re-upload a document. Showing questionnaire questions here
-      // makes no sense since no answers were given originally.
-      if (projectId) {
-        router.push(`/projects/${projectId}/analyze?mode=upload`);
-      } else {
-        router.back();
-      }
-      return;
-    }
+    setShowEditOptions(true);
+  };
 
-    // Questionnaire flow — open the inline signal editor as normal.
+  const handleSelectQuestionnaire = () => {
+    setShowEditOptions(false);
     if (!result?.signals) return;
     const initialAnswers: Record<string, string> = {};
     Object.entries(result.signals).forEach(([k, v]) => {
@@ -287,6 +280,15 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     setEditAnswers(initialAnswers);
     setCurrentEditStep(0);
     setIsEditingInputs(true);
+  };
+
+  const handleSelectReupload = () => {
+    setShowEditOptions(false);
+    if (projectId) {
+      router.push(`/projects/${projectId}/analyze?mode=upload`);
+    } else {
+      router.back();
+    }
   };
 
   const handleEditChange = (key: string, val: string) => {
@@ -485,7 +487,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
           className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
         >
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          {isQuestionnaire ? "Edit Inputs" : "Re-upload Document"}
+          Edit Inputs
         </button>
 
         {projectId && (
@@ -499,7 +501,39 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         )}
       </div>
 
-      {isEditingInputs && questionnaireOptions && sortedEditSignals.length > 0 ? (
+      {showEditOptions ? (
+        <div className="w-full flex flex-col items-center max-w-2xl mx-auto mt-10 min-h-[50vh]">
+          <h2 className="text-3xl font-bold mb-8 text-center tracking-tight">How would you like to edit inputs?</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+            <button 
+              onClick={handleSelectQuestionnaire} 
+              className="p-8 rounded-[2rem] bg-[color:var(--surface)] border border-[color:var(--border)] hover:border-[color:var(--text-primary)] hover:shadow-lg transition-all flex flex-col items-center text-center gap-4 group"
+            >
+              <div className="w-16 h-16 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--text-primary)] group-hover:text-[color:var(--background)] transition-colors">
+                 <CheckCircle size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-[color:var(--text-primary)]">Complete via Questionnaire</h3>
+              <p className="text-[color:var(--text-secondary)] text-sm font-medium">Review extracted signals and answer questions to complete missing ones.</p>
+            </button>
+            <button 
+              onClick={handleSelectReupload} 
+              className="p-8 rounded-[2rem] bg-[color:var(--surface)] border border-[color:var(--border)] hover:border-[color:var(--text-primary)] hover:shadow-lg transition-all flex flex-col items-center text-center gap-4 group"
+            >
+              <div className="w-16 h-16 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] flex items-center justify-center group-hover:bg-[color:var(--text-primary)] group-hover:text-[color:var(--background)] transition-colors">
+                 <FileText size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-[color:var(--text-primary)]">Upload New Document</h3>
+              <p className="text-[color:var(--text-secondary)] text-sm font-medium">Upload a new document to extract signals and re-run analysis.</p>
+            </button>
+          </div>
+          <button 
+            onClick={() => setShowEditOptions(false)} 
+            className="mt-8 px-6 py-2 rounded-full text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] hover:bg-[color:var(--surface)] font-bold text-sm transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : isEditingInputs && questionnaireOptions && sortedEditSignals.length > 0 ? (
         <div className="w-full flex flex-col items-center max-w-2xl mx-auto">
           {/* Progress Bar */}
           <div className="w-full mb-6">
