@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Bot, User, Loader2, Sparkles, ArrowRight, Plus, Trash2 } from "lucide-react";
 import { streamChatMessage, ChatMessageItem, AnalysisResult } from "@/lib/api";
 
@@ -398,7 +398,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
   return (
     <>
       {/* Floating trigger button */}
-      <motion.button
+      <m.button
         onClick={() => { setOpen(prev => !prev); setShowPulse(false); }}
         className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-2xl"
         style={{ background: C.accent, color: "#fff" }}
@@ -416,12 +416,12 @@ export function ArchGuideChat({ analysisId, result }: Props) {
             {messages.filter(m => m.role === "assistant").length}
           </span>
         )}
-      </motion.button>
+      </m.button>
 
       {/* Chat panel */}
       <AnimatePresence>
         {open && (
-          <motion.div
+          <m.div
             key="chat-panel"
             initial={{ opacity: 0, y: 20, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -516,7 +516,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
               onTouchMove={(e) => e.stopPropagation()}
             >
               {/* Welcome */}
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5">
+              <m.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5"
                   style={{ background: C.avatarBot }}>
                   <Bot size={13} style={{ color: C.accent }} />
@@ -527,7 +527,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                   <span style={{ color: C.accent, fontWeight: 600 }}>{archName}</span>{" "}
                   recommendation.
                 </div>
-              </motion.div>
+              </m.div>
 
               {/* Message list */}
               {messages.map((msg, i) => {
@@ -535,7 +535,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                 const isLastBot = !isUser && i === messages.length - 1;
                 return (
                   <React.Fragment key={i}>
-                    <motion.div
+                    <m.div
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.16 }}
@@ -582,11 +582,11 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                           </div>
                         </div>
                       )}
-                    </motion.div>
+                    </m.div>
 
                     {/* Follow-up questions — clearly separated section */}
                     {isLastBot && !loading && followUps.length > 0 && (
-                      <motion.div
+                      <m.div
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.15, duration: 0.2 }}
@@ -636,7 +636,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                             </div>
                           </div>
                         ))}
-                      </motion.div>
+                      </m.div>
                     )}
                   </React.Fragment>
                 );
@@ -644,7 +644,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
 
               {/* Streaming answer — only while generating, never alongside a completed bubble */}
               {loading && messages[messages.length - 1]?.role === "user" && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
+                <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5"
                     style={{ background: C.avatarBot }}>
                     <Bot size={12} style={{ color: C.accent }} />
@@ -675,16 +675,16 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                       ))}
                     </div>
                   )}
-                </motion.div>
+                </m.div>
               )}
 
               {/* Error */}
               {error && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className="text-xs px-3 py-2 rounded-xl text-center mx-1"
                   style={{ background: "rgba(239,68,68,0.12)", color: "rgb(248,113,113)", border: "1px solid rgba(239,68,68,0.25)" }}>
                   {error}
-                </motion.div>
+                </m.div>
               )}
 
               <div ref={bottomRef} />
@@ -744,7 +744,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                 {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
               </button>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </>

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Hexagon, Moon, Sun, Menu, X, FolderOpen, LogOut, User } from "lucide-react";
-import { motion, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, Variants } from "framer-motion";
+import { m, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
 import { useAuth } from "@/lib/auth-context";
 import { getProjects } from "@/lib/projects-store";
@@ -30,6 +30,7 @@ export function Navbar() {
   const [phase, setPhase] = useState<"top" | "pill" | "sphere">("sphere");
   const [isForcedPill, setIsForcedPill] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
@@ -54,6 +55,7 @@ export function Navbar() {
 
   useEffect(() => {
     setMounted(true);
+    setIsMobile(window.innerWidth < 768);
     const timer = setTimeout(() => {
       const currentScroll = window.scrollY;
       if (currentScroll < 50) setPhase("top");
@@ -139,6 +141,7 @@ export function Navbar() {
     }
   });
 
+  const blur = isMobile ? "none" : "blur(20px)";
   const variants = {
     top: {
       width: "100%",
@@ -149,8 +152,8 @@ export function Navbar() {
       backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
       border: "1px solid rgba(150,150,150,0.05)",
       padding: "0 24px",
-      backdropFilter: "blur(20px)",
-      WebkitBackdropFilter: "blur(20px)",
+      backdropFilter: blur,
+      WebkitBackdropFilter: blur,
     },
     pill: {
       width: "100%",
@@ -161,8 +164,8 @@ export function Navbar() {
       backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
       border: currentTheme === "dark" ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)",
       padding: "0 24px",
-      backdropFilter: "blur(20px)",
-      WebkitBackdropFilter: "blur(20px)",
+      backdropFilter: blur,
+      WebkitBackdropFilter: blur,
       boxShadow: "0 10px 40px rgba(0,0,0,0.1)"
     },
     sphere: {
@@ -174,8 +177,8 @@ export function Navbar() {
       backgroundColor: currentTheme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)",
       border: currentTheme === "dark" ? "1px solid rgba(255,255,255,0.3)" : "1px solid rgba(0,0,0,0.3)",
       padding: "0 10px",
-      backdropFilter: "blur(20px)",
-      WebkitBackdropFilter: "blur(20px)",
+      backdropFilter: blur,
+      WebkitBackdropFilter: blur,
       boxShadow: "0 10px 40px rgba(0,0,0,0.2)"
     }
   };
@@ -246,7 +249,7 @@ export function Navbar() {
       />
 
       <div className="fixed top-0 left-0 w-full flex justify-center z-50 pointer-events-none px-4">
-        <motion.nav
+        <m.nav
           variants={variants}
           initial="sphere"
           animate={phase}
@@ -276,7 +279,7 @@ export function Navbar() {
               <div className="pointer-events-auto shrink-0 flex items-center z-10">
                 <AnimatePresence>
                   {isExpanded && (
-                    <motion.div
+                    <m.div
                       key="left-logo"
                       variants={leftVariants}
                       initial="hidden"
@@ -292,7 +295,7 @@ export function Navbar() {
                           ArchGuide.
                         </span>
                       </Link>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>
@@ -301,7 +304,7 @@ export function Navbar() {
               <div className="pointer-events-auto shrink-0 flex items-center justify-center absolute left-1/2 -translate-x-1/2 z-0">
                 <AnimatePresence>
                   {isExpanded && (
-                    <motion.div
+                    <m.div
                       key="nav-links"
                       variants={centerVariants}
                       initial="hidden"
@@ -325,7 +328,7 @@ export function Navbar() {
                               </span>
                             )}
                             {isActive && (
-                              <motion.div
+                              <m.div
                                 layoutId="navbar-active-pill"
                                 transition={{ type: "spring", stiffness: 400, damping: 35 }}
                                 className="absolute inset-0 bg-[color:var(--text-primary)] rounded-full -z-10 shadow-sm"
@@ -334,7 +337,7 @@ export function Navbar() {
                           </Link>
                         );
                       })}
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>
@@ -344,7 +347,7 @@ export function Navbar() {
                 {/* Desktop Actions */}
                 <AnimatePresence>
                   {isExpanded && (
-                    <motion.div
+                    <m.div
                       key="nav-actions"
                       variants={rightVariants}
                       initial="hidden"
@@ -381,7 +384,7 @@ export function Navbar() {
 
                             <AnimatePresence>
                               {userMenuOpen && (
-                                <motion.div
+                                <m.div
                                   initial={{ opacity: 0, scale: 0.95, y: -8 }}
                                   animate={{ opacity: 1, scale: 1, y: 0 }}
                                   exit={{ opacity: 0, scale: 0.95, y: -8 }}
@@ -407,7 +410,7 @@ export function Navbar() {
                                   >
                                     <LogOut size={14} /> Sign Out
                                   </button>
-                                </motion.div>
+                                </m.div>
                               )}
                             </AnimatePresence>
                           </div>
@@ -423,14 +426,14 @@ export function Navbar() {
                           </button>
                         )
                       ) : null}
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
 
                 {/* Mobile Toggles */}
                 <AnimatePresence>
                   {isExpanded && (
-                    <motion.div
+                    <m.div
                       key="mobile-toggle"
                       variants={rightVariants}
                       initial="hidden"
@@ -470,7 +473,7 @@ export function Navbar() {
                       >
                         {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
                       </button>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>
@@ -481,7 +484,7 @@ export function Navbar() {
           {/* Center Block (Sphere Logo - only visible when not expanded) */}
           <AnimatePresence>
             {!isExpanded && (
-              <motion.div
+              <m.div
                 key="sphere-center-logo"
                 initial={{ opacity: 0, scale: 0.5, rotate: -30 }}
                 animate={{ opacity: 1, scale: 1, rotate: 0 }}
@@ -490,16 +493,16 @@ export function Navbar() {
                 className="absolute inset-0 flex items-center justify-center pointer-events-none"
               >
                 <Hexagon size={26} className="text-[color:var(--text-primary)]" />
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
-        </motion.nav>
+        </m.nav>
       </div>
 
       {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -517,7 +520,7 @@ export function Navbar() {
               {navLinks.map((link, i) => {
                 const isActive = activeTab === link.id;
                 return (
-                  <motion.div
+                  <m.div
                     key={link.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -540,13 +543,13 @@ export function Navbar() {
                         </span>
                       )}
                     </Link>
-                  </motion.div>
+                  </m.div>
                 );
               })}
             </div>
 
             {/* Mobile: User actions */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.35 }}
@@ -578,8 +581,8 @@ export function Navbar() {
                   <User size={18} /> Sign In
                 </button>
               )}
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         )}
       </AnimatePresence>
     </>
