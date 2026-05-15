@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, X, Send, Bot, User, Loader2, Sparkles, ArrowRight } from "lucide-react";
+import { MessageCircle, X, Send, Bot, User, Loader2, Sparkles, ArrowRight, Plus, Trash2 } from "lucide-react";
 import { streamChatMessage, ChatMessageItem, AnalysisResult } from "@/lib/api";
 
 interface Props {
@@ -376,6 +376,14 @@ export function ArchGuideChat({ analysisId, result }: Props) {
     }
   }, [analysisId, loading, messages, result]);
 
+  const clearChat = useCallback(() => {
+    setMessages([]);
+    setStreaming("");
+    setFollowUps([]);
+    setInput("");
+    setError(null);
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -437,11 +445,33 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setOpen(false)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center transition-opacity hover:opacity-60"
-                style={{ color: C.textSecond }} aria-label="Close chat">
-                <X size={15} />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={clearChat}
+                  title="New chat"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-opacity hover:opacity-60"
+                  style={{ color: C.textSecond }}
+                  aria-label="New chat"
+                >
+                  <Plus size={15} />
+                </button>
+                {hasMessages && (
+                  <button
+                    onClick={clearChat}
+                    title="Clear history"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center transition-opacity hover:opacity-60"
+                    style={{ color: C.textSecond }}
+                    aria-label="Clear history"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+                <button onClick={() => setOpen(false)}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-opacity hover:opacity-60"
+                  style={{ color: C.textSecond }} aria-label="Close chat">
+                  <X size={15} />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
