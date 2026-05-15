@@ -49,7 +49,9 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
 
   const handleCardClick = () => {
     if (project.status === "completed" && project.analysis_id) {
-      router.push(`/results/${project.analysis_id}?projectId=${project.id}`);
+      const qs = new URLSearchParams({ projectId: project.id });
+      if (project.mode === "questionnaire") qs.append("mode", "questionnaire");
+      router.push(`/results/${project.analysis_id}?${qs.toString()}`);
     } else {
       router.push(`/projects/${project.id}/analyze`);
     }
