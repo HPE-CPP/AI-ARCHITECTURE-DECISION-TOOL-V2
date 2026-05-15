@@ -204,7 +204,7 @@ def update_signals(db: DBSession, session_id: str, updates: dict[str, str]) -> d
                 session_id=session_uuid,
                 signal_name=signal_name,
                 value=value,
-                confidence=1.0,
+                confidence=0.85,
                 source_text="Follow-up answer from user",
                 page_number=0,
                 source_verified=True,

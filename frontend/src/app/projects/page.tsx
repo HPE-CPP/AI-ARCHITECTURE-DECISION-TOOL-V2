@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ProjectCard } from "@/components/ProjectCard";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
 import { AnimatedSection } from "@/components/AnimatedScroll";
-import { AuthModal } from "@/components/AuthModal";
+
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -29,7 +29,7 @@ export default function ProjectsPage() {
   const [mounted, setMounted] = useState(false);
   // FIX FE-012: separate loading state so we can show skeletons during fetch
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   const [undoInfo, setUndoInfo] = useState<{
     id: string;
     project: Project;
@@ -227,25 +227,12 @@ export default function ProjectsPage() {
   }
 
   const handleNewProjectClick = () => {
-    if (!user && projects.length >= 1) {
-      setAuthModalOpen(true);
-    } else {
-      setEditTarget(null);
-      setCreateModalOpen(true);
-    }
+    setEditTarget(null);
+    setCreateModalOpen(true);
   };
 
   return (
     <>
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        onAuthSuccess={() => { setAuthModalOpen(false); setEditTarget(null); setCreateModalOpen(true); }}
-        onSkip={() => setAuthModalOpen(false)}  // Skipping refuses project creation 
-        signIn={signIn}
-        signOut={signOut}
-        mode="project-limit"
-      />
 
       <div className="w-full min-h-screen pt-32 pb-20 px-4 sm:px-6 max-w-6xl mx-auto">
 

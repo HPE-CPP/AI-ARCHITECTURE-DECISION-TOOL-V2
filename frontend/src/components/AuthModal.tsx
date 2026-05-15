@@ -12,7 +12,7 @@ interface AuthModalProps {
   signIn: () => Promise<{ displayName: string | null; uid: string; email: string | null }>;
   /** Pass the signOut function from useAuth() */
   signOut: () => Promise<void>;
-  mode?: "default" | "project-limit";
+  mode?: "default" | "project-limit" | "questionnaire-required";
 }
 
 export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, signOut, mode = "default" }: AuthModalProps) {
@@ -160,11 +160,15 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                     </div>
 
                     <h2 className="text-xl sm:text-2xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
-                      {mode === "project-limit" ? "Sign In Required" : "Save Your Progress"}
+                      {mode === "project-limit" || mode === "questionnaire-required"
+                        ? "Sign In Required"
+                        : "Save Your Progress"}
                     </h2>
                     <p className="text-[color:var(--text-secondary)] font-medium mb-8 leading-relaxed">
-                      {mode === "project-limit" 
-                        ? "Only one project can be created without signing in. Please sign in to create more projects." 
+                      {mode === "questionnaire-required"
+                        ? "The Guided Flow requires an account to submit your answers. Sign in to continue."
+                        : mode === "project-limit"
+                        ? "Only one project can be created without signing in. Please sign in to create more projects."
                         : "Sign in to save your analyses and access them anytime from any device."}
                     </p>
 
@@ -203,11 +207,11 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
 
                     {/* Skip / Cancel */}
                     <button
-                      onClick={mode === "project-limit" ? onClose : handleSkipRequest}
+                      onClick={mode === "project-limit" ? onClose : mode === "questionnaire-required" ? onSkip : handleSkipRequest}
                       disabled={loading}
                       className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors"
                     >
-                      {mode === "project-limit" ? "Cancel" : "Skip for now"}
+                      {mode === "project-limit" || mode === "questionnaire-required" ? "Cancel" : "Skip for now"}
                     </button>
                   </div>
                 </div>

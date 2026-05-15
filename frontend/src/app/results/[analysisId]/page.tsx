@@ -266,6 +266,19 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   };
 
   const handleEditInputsClick = () => {
+    if (!isQuestionnaire) {
+      // Document upload flow — go back to the analyze page so the user
+      // can re-upload a document. Showing questionnaire questions here
+      // makes no sense since no answers were given originally.
+      if (projectId) {
+        router.push(`/projects/${projectId}/analyze?mode=upload`);
+      } else {
+        router.back();
+      }
+      return;
+    }
+
+    // Questionnaire flow — open the inline signal editor as normal.
     if (!result?.signals) return;
     const initialAnswers: Record<string, string> = {};
     Object.entries(result.signals).forEach(([k, v]) => {
@@ -472,7 +485,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
           className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
         >
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          Edit Inputs
+          {isQuestionnaire ? "Edit Inputs" : "Re-upload Document"}
         </button>
 
         {projectId && (
