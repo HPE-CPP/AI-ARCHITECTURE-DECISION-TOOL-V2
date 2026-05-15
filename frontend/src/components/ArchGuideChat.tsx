@@ -299,6 +299,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [showPulse, setShowPulse]   = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const bottomRef        = useRef<HTMLDivElement>(null);
   const inputRef         = useRef<HTMLTextAreaElement>(null);
   const scrollRef        = useRef<HTMLDivElement>(null);
@@ -382,6 +383,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
     setFollowUps([]);
     setInput("");
     setError(null);
+    setConfirmClear(false);
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -446,6 +448,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                {/* New Chat — immediate fresh start */}
                 <button
                   onClick={clearChat}
                   title="New chat"
@@ -455,9 +458,11 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                 >
                   <Plus size={15} />
                 </button>
-                {hasMessages && (
+
+                {/* Clear History — confirmation required */}
+                {hasMessages && !confirmClear && (
                   <button
-                    onClick={clearChat}
+                    onClick={() => setConfirmClear(true)}
                     title="Clear history"
                     className="w-7 h-7 rounded-lg flex items-center justify-center transition-opacity hover:opacity-60"
                     style={{ color: C.textSecond }}
@@ -466,6 +471,28 @@ export function ArchGuideChat({ analysisId, result }: Props) {
                     <Trash2 size={14} />
                   </button>
                 )}
+
+                {/* Inline confirm prompt */}
+                {confirmClear && (
+                  <div className="flex items-center gap-1 text-[11px]" style={{ color: C.textSecond }}>
+                    <span>Clear?</span>
+                    <button
+                      onClick={clearChat}
+                      className="px-2 py-0.5 rounded-md font-semibold transition-opacity hover:opacity-80"
+                      style={{ background: "rgba(239,68,68,0.18)", color: "rgb(248,113,113)", border: "1px solid rgba(239,68,68,0.30)" }}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setConfirmClear(false)}
+                      className="px-2 py-0.5 rounded-md font-semibold transition-opacity hover:opacity-80"
+                      style={{ background: C.pillBg, color: C.textPrimary, border: `1px solid ${C.pillBorder}` }}
+                    >
+                      No
+                    </button>
+                  </div>
+                )}
+
                 <button onClick={() => setOpen(false)}
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-opacity hover:opacity-60"
                   style={{ color: C.textSecond }} aria-label="Close chat">
