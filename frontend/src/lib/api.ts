@@ -146,8 +146,9 @@ export async function submitQuestionnaire(answers: Record<string, string | null>
   const res = await fetchWithApiFallback(`/api/v1/questionnaire?${qs.toString()}`, {
     method: "POST",
     headers,
-    // FIX FE-005: Backend expects { answers: {...} } not raw answers dict
-    body: JSON.stringify({ answers }),
+    // QuestionnaireInput is a flat Pydantic model — send answers directly,
+    // NOT wrapped in { answers: {...} } which causes all fields to be None.
+    body: JSON.stringify(answers),
   });
   if (!res.ok) {
     const err = await res.json();

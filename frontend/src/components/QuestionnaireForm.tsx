@@ -143,7 +143,9 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       }
 
       setTimeout(() => {
-        router.push(`/results/${result.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
+        const qs = new URLSearchParams({ mode: "questionnaire" });
+        if (projectId) qs.append("projectId", projectId);
+        router.push(`/results/${result.analysis_id}?${qs.toString()}`);
       }, 800);
 
     } catch (err: any) {

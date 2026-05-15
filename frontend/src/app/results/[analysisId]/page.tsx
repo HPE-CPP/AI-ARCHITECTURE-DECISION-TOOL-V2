@@ -17,6 +17,7 @@ function formatElapsed(seconds: number): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+// Stages for document upload flow
 const ANALYSIS_STAGES = [
   {
     statuses: ["queued", "detecting_sections", "parsing"],
@@ -48,27 +49,50 @@ const ANALYSIS_STAGES = [
   },
 ] as const;
 
-function getStageIndex(status: string): number {
-  const idx = ANALYSIS_STAGES.findIndex(s =>
-    (s.statuses as readonly string[]).includes(status)
+// Stages for guided questionnaire flow (synchronous — no document parsing)
+const QUESTIONNAIRE_STAGES = [
+  {
+    statuses: ["queued", "processing"],
+    label: "Processing Answers",
+    shortLabel: "Processing",
+    desc: "Converting your responses into analysis signals",
+    Icon: BookOpen,
+  },
+  {
+    statuses: ["scoring"],
+    label: "Scoring Architectures",
+    shortLabel: "Scoring",
+    desc: "Running deterministic scoring engine",
+    Icon: Activity,
+  },
+  {
+    statuses: ["validating"],
+    label: "Validating Results",
+    shortLabel: "Validating",
+    desc: "Verifying consistency and confidence levels",
+    Icon: ShieldCheck,
+  },
+] as const;
+
+type StageList = typeof ANALYSIS_STAGES | typeof QUESTIONNAIRE_STAGES;
+
+function getStageIndex(status: string, stages: StageList): number {
+  const idx = (stages as readonly { statuses: readonly string[] }[]).findIndex(s =>
+    s.statuses.includes(status)
   );
   return idx === -1 ? 0 : idx;
 }
 
-// Time thresholds (seconds) at which each stage should visually begin,
-// regardless of what the backend last reported. These mirror realistic
-// processing times so the indicator never looks frozen.
-const STAGE_TIME_THRESHOLDS = [0, 14, 38, 54]; // Parsing / Extracting / Scoring / Validating
+// Time thresholds for document flow (seconds per stage: Parsing/Extracting/Scoring/Validating)
+const STAGE_TIME_THRESHOLDS = [0, 14, 38, 54];
 
-function getDisplayStageIndex(backendStatus: string, elapsedSeconds: number): number {
-  const backendIndex = getStageIndex(backendStatus);
-  // Walk thresholds in reverse to find the highest time-based stage reached
+function getDisplayStageIndex(backendStatus: string, elapsedSeconds: number, stages: StageList): number {
+  const backendIndex = getStageIndex(backendStatus, stages);
   let timeIndex = 0;
   for (let i = STAGE_TIME_THRESHOLDS.length - 1; i >= 0; i--) {
     if (elapsedSeconds >= STAGE_TIME_THRESHOLDS[i]) { timeIndex = i; break; }
   }
-  // Never go backwards — always show whichever is further along
-  return Math.max(backendIndex, timeIndex);
+  return Math.max(backendIndex, Math.min(timeIndex, stages.length - 1));
 }
 
 function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> }) {
@@ -76,6 +100,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId");
+  const isQuestionnaire = searchParams.get("mode") === "questionnaire";
+  const activeStages: StageList = isQuestionnaire ? QUESTIONNAIRE_STAGES : ANALYSIS_STAGES;
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +158,10 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         if (data.status === "complete" || data.status === "error") {
           if (data.status === "error") {
             setLoading(false);
+          } else if (isQuestionnaire) {
+            // Questionnaire is synchronous — backend is already done.
+            // Skip the stage animation and show results immediately.
+            setLoading(false);
           } else {
             setResultReady(true); // trigger stage fast-forward before revealing results
           }
@@ -164,17 +194,15 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   // 2. When result is ready, fast-forward through any unseen stages (700ms each) then reveal
   useEffect(() => {
     if (!resultReady) return;
-    const currentStage = forcedStageIndex ?? getDisplayStageIndex(result?.status || "queued", elapsedSeconds);
-    const lastStage = ANALYSIS_STAGES.length - 1;
+    const currentStage = forcedStageIndex ?? getDisplayStageIndex(result?.status || "queued", elapsedSeconds, activeStages);
+    const lastStage = activeStages.length - 1;
     if (currentStage >= lastStage) {
-      // Already at final stage — short pause then reveal
       const t = setTimeout(() => setLoading(false), 600);
       return () => clearTimeout(t);
     }
-    // Advance one stage, then this effect re-runs
     const t = setTimeout(() => setForcedStageIndex(currentStage + 1), 700);
     return () => clearTimeout(t);
-  }, [resultReady, forcedStageIndex, result?.status, elapsedSeconds]);
+  }, [resultReady, forcedStageIndex, result?.status, elapsedSeconds, activeStages]);
 
   // 3. Scroll to top + mark project completed + update history when results arrive
   useEffect(() => {
@@ -271,10 +299,10 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   };
 
   // --- LOADING STATE ---
-  if (loading || ["queued", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
+  if (loading || ["queued", "processing", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
     const currentStatus = result?.status || "queued";
-    const activeIndex = forcedStageIndex ?? getDisplayStageIndex(currentStatus, elapsedSeconds);
-    const activeStage = ANALYSIS_STAGES[activeIndex];
+    const activeIndex = forcedStageIndex ?? getDisplayStageIndex(currentStatus, elapsedSeconds, activeStages);
+    const activeStage = activeStages[activeIndex];
     const ActiveIcon = activeStage.Icon;
 
     return (
@@ -300,8 +328,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
               <p className="text-[color:var(--text-secondary)] text-base sm:text-lg font-medium">{activeStage.desc}</p>
             </div>
 
-            {/* Reassurance message after 35 s — tells the user the backend is alive */}
-            {elapsedSeconds >= 35 && (
+            {/* Reassurance message — only for document flow which can take minutes */}
+            {!isQuestionnaire && elapsedSeconds >= 35 && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -313,10 +341,10 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
             )}
           </div>
 
-          {/* 4-step progress pipeline */}
+          {/* Progress pipeline — steps match the active flow (document or questionnaire) */}
           <div className="w-full px-2">
             <div className="flex items-start w-full">
-              {ANALYSIS_STAGES.map((stage, index) => {
+              {activeStages.map((stage, index) => {
                 const isCompleted = index < activeIndex;
                 const isActive = index === activeIndex;
                 const isPending = index > activeIndex;
@@ -362,7 +390,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                     </div>
 
                     {/* Connector line */}
-                    {index < ANALYSIS_STAGES.length - 1 && (
+                    {index < activeStages.length - 1 && (
                       <div className={`
                         flex-1 h-px mx-2 sm:mx-3 mt-5 transition-colors duration-500
                         ${index < activeIndex ? "bg-[color:var(--text-primary)]" : "bg-[color:var(--border)]"}
