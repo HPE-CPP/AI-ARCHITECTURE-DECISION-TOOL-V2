@@ -131,7 +131,19 @@ async function uploadWithProgress(
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
     let currentPct = 0;
-    let interval: ReturnType<typeof setInterval>;
+    let interval: ReturnType<typeof setInterval> | undefined = undefined;
+    // Guards against the race where xhr.onload fires before xhr.upload.onload
+    // (fast network / localhost). Without this flag, the interval would be
+    // started AFTER the XHR is already done and would run forever.
+    let xhrDone = false;
+
+    const stopInterval = () => {
+      xhrDone = true;
+      if (interval !== undefined) {
+        clearInterval(interval);
+        interval = undefined;
+      }
+    };
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -144,19 +156,26 @@ async function uploadWithProgress(
     };
 
     xhr.upload.onload = () => {
+      // If xhr.onload already fired (very fast upload), don't start interval
+      if (xhrDone) return;
+
       let currentPctFloat = currentPct;
       interval = setInterval(() => {
+        if (xhrDone) {
+          stopInterval();
+          return;
+        }
         if (currentPctFloat < 99) {
           if (currentPctFloat > 85) {
-             currentPctFloat += 0.2;
+            currentPctFloat += 0.2;
           } else if (currentPctFloat > 60) {
-             currentPctFloat += 0.5;
+            currentPctFloat += 0.5;
           } else {
-             currentPctFloat += 1;
+            currentPctFloat += 1;
           }
-          
+
           const displayPct = Math.floor(currentPctFloat);
-          
+
           let msg = "Uploading document";
           if (displayPct >= 90) msg = "Finalizing results";
           else if (displayPct >= 75) msg = "Computing scores";
@@ -164,14 +183,14 @@ async function uploadWithProgress(
           else if (displayPct >= 45) msg = "Generating embeddings";
           else if (displayPct >= 30) msg = "Chunking content";
           else if (displayPct >= 15) msg = "Extracting text";
-          
+
           onProgress(displayPct, msg);
         }
       }, 300);
     };
 
     xhr.onload = () => {
-      clearInterval(interval);
+      stopInterval();
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText));
@@ -189,11 +208,11 @@ async function uploadWithProgress(
     };
 
     xhr.onerror = () => {
-      clearInterval(interval);
+      stopInterval();
       reject(new Error("Network error - check your connection and try again"));
     };
     xhr.ontimeout = () => {
-      clearInterval(interval);
+      stopInterval();
       reject(new Error("Upload timed out"));
     };
 
