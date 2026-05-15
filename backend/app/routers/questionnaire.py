@@ -32,9 +32,6 @@ def submit_questionnaire(
     uid: Optional[str] = Depends(verify_firebase_token),
 ):
     """Process questionnaire input and return architecture recommendation."""
-    # H-005 FIX: Require authentication to prevent anonymous abuse
-    if not uid:
-        raise HTTPException(401, "Authentication required to submit questionnaire.")
     session_id = str(uuid.uuid4())
     session_uuid = uuid.UUID(session_id)
     trace: list[dict] = []

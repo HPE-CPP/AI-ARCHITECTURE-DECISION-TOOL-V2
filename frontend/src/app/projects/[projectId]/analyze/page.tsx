@@ -20,6 +20,11 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
   });
 
   const { user, signIn, signOut } = useAuth();
+  // Ref so async functions always read the latest user value, avoiding
+  // stale-closure issues after awaiting requireAuth().
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const [project, setProject] = useState<any>(null);
@@ -28,6 +33,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
 
   // Auth modal state
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"default" | "questionnaire-required">("default");
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [welcomeVisible, setWelcomeVisible] = useState(false);
   const [welcomeName, setWelcomeName] = useState("");
@@ -52,7 +58,16 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
     }
   }, [projectId, searchParams]);
 
-  const handleModeChange = (newMode: "upload" | "questionnaire" | null) => {
+  const requireAuth = useCallback((): Promise<void> => {
+    if (user) return Promise.resolve(); // Already signed in
+    return new Promise((resolve) => {
+      setPendingAction(() => resolve);
+      setAuthModalOpen(true);
+    });
+  }, [user]);
+
+  const handleModeChange = async (newMode: "upload" | "questionnaire" | null) => {
+    setAuthModalMode("default");
     setMode(newMode);
     const modeKey = projectId ? getProjectKey(projectId, "mode") : "analyze_mode";
     if (newMode) {
@@ -68,18 +83,6 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
     setProvider(newProvider);
     localStorage.setItem("llm_provider", newProvider);
   };
-
-  /**
-   * Called just before analysis starts. If user is not signed in, show auth modal.
-   * Returns a promise that resolves when auth is complete (or skipped).
-   */
-  const requireAuth = useCallback((): Promise<void> => {
-    if (user) return Promise.resolve(); // Already signed in
-    return new Promise((resolve) => {
-      setPendingAction(() => resolve);
-      setAuthModalOpen(true);
-    });
-  }, [user]);
 
   const handleAuthSuccess = async (u: { displayName: string | null }) => {
     setAuthModalOpen(false);
@@ -149,6 +152,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
         onSkip={handleSkip}
         signIn={signIn}
         signOut={signOut}
+        mode={authModalMode}
       />
 
       {/* Welcome Banner */}

@@ -121,9 +121,6 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
   const handleSubmit = async () => {
     if (!optionsData) return;
     try {
-      // Show auth gate before submitting
-      if (requireAuth) await requireAuth();
-
       setSubmitting(true);
       setError(null);
       const provider = localStorage.getItem("llm_provider") || "ollama";
