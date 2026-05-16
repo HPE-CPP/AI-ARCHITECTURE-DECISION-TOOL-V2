@@ -128,11 +128,11 @@ export function DecisionPipeline({ result }: { result: AnalysisResult }) {
     },
   };
 
-  const statusStyles: Record<string, { border: string; bg: string; text: string; icon: string; dot: string }> = {
-    success:   { border: "border-emerald-500/25", bg: "bg-emerald-500/5",            text: "text-emerald-500", icon: "bg-emerald-500", dot: "bg-emerald-500" },
-    warning:   { border: "border-amber-500/25",   bg: "bg-amber-500/5",              text: "text-amber-500",   icon: "bg-amber-500",   dot: "bg-amber-500" },
-    info:      { border: "border-[var(--primary)]/20", bg: "bg-[var(--primary)]/5",  text: "text-[var(--primary)]", icon: "bg-[var(--primary)]", dot: "bg-[var(--primary)]" },
-    highlight: { border: "border-[var(--primary)]/40", bg: "bg-[var(--primary)]/10", text: "text-[var(--primary)]", icon: "bg-[var(--primary)]", dot: "bg-[var(--primary)]" },
+  const statusStyles: Record<string, { border: string; bg: string; text: string; icon: string; dot: string; iconText: string }> = {
+    success:   { border: "border-emerald-500/25", bg: "bg-emerald-500/5",            text: "text-emerald-500", icon: "bg-emerald-500", dot: "bg-emerald-500", iconText: "text-white" },
+    warning:   { border: "border-amber-500/25",   bg: "bg-amber-500/5",              text: "text-amber-500",   icon: "bg-amber-500",   dot: "bg-amber-500", iconText: "text-white" },
+    info:      { border: "border-[var(--primary)]/20", bg: "bg-[var(--primary)]/5",  text: "text-[var(--primary)]", icon: "bg-[var(--primary)]", dot: "bg-[var(--primary)]", iconText: "text-[color:var(--background)]" },
+    highlight: { border: "border-[var(--primary)]/40", bg: "bg-[var(--primary)]/10", text: "text-[var(--primary)]", icon: "bg-[var(--primary)]", dot: "bg-[var(--primary)]", iconText: "text-[color:var(--background)]" },
   };
 
   return (
@@ -167,7 +167,7 @@ export function DecisionPipeline({ result }: { result: AnalysisResult }) {
                 {/* Vertical rail */}
                 <div className="flex flex-col items-center w-9 flex-shrink-0">
                   {/* Dot / icon */}
-                  <div className={`relative z-10 w-9 h-9 rounded-full ${s.icon} text-white flex items-center justify-center shadow-lg ${isLast ? "ring-4 ring-[var(--primary)]/20" : ""}`}>
+                  <div className={`relative z-10 w-9 h-9 rounded-full ${s.icon} ${s.iconText} flex items-center justify-center shadow-lg ${isLast ? "ring-4 ring-[var(--primary)]/20" : ""}`}>
                     {step.icon}
                   </div>
                   {/* Connector line */}

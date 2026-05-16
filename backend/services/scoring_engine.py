@@ -2,7 +2,6 @@
 Architecture Scoring Engine
 Deterministic rule-based scoring for RAG, Fine-Tuning, CAG, and Hybrid architectures.
 """
-import copy
 import logging
 from typing import Optional
 from services.signal_extractor import SIGNAL_SCHEMA
@@ -12,34 +11,29 @@ logger = logging.getLogger(__name__)
 # Scoring rules: each signal value maps to score adjustments for each architecture
 # Format: signal_value -> {architecture: score_delta}
 SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
-    # Each value maps to how well each architecture fits that signal value.
-    # Hybrid should only compete when signals genuinely require BOTH retrieval
-    # flexibility AND fine-tuned model accuracy — not as a universal fallback.
     "dataset_size": {
-        "small":      {"RAG": 0.3, "FineTuning": 0.6, "CAG": 0.9, "Hybrid": 0.3},
-        "medium":     {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.5},
-        "large":      {"RAG": 0.9, "FineTuning": 0.5, "CAG": 0.2, "Hybrid": 0.65},
-        "very_large": {"RAG": 1.0, "FineTuning": 0.3, "CAG": 0.1, "Hybrid": 0.7},
+        "small": {"RAG": 0.3, "FineTuning": 0.6, "CAG": 0.9, "Hybrid": 0.4},
+        "medium": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
+        "large": {"RAG": 0.9, "FineTuning": 0.5, "CAG": 0.2, "Hybrid": 0.8},
+        "very_large": {"RAG": 1.0, "FineTuning": 0.3, "CAG": 0.1, "Hybrid": 0.9},
     },
     "query_volume": {
-        "low":       {"RAG": 0.5, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
-        "medium":    {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
-        "high":      {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.6},
-        "very_high": {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.7},
+        "low": {"RAG": 0.5, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
+        "medium": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.6},
+        "high": {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.7},
+        "very_high": {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.8},
     },
     "latency_requirement": {
-        # Hybrid adds a retrieval step — strict/ultra-low latency strongly disfavors it.
-        "relaxed":   {"RAG": 0.8, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.4},
-        "moderate":  {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.5},
-        "strict":    {"RAG": 0.4, "FineTuning": 0.9, "CAG": 0.3, "Hybrid": 0.55},
-        "ultra_low": {"RAG": 0.2, "FineTuning": 1.0, "CAG": 0.2, "Hybrid": 0.4},
+        "relaxed": {"RAG": 0.8, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.5},
+        "moderate": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
+        "strict": {"RAG": 0.4, "FineTuning": 0.9, "CAG": 0.3, "Hybrid": 0.7},
+        "ultra_low": {"RAG": 0.2, "FineTuning": 1.0, "CAG": 0.2, "Hybrid": 0.6},
     },
     "data_volatility": {
-        # High volatility is RAG's unique strength — Hybrid's FT component hurts here.
-        "static":   {"RAG": 0.5, "FineTuning": 0.9, "CAG": 0.8, "Hybrid": 0.4},
-        "low":      {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.5},
-        "moderate": {"RAG": 0.9, "FineTuning": 0.4, "CAG": 0.3, "Hybrid": 0.6},
-        "high":     {"RAG": 1.0, "FineTuning": 0.2, "CAG": 0.1, "Hybrid": 0.5},
+        "static": {"RAG": 0.5, "FineTuning": 0.9, "CAG": 0.8, "Hybrid": 0.5},
+        "low": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.6},
+        "moderate": {"RAG": 0.9, "FineTuning": 0.4, "CAG": 0.3, "Hybrid": 0.7},
+        "high": {"RAG": 1.0, "FineTuning": 0.2, "CAG": 0.1, "Hybrid": 0.8},
     },
     "accuracy_requirement": {
         # Rebalanced: grounded retrieval with citations is RAG's defining
@@ -65,35 +59,28 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
         "highly_specialized": {"RAG": 0.68, "FineTuning": 0.95, "CAG": 0.25, "Hybrid": 0.65},
     },
     "security_level": {
-        "standard": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.7, "Hybrid": 0.5},
-        "elevated": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
-        "high":     {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.65},
-        "critical": {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.6},
+        "standard": {"RAG": 0.8, "FineTuning": 0.7, "CAG": 0.7, "Hybrid": 0.6},
+        "elevated": {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.7},
+        "high": {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.8},
+        "critical": {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.7},
     },
     "cost_sensitivity": {
-        # Hybrid is the most expensive option — high/very_high cost sensitivity should
-        # strongly disfavor it.
-        "low":       {"RAG": 0.7, "FineTuning": 0.8, "CAG": 0.5, "Hybrid": 0.65},
-        "moderate":  {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.6, "Hybrid": 0.5},
-        "high":      {"RAG": 0.6, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
-        "very_high": {"RAG": 0.5, "FineTuning": 0.2, "CAG": 0.9, "Hybrid": 0.2},
+        "low": {"RAG": 0.7, "FineTuning": 0.8, "CAG": 0.5, "Hybrid": 0.8},
+        "moderate": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.6, "Hybrid": 0.7},
+        "high": {"RAG": 0.6, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.5},
+        "very_high": {"RAG": 0.5, "FineTuning": 0.2, "CAG": 0.9, "Hybrid": 0.4},
     },
     "deployment_preference": {
-        # FIX: "hybrid deployment" (cloud + on-prem mix) ≠ "Hybrid architecture".
-        # Removed circular 1.0 self-boost; Hybrid gets a modest advantage (0.75) since
-        # hybrid deployment environments benefit from its flexibility, not a perfect score.
-        "cloud":      {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.6},
+        "cloud": {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.7},
         "on_premise": {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.7, "Hybrid": 0.6},
-        "hybrid":     {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.4, "Hybrid": 0.75},
-        "edge":       {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.5, "Hybrid": 0.4},
+        "hybrid": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.4, "Hybrid": 1.0},
+        "edge": {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.5, "Hybrid": 0.5},
     },
     "user_scale": {
-        # FIX: Removed Hybrid=1.0 for enterprise. Enterprise scale favors RAG and
-        # FineTuning equally; Hybrid is an option, not the automatic winner.
-        "small":      {"RAG": 0.5, "FineTuning": 0.5, "CAG": 0.9, "Hybrid": 0.2},
-        "medium":     {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
-        "large":      {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.2, "Hybrid": 0.65},
-        "enterprise": {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.1, "Hybrid": 0.75},
+        "small": {"RAG": 0.5, "FineTuning": 0.5, "CAG": 0.9, "Hybrid": 0.3},
+        "medium": {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.6},
+        "large": {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.2, "Hybrid": 0.8},
+        "enterprise": {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.1, "Hybrid": 1.0},
     },
 }
 
@@ -146,16 +133,6 @@ class ScoringEngine:
         self.rules = SCORING_RULES
         self.weights = SIGNAL_WEIGHTS
         self.architectures = ["RAG", "FineTuning", "CAG", "Hybrid"]
-        # B-12 FIX: Cache sensitivity results to avoid 30+ score() calls on every re-score.
-        self._sensitivity_cache: dict[str, dict] = {}
-
-    def _hash_signals(self, signals: dict) -> str:
-        """Create a deterministic hash of the signals dictionary for caching."""
-        import hashlib
-        import json
-        # Sort keys to ensure deterministic serialization
-        serialized = json.dumps(signals, sort_keys=True)
-        return hashlib.md5(serialized.encode("utf-8")).hexdigest()
 
     def score(self, signals: dict[str, dict]) -> dict:
         """Compute architecture scores from extracted signals."""
@@ -298,7 +275,8 @@ class ScoringEngine:
                 scores["CAG"] = round(scores["CAG"] + 14.0, 1)
 
         # Rank architectures
-        ranked = sorted(self.architectures, key=lambda a: scores[a], reverse=True)
+        STABLE_ORDER = {"RAG": 0, "FineTuning": 1, "CAG": 2, "Hybrid": 3}
+        ranked = sorted(self.architectures,key=lambda a: (scores[a], -STABLE_ORDER.get(a, 99)),reverse=True)
 
         # Compute suitability categories
         suitability = {}
@@ -313,10 +291,6 @@ class ScoringEngine:
             else:
                 suitability[arch] = "Not Recommended"
 
-        # AI-5.2 FIX: Detect zero-signal state and flag it so callers can warn users.
-        # When all signals are missing, scores are all 0.0 and ranking is arbitrary.
-        data_sufficient = evaluated_factors > 0
-
         return {
             "scores": scores,
             "ranking": ranked,
@@ -328,34 +302,17 @@ class ScoringEngine:
             "total_factors": len(SIGNAL_SCHEMA) if hasattr(self, 'rules') else 10,
             "architecture_details": ARCHITECTURE_DESCRIPTIONS,
             "why_not": self._generate_why_not(ranked, scores, factor_breakdown),
-            # AI-5.2: False when no signals were evaluated — frontend should show a warning.
-            "data_sufficient": data_sufficient,
         }
 
     def _compute_overall_confidence(self, signals: dict) -> float:
-        """Compute overall confidence of the recommendation.
-
-        Only signals that actually have a non-null value contribute to the
-        average — signals that were nulled by anti-hallucination should not
-        inflate coverage or be counted in the mean (they were not scored).
-        Coverage (fraction of 10 signals that have a value) acts as a separate
-        penalty so a recommendation from 3 signals is less confident than one
-        from 9, even if per-signal confidence is the same.
-        """
-        total = len(signals)
-        if total == 0:
+        """Compute overall confidence of the recommendation."""
+        confidences = [s.get("confidence", 0) for s in signals.values()]
+        if not confidences:
             return 0.0
-
-        valued = [(s.get("value"), s.get("confidence", 0)) for s in signals.values()]
-        active_confs = [c for v, c in valued if v is not None and c > 0.0]
-
-        if not active_confs:
-            return 0.0
-
-        avg_active = sum(active_confs) / len(active_confs)
-        coverage = len(active_confs) / total
-
-        return round(avg_active * 0.7 + coverage * 0.3, 2)
+        avg = sum(confidences) / len(confidences)
+        # Factor in how many signals we have
+        coverage = sum(1 for c in confidences if c > 0.3) / len(confidences)
+        return round(avg * 0.6 + coverage * 0.4, 2)
 
     def _generate_why_not(self, ranked: list, scores: dict, breakdown: dict) -> dict[str, str]:
         """Generate explanations for why non-recommended architectures rank lower."""
@@ -384,12 +341,6 @@ class ScoringEngine:
 
     def sensitivity_analysis(self, signals: dict, perturbation_steps: int = 3) -> dict:
         """Perturb each signal and check if recommendation changes."""
-        
-        # B-12 FIX: Check cache first
-        sig_hash = self._hash_signals(signals)
-        if sig_hash in self._sensitivity_cache:
-            return self._sensitivity_cache[sig_hash]
-            
         base_result = self.score(signals)
         base_recommended = base_result["recommended"]
         instabilities = []
@@ -403,11 +354,7 @@ class ScoringEngine:
                 if alt_value == original.get("value"):
                     continue
 
-                # AI-5.3 FIX: Use copy.deepcopy() instead of dict() shallow copy.
-                # dict(signals) only copies the top-level keys; nested signal dicts
-                # are still references. A mutation inside score() would corrupt the
-                # caller's original signal dict, causing subtle scoring bugs.
-                perturbed = copy.deepcopy(signals)
+                perturbed = dict(signals)
                 perturbed[signal_name] = {
                     **original,
                     "value": alt_value,
@@ -430,16 +377,9 @@ class ScoringEngine:
 
         stability_score = max(0, 1.0 - (len(instabilities) / (len(SIGNAL_SCHEMA) * 3)))
 
-        result = {
+        return {
             "is_stable": stability_score > 0.7,
             "stability_score": round(stability_score, 2),
             "instabilities": instabilities,
             "warning": "Recommendation may change with different input values" if stability_score <= 0.7 else None,
         }
-        
-        # Prevent cache from growing unbounded
-        if len(self._sensitivity_cache) > 1000:
-            self._sensitivity_cache.clear()
-            
-        self._sensitivity_cache[sig_hash] = result
-        return result
