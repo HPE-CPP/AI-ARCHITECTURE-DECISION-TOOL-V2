@@ -12,6 +12,9 @@ from app.utils import faiss_store
 logger = logging.getLogger(__name__)
 
 
+_FAISS_CHAR_LIMIT = 500_000  # ~125k tokens — beyond this FAISS adds no retrieval value
+
+
 async def index_document(
     session_id: str,
     full_text: str,
@@ -31,6 +34,17 @@ async def index_document(
     if not full_text.strip():
         logger.warning(f"No text to index for session {session_id}")
         return 0
+
+    # For very large documents the heuristic extractor and parallel LLM chunking
+    # already cover the full text. Embedding 25k+ chunks via Ollama adds minutes
+    # of latency with no meaningful retrieval benefit, so we cap the indexed text.
+    if len(full_text) > _FAISS_CHAR_LIMIT:
+        logger.info(
+            "Document too large for full FAISS indexing (%d chars > %d limit) — "
+            "indexing first %d chars only.",
+            len(full_text), _FAISS_CHAR_LIMIT, _FAISS_CHAR_LIMIT,
+        )
+        full_text = full_text[:_FAISS_CHAR_LIMIT]
 
     # Build chunk → page mapping
     chunks = chunk_text(full_text)
