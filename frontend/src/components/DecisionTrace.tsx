@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { TraceStep } from "@/lib/api";
-import { CheckCircle2, Clock, PlayCircle, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, PlayCircle, XCircle, AlertTriangle } from "lucide-react";
 import { motion, Variants } from "framer-motion";
 
 export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
@@ -46,10 +46,22 @@ export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
         <div className="absolute top-2 bottom-2 left-[10px] sm:left-[11px] w-0.5 bg-[color:var(--border)]" />
 
         {trace.map((step, index) => {
-          const isComplete = step.status === "complete";
-          const isInProgress = step.status === "in_progress";
-          const isFailed = step.status === "failed";
-          const isQueued = step.status === "queued";
+          let displayStatus = step.status;
+          
+          // Fix: Backend sometimes leaves 'scoring' as 'in_progress' even after it finishes.
+          // If the 'recommend' step exists, scoring is definitely complete.
+          if (step.step === "scoring" && step.status === "in_progress") {
+            const hasRecommend = trace.some(t => t.step.toLowerCase().includes("recommend"));
+            if (hasRecommend) {
+              displayStatus = "complete";
+            }
+          }
+
+          const isComplete = displayStatus === "complete";
+          const isInProgress = displayStatus === "in_progress";
+          const isFailed = displayStatus === "failed";
+          const isWarning = displayStatus === "warning";
+          const isQueued = displayStatus === "queued";
 
           return (
             <motion.div
@@ -69,32 +81,36 @@ export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
               className="relative"
             >
               {/* Node Icon - Scaled down for mobile */}
-              <div className={`absolute -left-[27px] sm:-left-[30px] top-1/2 -translate-y-1/2 rounded-full p-0.5 sm:p-1 bg-[color:var(--surface)] border-2 z-10 ${isComplete ? "border-emerald-500 shadow-lg shadow-emerald-500/20" :
+              <div className={`absolute -left-[27px] sm:-left-[30px] top-1/2 -translate-y-1/2 rounded-full p-0.5 sm:p-1 bg-[color:var(--surface)] border-2 z-10 ${
+                  isComplete ? "border-emerald-500 shadow-lg shadow-emerald-500/20" :
+                  isWarning ? "border-amber-500 shadow-lg shadow-amber-500/20" :
                   isInProgress ? "border-[color:var(--primary)] shadow-lg shadow-indigo-500/30" :
-                    isFailed ? "border-red-500" : "border-[color:var(--border)]"
+                    isFailed ? "border-red-500 shadow-lg shadow-red-500/20" : 
+                  "border-[color:var(--text-secondary)] shadow-sm"
                 }`}>
                 {isComplete && <CheckCircle2 size={14} className="text-emerald-500 sm:w-4 sm:h-4" />}
+                {isWarning && <AlertTriangle size={14} className="text-amber-500 sm:w-4 sm:h-4" />}
                 {isInProgress && <PlayCircle size={14} className="text-[color:var(--primary)] animate-pulse sm:w-4 sm:h-4" />}
                 {isFailed && <XCircle size={14} className="text-red-500 sm:w-4 sm:h-4" />}
-                {isQueued && <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-[color:var(--border)]" />}
+                {isQueued && <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-[color:var(--text-secondary)]" />}
               </div>
 
               {/* Content Card - Slimmer padding and text on mobile */}
               <motion.div
-                whileHover={{
-                  backgroundColor: "rgba(16, 185, 129, 0.12)",
-                  borderColor: "rgba(16, 185, 129, 0.4)",
-                  transition: { duration: 0.2 }
-                }}
-                className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border transition-colors duration-300 ${isComplete ? "border-emerald-500/20 bg-emerald-500/5" :
-                    isInProgress ? "border-[color:var(--primary)]/30 bg-[color:var(--primary)]/5" :
-                      isFailed ? "border-red-500/30 bg-red-500/5" : "border-[color:var(--border)] bg-[color:var(--surface)] opacity-70"
+                className={`p-3 sm:p-5 rounded-xl sm:rounded-2xl border transition-all duration-300 ${
+                    isComplete ? "border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/40" :
+                    isWarning ? "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/50" :
+                    isInProgress ? "border-[color:var(--primary)]/30 bg-[color:var(--primary)]/5 hover:bg-[color:var(--primary)]/10 hover:border-[color:var(--primary)]/50" :
+                    isFailed ? "border-red-500/30 bg-red-500/5 hover:bg-red-500/10 hover:border-red-500/50" : 
+                    "border-[color:var(--border)] bg-[color:var(--surface)] opacity-80 hover:opacity-100 hover:border-[color:var(--text-secondary)]/40"
                   }`}
               >
                 <div className="flex flex-row items-center justify-between gap-2 mb-1.5 sm:mb-2">
-                  <h4 className={`font-bold capitalize text-sm sm:text-lg truncate ${isComplete ? "text-emerald-500" :
+                  <h4 className={`font-bold capitalize text-sm sm:text-lg truncate ${
+                      isComplete ? "text-emerald-500" :
+                      isWarning ? "text-amber-500" :
                       isInProgress ? "text-[color:var(--primary)]" :
-                        isFailed ? "text-red-500" : "text-[color:var(--text-secondary)]"
+                      isFailed ? "text-red-500" : "text-[color:var(--text-primary)]"
                     }`}>
                     {step.step.replace(/_/g, " ")}
                   </h4>
@@ -106,11 +122,14 @@ export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
                 </div>
 
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <span className={`text-[8px] sm:text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border whitespace-nowrap ${isComplete ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10' :
-                      isInProgress ? 'border-[color:var(--primary)]/30 text-[color:var(--primary)] bg-[color:var(--primary)]/10' :
-                        isFailed ? 'border-red-500/30 text-red-500 bg-red-500/10' : 'border-[color:var(--border)] text-[color:var(--text-secondary)] bg-[color:var(--background)]'
+                  <span className={`text-[8px] sm:text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border whitespace-nowrap ${
+                      isComplete ? 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10' :
+                      isWarning ? 'border-amber-500/40 text-amber-500 bg-amber-500/10' :
+                      isInProgress ? 'border-[color:var(--primary)]/40 text-[color:var(--primary)] bg-[color:var(--primary)]/10' :
+                      isFailed ? 'border-red-500/40 text-red-500 bg-red-500/10' : 
+                      'border-[color:var(--border)] text-[color:var(--text-primary)] bg-[color:var(--surface)]'
                     }`}>
-                    {step.status.replace(/_/g, " ")}
+                    {displayStatus.replace(/_/g, " ")}
                   </span>
                   {step.details && (
                     <span className="text-xs sm:text-sm font-medium text-[color:var(--text-primary)] opacity-90 leading-tight sm:leading-relaxed line-clamp-1 sm:line-clamp-none">
