@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends, HTTPException, Request
 from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
@@ -18,13 +18,16 @@ from app.core.security import verify_firebase_token
 from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
 from services.llm_client import get_llm_client
 from config import settings
+from app.limiter import limiter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.post("/questionnaire", response_model=AnalysisResponse)
+@limiter.limit("10/minute")
 def submit_questionnaire(
+    request: Request,
     input_data: QuestionnaireInput,
     provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), pattern="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
