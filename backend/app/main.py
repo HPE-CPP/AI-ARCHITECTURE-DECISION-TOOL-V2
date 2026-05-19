@@ -80,6 +80,12 @@ async def lifespan(app: FastAPI):
     faiss_path.mkdir(parents=True, exist_ok=True)
     logger.info(f"FAISS index directory ready at: {faiss_path.resolve()}")
 
+    try:
+        from app.utils.faiss_store import cleanup_old_indexes
+        cleanup_old_indexes(max_age_days=7)
+    except Exception as e:
+        logger.error("FAISS cleanup failed: %s", e)
+
     # Recover orphaned sessions: any session stuck in "processing" after a
     # server crash or OOM kill will never self-heal. Mark them as "error" on
     # startup so users get a clear failure rather than an infinite spinner.

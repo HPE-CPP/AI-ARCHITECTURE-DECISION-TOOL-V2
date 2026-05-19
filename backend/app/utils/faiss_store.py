@@ -274,3 +274,35 @@ def delete_session_index(session_id: str) -> None:
     with _locks_lock:
         _session_locks.pop(session_id, None)
     logger.info(f"FAISS: deleted index for session {session_id}")
+
+
+def cleanup_old_indexes(max_age_days: int = 7) -> int:
+    """Delete session index folders not modified in the last max_age_days days.
+
+    Returns the number of folders deleted.
+    """
+    import shutil
+    import time
+
+    base = Path(settings.FAISS_INDEX_PATH)
+    if not base.exists():
+        return 0
+
+    cutoff = time.time() - max_age_days * 86400
+    deleted = 0
+    for session_dir in base.iterdir():
+        if not session_dir.is_dir():
+            continue
+        if session_dir.stat().st_mtime < cutoff:
+            try:
+                shutil.rmtree(session_dir)
+                _cache_evict(session_dir.name)
+                with _locks_lock:
+                    _session_locks.pop(session_dir.name, None)
+                logger.info("FAISS cleanup: deleted old index %s", session_dir.name)
+                deleted += 1
+            except Exception as e:
+                logger.warning("FAISS cleanup: failed to delete %s: %s", session_dir.name, e)
+
+    logger.info("FAISS cleanup: removed %d session(s) older than %d days", deleted, max_age_days)
+    return deleted
