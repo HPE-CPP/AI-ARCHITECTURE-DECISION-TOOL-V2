@@ -4,6 +4,7 @@ Deterministic rule-based scoring for RAG, Fine-Tuning, CAG, and Hybrid architect
 """
 import copy
 import logging
+from collections import OrderedDict
 from typing import Optional
 from services.signal_extractor import SIGNAL_SCHEMA
 
@@ -147,7 +148,8 @@ class ScoringEngine:
         self.weights = SIGNAL_WEIGHTS
         self.architectures = ["RAG", "FineTuning", "CAG", "Hybrid"]
         # B-12 FIX: Cache sensitivity results to avoid 30+ score() calls on every re-score.
-        self._sensitivity_cache: dict[str, dict] = {}
+        # OrderedDict enables O(1) LRU eviction (popitem(last=False)) instead of full clear.
+        self._sensitivity_cache: "OrderedDict[str, dict]" = OrderedDict()
 
     def _hash_signals(self, signals: dict) -> str:
         """Create a deterministic hash of the signals dictionary for caching."""
@@ -166,7 +168,7 @@ class ScoringEngine:
 
         for signal_name, signal_data in signals.items():
             value = signal_data.get("value")
-            confidence = signal_data.get("confidence", 0.0)
+            confidence = signal_data.get("confidence", 0.0) # get t he confidence
 
             if not value or confidence < 0.1:
                 # Skip missing or very low confidence signals
@@ -185,14 +187,14 @@ class ScoringEngine:
 
             weight = self.weights.get(signal_name, 1.0)
             # Apply confidence as a modifier
-            effective_weight = weight * confidence
+            effective_weight = weight * confidence # yaha pe we do weight * confidence
             total_weight += effective_weight
             evaluated_factors += 1
 
             for arch in self.architectures:
                 arch_score = value_scores.get(arch, 0.5)
-                weighted_score = arch_score * effective_weight
-                scores[arch] += weighted_score
+                weighted_score = arch_score * effective_weight # then we multiply effective score with arch score
+                scores[arch] += weighted_score # final score
                 factor_breakdown[arch][signal_name] = round(arch_score, 2)
 
         # Normalize scores to percentages
@@ -437,9 +439,9 @@ class ScoringEngine:
             "warning": "Recommendation may change with different input values" if stability_score <= 0.7 else None,
         }
         
-        # Prevent cache from growing unbounded
-        if len(self._sensitivity_cache) > 1000:
-            self._sensitivity_cache.clear()
-            
+        # LRU eviction: remove oldest entry instead of clearing everything at once
+        if len(self._sensitivity_cache) >= 1000:
+            self._sensitivity_cache.popitem(last=False)
+
         self._sensitivity_cache[sig_hash] = result
         return result
