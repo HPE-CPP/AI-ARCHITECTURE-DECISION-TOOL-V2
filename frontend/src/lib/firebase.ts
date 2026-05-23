@@ -46,11 +46,10 @@ const app = getApps().length
   : initializeApp({ apiKey: "__unconfigured__", authDomain: "", projectId: "" });
 const auth = getAuth(app);
 
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: "select_account" });
-
 export async function signInWithGoogle(): Promise<User> {
-  const result = await signInWithPopup(auth, googleProvider);
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  const result = await signInWithPopup(auth, provider);
   return result.user;
 }
 
