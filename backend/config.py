@@ -23,9 +23,14 @@ class Settings(BaseSettings):
     # PostgreSQL (Supabase)
     DATABASE_URL: str = "postgresql+psycopg2://postgres:password@localhost:5432/architecture_db"
 
-    # Redis (Upstash)
+    # Redis (Upstash) — using APP_REDIS_URL to avoid conflict with Railway's internal REDIS_URL
     REDIS_URL: str = "redis://localhost:6379/0"
+    APP_REDIS_URL: Optional[str] = None  # Set this in Railway/production
     REDIS_TOKEN: Optional[str] = None  # Upstash REST token (for SSL auth)
+
+    @property
+    def effective_redis_url(self) -> str:
+        return self.APP_REDIS_URL or self.REDIS_URL
 
     # Default Provider Switch
     DEFAULT_LLM_PROVIDER: str = "ollama"

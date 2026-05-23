@@ -25,7 +25,7 @@ if settings.REDIS_TOKEN:
 # round-trip latency. The client is now created eagerly but connectivity is only
 # verified on the first actual operation, keeping startup non-blocking.
 try:
-    _client = redis_lib.Redis.from_url(settings.REDIS_URL, **_redis_kwargs)
+    _client = redis_lib.Redis.from_url(settings.effective_redis_url, **_redis_kwargs)
     # Ping on a background thread to avoid blocking the event loop.
     # If Redis is unavailable the first .get() / .set() will raise and be caught.
     logger.info("Redis client created. Connectivity will be verified on first use.")

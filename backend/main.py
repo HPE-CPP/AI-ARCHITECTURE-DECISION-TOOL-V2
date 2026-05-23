@@ -65,7 +65,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"PostgreSQL connection failed: {e}")
 
-    logger.info("Verifying Redis connection...")
+    redis_url = settings.effective_redis_url
+    masked = redis_url[:20] + "..." if len(redis_url) > 20 else redis_url
+    logger.info(f"Verifying Redis connection (URL: {masked})...")
     try:
         from app.services import cache_service
         if cache_service._client:
