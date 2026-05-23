@@ -1,4 +1,4 @@
-# ArchGuide — AI Architecture Decision Tool
+# ArchGuide / AI Architecture Decision Tool
 
 > Stop guessing between RAG, Fine-Tuning, CAG, and Hybrid. ArchGuide analyses your requirements and recommends the right AI architecture instantly.
 
