@@ -271,7 +271,8 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
       setProgress(0);
       setStatusMessage("Preparing upload...");
 
-      const provider = localStorage.getItem("llm_provider") || "ollama";
+      const providerRaw = localStorage.getItem("llm_provider") || "openai";
+      const provider = providerRaw === "groq" ? "openai" : providerRaw;
 
       const res = await uploadWithProgress(file, provider, projectId, (pct, msg) => {
         setProgress(pct);

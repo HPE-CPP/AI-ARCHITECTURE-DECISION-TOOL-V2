@@ -29,7 +29,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams();
   const [project, setProject] = useState<any>(null);
 
-  const [provider, setProvider] = useState<"openai" | "ollama">("ollama");
+  const [provider, setProvider] = useState<"openai" | "groq">("openai");
 
   // Auth modal state
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -46,8 +46,9 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    const savedProvider = localStorage.getItem("llm_provider") as any;
-    if (savedProvider) setProvider(savedProvider);
+    const savedProvider = localStorage.getItem("llm_provider");
+    if (savedProvider === "openai" || savedProvider === "groq") setProvider(savedProvider);
+    else setProvider("openai");
 
     // Force user to pick a mode unless they explicitly navigate via Edit Inputs (with a ?mode= param)
     const modeParam = searchParams.get("mode") as "upload" | "questionnaire" | null;
@@ -79,7 +80,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
     }
   };
 
-  const handleProviderChange = (newProvider: "openai" | "ollama") => {
+  const handleProviderChange = (newProvider: "openai" | "groq") => {
     setProvider(newProvider);
     localStorage.setItem("llm_provider", newProvider);
   };
@@ -177,13 +178,13 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
         <AnimatedSection delay={0.2}>
           <div className="flex items-center gap-1 p-1 bg-[color:var(--surface)]/80 backdrop-blur-xl border border-[color:var(--border)] rounded-full shadow-2xl mb-10 scale-90 sm:scale-100">
             <button
-              onClick={() => handleProviderChange("ollama")}
-              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${provider === "ollama"
+              onClick={() => handleProviderChange("groq")}
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${provider === "groq"
                 ? "bg-[color:var(--text-primary)] text-[color:var(--background)] shadow-lg"
                 : "text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
                 }`}
             >
-              Ollama 3.2
+              Groq
             </button>
             <button
               onClick={() => handleProviderChange("openai")}
