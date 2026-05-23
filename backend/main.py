@@ -13,7 +13,7 @@ from app.db.base import Base
 from app.db.session import engine
 import app.db.models  # noqa: F401
 
-from app.routers import upload, analysis, questionnaire, projects, users
+from app.routers import upload, analysis, questionnaire, projects, users, chat
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -78,7 +78,11 @@ async def lifespan(app: FastAPI):
 
     logger.info("Creating database tables (if not exist)...")
     from pathlib import Path
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables ready.")
+    except Exception as e:
+        logger.error(f"Could not create database tables: {e}")
     faiss_path = Path(settings.FAISS_INDEX_PATH)
     faiss_path.mkdir(parents=True, exist_ok=True)
     logger.info(f"FAISS index directory ready at: {faiss_path.resolve()}")
@@ -124,6 +128,7 @@ app.include_router(analysis.router, prefix=prefix, tags=["Analysis"])
 app.include_router(questionnaire.router, prefix=prefix, tags=["Questionnaire"])
 app.include_router(projects.router, prefix=prefix, tags=["Projects"])
 app.include_router(users.router, prefix=prefix, tags=["Users"])
+app.include_router(chat.router, prefix=prefix, tags=["Chat"])
 
 @app.get("/api/v1/health", tags=["Health"])
 def health():

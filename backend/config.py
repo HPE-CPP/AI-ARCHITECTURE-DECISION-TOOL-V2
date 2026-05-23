@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # LLM - OpenAI
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_BASE_URL: Optional[str] = None
+
+    # LLM - Groq (free fallback when OPENAI_API_KEY is not set)
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
 
     # LLM - Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"

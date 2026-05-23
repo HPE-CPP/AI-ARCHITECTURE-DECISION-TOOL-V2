@@ -37,9 +37,24 @@ class LLMClient:
     def __init__(self, provider: str = None):
         self.provider = (provider or settings.DEFAULT_LLM_PROVIDER).lower()
         self._openai_client: Optional[AsyncOpenAI] = None
+        self._model: str = settings.OPENAI_MODEL
 
-        if self.provider == "openai" and settings.OPENAI_API_KEY:
-            self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        if self.provider == "openai":
+            if settings.OPENAI_API_KEY:
+                # Real OpenAI (or custom base_url override)
+                client_kwargs: dict = {"api_key": settings.OPENAI_API_KEY}
+                if settings.OPENAI_BASE_URL:
+                    client_kwargs["base_url"] = settings.OPENAI_BASE_URL
+                self._openai_client = AsyncOpenAI(**client_kwargs)
+                logger.info("LLM: using OpenAI")
+            elif settings.GROQ_API_KEY:
+                # Fallback to Groq (OpenAI-compatible)
+                self._openai_client = AsyncOpenAI(
+                    api_key=settings.GROQ_API_KEY,
+                    base_url=settings.GROQ_BASE_URL,
+                )
+                self._model = settings.GROQ_MODEL
+                logger.info("LLM: OpenAI key not set — falling back to Groq")
 
     async def generate(
         self,
@@ -94,7 +109,7 @@ class LLMClient:
             raise RuntimeError("OpenAI API key not configured. Set OPENAI_API_KEY in .env")
 
         kwargs: dict[str, Any] = {
-            "model": settings.OPENAI_MODEL,
+            "model": self._model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
@@ -308,9 +323,7 @@ class LLMClient:
         This was previously dead code — indented inside sanitize_json_string
         after a return statement and thus completely unreachable.
         """
-        self.provider = provider.lower()
-        if self.provider == "openai" and not self._openai_client and settings.OPENAI_API_KEY:
-            self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        self.__init__(provider)
 
 
 def sanitize_json_string(raw: str) -> str:
