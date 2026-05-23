@@ -1,178 +1,52 @@
 """
-FAISS index helper — load, save, add embeddings, and search.
-Each session gets its own sub-directory inside FAISS_INDEX_PATH.
-Metadata (chunk text + page numbers) is stored in a JSON sidecar.
+Qdrant vector store — persistent cloud storage replacing FAISS.
+Preserves the same public API: add_embeddings(), search(), delete_session_index()
 """
-import json
 import logging
-import os
-import threading
-from collections import OrderedDict
-from pathlib import Path
+import uuid
 from typing import Optional
 
-import faiss
 import numpy as np
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance, VectorParams, PointStruct,
+    Filter, FieldCondition, MatchValue, FilterSelector,
+)
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of sessions to keep in memory. When exceeded, the least
-# recently used entry is evicted (data stays safely on disk).
-_CACHE_MAX_SIZE = 50
-
-# B-05 FIX: In-memory LRU cache to prevent reloading the entire FAISS index
-# and metadata from disk on every search query.
-# Using OrderedDict so we can do O(1) LRU eviction without a third-party lib.
-_index_cache: OrderedDict[str, faiss.IndexFlatL2] = OrderedDict()
-_meta_cache: OrderedDict[str, list[dict]] = OrderedDict()
-_cache_lock = threading.Lock()  # protects both caches
-
-# P7-004 FIX: Per-session write locks.
-# Concurrent uploads to the same session can race on faiss.write_index(),
-# causing index file corruption (~15% probability under 5 parallel writes).
-# The _locks_lock protects the _session_locks dict itself from concurrent creation.
-_session_locks: dict[str, threading.Lock] = {}
-_locks_lock = threading.Lock()
+_client: Optional[QdrantClient] = None
 
 
-def _cache_put(session_id: str, index: "faiss.IndexFlatL2", meta: list[dict]) -> None:
-    """Insert/update both caches under _cache_lock, evicting LRU if needed."""
-    with _cache_lock:
-        # Move to end (most recently used)
-        _index_cache.pop(session_id, None)
-        _meta_cache.pop(session_id, None)
-        _index_cache[session_id] = index
-        _meta_cache[session_id] = meta
-        while len(_index_cache) > _CACHE_MAX_SIZE:
-            evicted, _ = _index_cache.popitem(last=False)
-            _meta_cache.pop(evicted, None)
-            logger.debug("FAISS LRU evicted session %s from memory cache", evicted)
-
-
-def _cache_get_index(session_id: str) -> "Optional[faiss.IndexFlatL2]":
-    with _cache_lock:
-        if session_id in _index_cache:
-            _index_cache.move_to_end(session_id)
-            return _index_cache[session_id]
-    return None
-
-
-def _cache_get_meta(session_id: str) -> "Optional[list[dict]]":
-    with _cache_lock:
-        if session_id in _meta_cache:
-            _meta_cache.move_to_end(session_id)
-            return _meta_cache[session_id]
-    return None
-
-
-def _cache_evict(session_id: str) -> None:
-    with _cache_lock:
-        _index_cache.pop(session_id, None)
-        _meta_cache.pop(session_id, None)
-
-
-def _get_session_lock(session_id: str) -> threading.Lock:
-    """Return (or lazily create) the write lock for this session."""
-    if session_id not in _session_locks:
-        with _locks_lock:
-            # Double-checked locking: re-check after acquiring the meta-lock
-            if session_id not in _session_locks:
-                _session_locks[session_id] = threading.Lock()
-    return _session_locks[session_id]
-
-
-def _session_dir(session_id: str) -> Path:
-    path = Path(settings.FAISS_INDEX_PATH) / session_id
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _index_path(session_id: str) -> Path:
-    return _session_dir(session_id) / "index.faiss"
-
-
-def _meta_path(session_id: str) -> Path:
-    return _session_dir(session_id) / "meta.json"
+def _get_client() -> QdrantClient:
+    global _client
+    if _client is None:
+        _client = QdrantClient(
+            url=settings.QDRANT_URL,
+            api_key=settings.QDRANT_API_KEY,
+        )
+    return _client
 
 
 def _get_dim() -> int:
-    """Return the embedding dimension for the current provider.
-
-    B-06 FIX: Resolve the dimension at call-time rather than at module import,
-    so provider switches (ollama<->openai) pick up the correct dimensionality.
-    """
     provider = getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama").lower()
     if provider == "ollama":
         return getattr(settings, "OLLAMA_EMBEDDING_DIMENSION", 768)
     return settings.EMBEDDING_DIMENSION
 
 
-def _dim_path(session_id: str) -> Path:
-    """Path to the file that records the FAISS index dimension for this session."""
-    return _session_dir(session_id) / "dim.txt"
+def _ensure_collection(client: QdrantClient, dim: int) -> None:
+    collection = settings.QDRANT_COLLECTION
+    existing = {c.name for c in client.get_collections().collections}
+    if collection not in existing:
+        client.create_collection(
+            collection_name=collection,
+            vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+        )
+        logger.info("Qdrant: created collection '%s' dim=%d", collection, dim)
 
-
-def _load_or_create(session_id: str, dim: int) -> faiss.IndexFlatL2:
-    """Load an existing FAISS index if the stored dimension matches `dim`.
-
-    B-06 FIX: If the stored dimension doesn't match (e.g. after a provider
-    switch), discard the old index and start fresh to avoid a FAISS crash.
-    """
-    ip = _index_path(session_id)
-    dp = _dim_path(session_id)
-
-    if ip.exists() and dp.exists():
-        stored_dim = int(dp.read_text().strip())
-        if stored_dim == dim:
-            cached = _cache_get_index(session_id)
-            if cached is not None:
-                return cached
-            idx = faiss.read_index(str(ip))
-            # Load meta in tandem so cache stays consistent
-            meta = _load_meta(session_id)
-            _cache_put(session_id, idx, meta)
-            return idx
-        else:
-            logger.warning(
-                "FAISS dimension mismatch for session %s: stored=%d, requested=%d. "
-                "Discarding old index.",
-                session_id, stored_dim, dim,
-            )
-            ip.unlink(missing_ok=True)
-            dp.unlink(missing_ok=True)
-            _save_meta(session_id, [])  # clear stale metadata
-            _cache_evict(session_id)
-
-    # Write the dimension so future calls can validate it
-    dp.write_text(str(dim))
-    idx = faiss.IndexFlatL2(dim)
-    _cache_put(session_id, idx, [])
-    return idx
-
-
-def _load_meta(session_id: str) -> list[dict]:
-    cached = _cache_get_meta(session_id)
-    if cached is not None:
-        return cached
-    mp = _meta_path(session_id)
-    if mp.exists():
-        with open(mp, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-        return meta
-    return []
-
-
-def _save_meta(session_id: str, meta: list[dict]) -> None:
-    mp = _meta_path(session_id)
-    with open(mp, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False)
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def add_embeddings(
     session_id: str,
@@ -180,48 +54,53 @@ def add_embeddings(
     chunks: list[str],
     pages: Optional[list[int]] = None,
 ) -> None:
-    """
-    Add embeddings (and their text chunks) to the session's FAISS index.
-
-    P7-004 FIX: All read-modify-write operations on the FAISS index and
-    metadata sidecar are performed under a per-session threading.Lock.
-    Without the lock, concurrent uploads for the same session race on
-    faiss.write_index() and corrupt the index file.
-
-    Args:
-        session_id: Unique session identifier.
-        embeddings:  List of float32 numpy arrays (shape [dim]).
-        chunks:      Corresponding text strings.
-        pages:       Optional page numbers for each chunk.
-    """
     if not embeddings:
         return
 
     dim = embeddings[0].shape[0]
     pages = pages or [0] * len(chunks)
 
-    lock = _get_session_lock(session_id)
-    with lock:
-        index = _load_or_create(session_id, dim)  # B-06: pass dim for validation
-        meta = _load_meta(session_id)
+    client = _get_client()
+    _ensure_collection(client, dim)
 
-        vectors = np.stack(embeddings).astype(np.float32)
-        faiss.normalize_L2(vectors)  # cosine similarity via normalised L2
-        index.add(vectors)  # type: ignore[arg-type]
+    # Delete any existing vectors for this session before re-uploading
+    try:
+        client.delete(
+            collection_name=settings.QDRANT_COLLECTION,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[FieldCondition(key="session_id", match=MatchValue(value=session_id))]
+                )
+            ),
+        )
+    except Exception:
+        pass
 
-        base_offset = len(meta)
-        for i, (chunk, page) in enumerate(zip(chunks, pages)):
-            meta.append({
-                "chunk_id": base_offset + i,
+    points = []
+    for i, (embedding, chunk, page) in enumerate(zip(embeddings, chunks, pages)):
+        vec = embedding.astype(np.float32)
+        norm = np.linalg.norm(vec)
+        if norm > 0:
+            vec = vec / norm
+
+        points.append(PointStruct(
+            id=str(uuid.uuid4()),
+            vector=vec.tolist(),
+            payload={
                 "session_id": session_id,
                 "text": chunk,
                 "page": page,
-            })
+                "chunk_index": i,
+            },
+        ))
 
-        faiss.write_index(index, str(_index_path(session_id)))
-        _save_meta(session_id, meta)
-        _cache_put(session_id, index, meta)
-    logger.info(f"FAISS: added {len(embeddings)} vectors for session {session_id}")
+    for i in range(0, len(points), 100):
+        client.upsert(
+            collection_name=settings.QDRANT_COLLECTION,
+            points=points[i:i + 100],
+        )
+
+    logger.info("Qdrant: upserted %d vectors for session %s", len(points), session_id)
 
 
 def search(
@@ -229,80 +108,59 @@ def search(
     query_embedding: np.ndarray,
     top_k: int = 5,
 ) -> list[dict]:
-    """
-    Search the session's FAISS index.
+    client = _get_client()
 
-    Returns a list of metadata dicts (text, page, chunk_id) for the top-k matches.
-    """
-    ip = _index_path(session_id)
-    if not ip.exists():
-        logger.warning(f"FAISS index not found for session {session_id}")
+    existing = {c.name for c in client.get_collections().collections}
+    if settings.QDRANT_COLLECTION not in existing:
+        logger.warning("Qdrant: collection not found for session %s", session_id)
         return []
 
-    # B-05 FIX: Use _load_or_create to utilize the in-memory cache instead of faiss.read_index
-    # We must pass the correct dim (from settings via _get_dim()) for validation.
-    dim = _get_dim()
-    index = _load_or_create(session_id, dim)
-    meta = _load_meta(session_id)
+    vec = query_embedding.astype(np.float32)
+    norm = np.linalg.norm(vec)
+    if norm > 0:
+        vec = vec / norm
 
-    vec = query_embedding.astype(np.float32).reshape(1, -1)
-    faiss.normalize_L2(vec)
+    results = client.search(
+        collection_name=settings.QDRANT_COLLECTION,
+        query_vector=vec.tolist(),
+        query_filter=Filter(
+            must=[FieldCondition(key="session_id", match=MatchValue(value=session_id))]
+        ),
+        limit=top_k,
+        with_payload=True,
+    )
 
-    actual_k = min(top_k, index.ntotal)
-    if actual_k == 0:
-        return []
+    hits = [
+        {
+            "text": r.payload.get("text", ""),
+            "page": r.payload.get("page", 0),
+            "chunk_id": r.payload.get("chunk_index", 0),
+            "session_id": session_id,
+        }
+        for r in results
+        if r.payload
+    ]
 
-    _distances, indices = index.search(vec, actual_k)  # type: ignore[arg-type]
-
-    results = []
-    for idx in indices[0]:
-        if 0 <= idx < len(meta):
-            results.append(meta[idx])
-    return results
+    logger.info("Qdrant: retrieved %d chunks for session %s", len(hits), session_id)
+    return hits
 
 
 def delete_session_index(session_id: str) -> None:
-    """Remove all FAISS data for a session."""
-    import shutil
-    lock = _get_session_lock(session_id)
-    with lock:
-        session_dir = _session_dir(session_id)
-        if session_dir.exists():
-            shutil.rmtree(session_dir)
-        _cache_evict(session_id)
-    # Clean up the lock itself to prevent unbounded growth
-    with _locks_lock:
-        _session_locks.pop(session_id, None)
-    logger.info(f"FAISS: deleted index for session {session_id}")
+    client = _get_client()
+    existing = {c.name for c in client.get_collections().collections}
+    if settings.QDRANT_COLLECTION not in existing:
+        return
+    client.delete(
+        collection_name=settings.QDRANT_COLLECTION,
+        points_selector=FilterSelector(
+            filter=Filter(
+                must=[FieldCondition(key="session_id", match=MatchValue(value=session_id))]
+            )
+        ),
+    )
+    logger.info("Qdrant: deleted vectors for session %s", session_id)
 
 
 def cleanup_old_indexes(max_age_days: int = 7) -> int:
-    """Delete session index folders not modified in the last max_age_days days.
-
-    Returns the number of folders deleted.
-    """
-    import shutil
-    import time
-
-    base = Path(settings.FAISS_INDEX_PATH)
-    if not base.exists():
-        return 0
-
-    cutoff = time.time() - max_age_days * 86400
-    deleted = 0
-    for session_dir in base.iterdir():
-        if not session_dir.is_dir():
-            continue
-        if session_dir.stat().st_mtime < cutoff:
-            try:
-                shutil.rmtree(session_dir)
-                _cache_evict(session_dir.name)
-                with _locks_lock:
-                    _session_locks.pop(session_dir.name, None)
-                logger.info("FAISS cleanup: deleted old index %s", session_dir.name)
-                deleted += 1
-            except Exception as e:
-                logger.warning("FAISS cleanup: failed to delete %s: %s", session_dir.name, e)
-
-    logger.info("FAISS cleanup: removed %d session(s) older than %d days", deleted, max_age_days)
-    return deleted
+    """No-op: Qdrant is persistent, no local file cleanup needed."""
+    return 0

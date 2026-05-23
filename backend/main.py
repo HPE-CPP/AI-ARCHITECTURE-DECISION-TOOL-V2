@@ -79,15 +79,20 @@ async def lifespan(app: FastAPI):
         logger.error(f"Redis connection failed: {e}")
 
     logger.info("Creating database tables (if not exist)...")
-    from pathlib import Path
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables ready.")
     except Exception as e:
         logger.error(f"Could not create database tables: {e}")
-    faiss_path = Path(settings.FAISS_INDEX_PATH)
-    faiss_path.mkdir(parents=True, exist_ok=True)
-    logger.info(f"FAISS index directory ready at: {faiss_path.resolve()}")
+
+    logger.info("Verifying Qdrant connection...")
+    try:
+        from app.utils.faiss_store import _get_client
+        _get_client().get_collections()
+        logger.info("Qdrant connection successful!")
+    except Exception as e:
+        logger.error(f"Qdrant connection failed: {e}")
+
     logger.info("Startup complete.")
 
     yield  # Application runs here

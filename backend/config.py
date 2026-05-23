@@ -61,8 +61,9 @@ class Settings(BaseSettings):
     VECTOR_DB_TYPE: str = "faiss"
     FAISS_INDEX_PATH: str = "./faiss_index"
 
-    # Qdrant (optional future swap)
+    # Qdrant Cloud
     QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_API_KEY: Optional[str] = None
     QDRANT_COLLECTION: str = "architecture_decisions"
 
     # Rate Limiting
