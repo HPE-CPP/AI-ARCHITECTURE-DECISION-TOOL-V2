@@ -1,158 +1,160 @@
-# AI Architecture Decision Tool : Local Setup Guide
+# ArchGuide — AI Architecture Decision Tool
 
-This guide sets up the full stack locally:
+> Stop guessing between RAG, Fine-Tuning, CAG, and Hybrid. ArchGuide analyses your requirements and recommends the right AI architecture instantly.
 
-* Frontend (Next.js)
-* Backend (FastAPI)
-* PostgreSQL (database)
-* Redis (required)
-* Firebase (authentication)
+**Live Demo:** [https://archguide-ashy.vercel.app](https://archguide-ashy.vercel.app)
 
 ---
 
-## 1. Clone Repository
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 16, React 19, Tailwind CSS, Framer Motion |
+| Backend | FastAPI (Python 3.11), SQLAlchemy, Alembic |
+| Database | PostgreSQL (Supabase) |
+| Cache | Redis (Upstash) |
+| Auth | Firebase (Google Sign-In) |
+| LLM | OpenAI / Groq (free fallback) |
+| Vector DB | FAISS |
+| Hosting | Vercel (frontend) + Railway (backend) |
+
+---
+
+## Cloud Deployment
+
+The app is fully deployed:
+
+- **Frontend:** [https://archguide-ashy.vercel.app](https://archguide-ashy.vercel.app)
+- **Backend:** [https://archguide-backend-production.up.railway.app](https://archguide-backend-production.up.railway.app)
+- **API Docs:** [https://archguide-backend-production.up.railway.app/docs](https://archguide-backend-production.up.railway.app/docs)
+
+---
+
+## Local Setup Guide
+
+### Prerequisites
+
+- Python 3.10 or 3.11 (not 3.13)
+- Node.js 18+
+- PostgreSQL
+- Redis
+
+---
+
+### 1. Clone Repository
 
 ```bash
-git clone https://github.com/Hrithik875/AI-ARCHITECTURE-DECISION-TOOL-V2
+git clone https://github.com/HPE-CPP/AI-ARCHITECTURE-DECISION-TOOL-V2
 cd AI-ARCHITECTURE-DECISION-TOOL-V2
 ```
 
 ---
 
-## 2. Backend Setup
+### 2. Backend Setup
 
-### 2.1 Navigate to backend
+#### 2.1 Navigate to backend
 
 ```bash
 cd backend
 ```
 
----
-
-### 2.2 Create virtual environment
-
-Use Python 3.10 or 3.11.
+#### 2.2 Create virtual environment
 
 ```bash
 python -m venv venv
 ```
 
----
-
-### 2.3 Activate environment
+#### 2.3 Activate environment
 
 Windows:
-
 ```bash
 venv\Scripts\Activate
 ```
 
----
+Mac/Linux:
+```bash
+source venv/bin/activate
+```
 
-### 2.4 Install dependencies
+#### 2.4 Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
+#### 2.5 Setup PostgreSQL
 
-### 2.5 Setup PostgreSQL
-
-* Install PostgreSQL
-* Create database:
+Install PostgreSQL and create a database:
 
 ```sql
 CREATE DATABASE "hpe-project";
 ```
 
----
+#### 2.6 Setup Redis
 
-### 2.6 Setup Redis
+Install Redis locally or use [Upstash](https://upstash.com) (free). Ensure it is running on `localhost:6379`.
 
-* Install Redis locally (or use a hosted instance like Upstash)
-* Ensure it is running on:
+#### 2.7 Create backend `.env`
 
-```text
-localhost:6379
-```
-
----
-
-### 2.7 Create backend `.env`
-
-Create file:
-
-```bash
-backend/.env
-```
-
-Add:
+Create `backend/.env` with:
 
 ```env
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/hpe-project
 
 REDIS_URL=redis://localhost:6379
-REDIS_TOKEN=your_token_if_required
+REDIS_TOKEN=
 
-OPENAI_API_KEY=your_key
+# LLM — use either OpenAI or Groq (free)
+OPENAI_API_KEY=sk-...
+# GROQ_API_KEY=gsk_...   ← free alternative if no OpenAI key
+DEFAULT_LLM_PROVIDER=openai
+
+CORS_ORIGINS=["http://localhost:3000"]
+
+FIREBASE_CREDENTIALS_PATH=./firebase-service-account.json
 ```
 
----
+> **LLM fallback:** If `OPENAI_API_KEY` is not set, the backend automatically falls back to Groq (free). Get a Groq key at [console.groq.com](https://console.groq.com).
 
-### 2.8 Run backend
+#### 2.8 Run Alembic migrations
 
 ```bash
-uvicorn app.main:app --reload
+alembic upgrade head
 ```
 
-Expected output includes:
+#### 2.9 Run backend
 
-```text
+```bash
+uvicorn main:app --reload
+```
+
+Expected output:
+```
 PostgreSQL connection successful!
 Application startup complete.
+Uvicorn running on http://0.0.0.0:8000
 ```
 
 ---
 
-## 3. Frontend Setup
+### 3. Frontend Setup
 
-### 3.1 Navigate to frontend
+#### 3.1 Navigate to frontend
 
 ```bash
 cd frontend
 ```
 
----
-
-### 3.2 Install dependencies
+#### 3.2 Install dependencies
 
 ```bash
 npm install
 ```
 
----
+#### 3.3 Create `.env.local`
 
-### 3.3 Create `.env.local`
-
-Create:
-
-```bash
-frontend/.env.local
-```
-
----
-
-### 3.4 Setup Firebase
-
-1. Go to https://console.firebase.google.com/
-2. Create project
-3. Add Web App
-4. Copy config values
-
----
-
-### 3.5 Add environment variables
+Create `frontend/.env.local` with:
 
 ```env
 NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
@@ -165,38 +167,35 @@ NEXT_PUBLIC_FIREBASE_APP_ID=xxxx
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
----
+#### 3.4 Setup Firebase
 
-### 3.6 Run frontend
+1. Go to [console.firebase.google.com](https://console.firebase.google.com)
+2. Create a project → Add Web App → copy config values into `.env.local`
+3. Enable **Google** sign-in under Authentication → Sign-in methods
+4. Add `localhost` to Authentication → Settings → Authorized domains
+
+#### 3.5 Run frontend
 
 ```bash
 npm run dev
 ```
 
-Open:
-
-```text
-http://localhost:3000
-```
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 4. Running the Project
+### 4. Running the Project
 
-Run in two terminals:
+Run in two terminals simultaneously:
 
-### Backend
-
+**Terminal 1 — Backend:**
 ```bash
 cd backend
-venv\Scripts\Activate
-uvicorn app.main:app --reload
+venv\Scripts\Activate      # Windows
+uvicorn main:app --reload
 ```
 
----
-
-### Frontend
-
+**Terminal 2 — Frontend:**
 ```bash
 cd frontend
 npm run dev
@@ -204,40 +203,37 @@ npm run dev
 
 ---
 
-## 5. Verification
+### 5. Verification
 
-* Backend: http://127.0.0.1:8000/docs
-* Frontend: http://localhost:3000
-* Login: Google sign-in should open popup
-
----
-
-## 6. Common Issues
-
-### FastAPI not found
-
-* Virtual environment not activated
-
-### Firebase not configured
-
-* `.env.local` missing or incorrect
-* Firebase config not updated in `firebase.ts`
-
-### VS Code import errors
-
-* Select interpreter:
-
-```text
-backend/venv/Scripts/python.exe
-```
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8000/docs |
+| Health check | http://localhost:8000/api/v1/health |
 
 ---
 
-## 7. Notes
+### 6. Common Issues
 
-* Backend uses `.env`
-* Frontend uses `.env.local`
-* Restart frontend after any env changes
-* Do not use Python 3.13
+**`uvicorn: command not found`**
+- Virtual environment not activated
+
+**Firebase sign-in not working**
+- Check `.env.local` values are correct
+- Make sure `localhost` is in Firebase Authorized Domains
+
+**Database connection refused**
+- PostgreSQL not running, or wrong password in `DATABASE_URL`
+
+**VS Code import errors**
+- Set Python interpreter to `backend/venv/Scripts/python.exe`
 
 ---
+
+### 7. Notes
+
+- Backend reads from `backend/.env`
+- Frontend reads from `frontend/.env.local`
+- Restart frontend after any env changes
+- Do not use Python 3.13
+- Redis is optional for local dev — the app works without it (caching disabled)
