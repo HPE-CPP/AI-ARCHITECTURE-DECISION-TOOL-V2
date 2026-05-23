@@ -16,7 +16,7 @@
 | Cache | Redis (Upstash) |
 | Auth | Firebase (Google Sign-In) |
 | LLM | OpenAI / Groq (free fallback) |
-| Vector DB | FAISS |
+| Vector DB | Qdrant Cloud |
 | Hosting | Vercel (frontend) + Railway (backend) |
 
 ---
