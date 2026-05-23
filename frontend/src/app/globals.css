@@ -155,6 +155,15 @@
   animation: hero-rise 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
 }
 
+/* ── Mobile touch & layout helpers ─────────────────────────────────── */
+
+/* Prevent accidental zoom on iOS when tapping inputs (Safari zooms on font-size < 16px) */
+@media (hover: none) and (pointer: coarse) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* Mobile performance: disable expensive GPU compositing effects.
    On a 4× CPU-throttled device every repaint with backdrop-filter is costly. */
 @media (max-width: 767px) {

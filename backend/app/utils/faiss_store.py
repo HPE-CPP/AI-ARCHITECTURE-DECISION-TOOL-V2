@@ -22,11 +22,34 @@ _client: Optional[QdrantClient] = None
 
 def _get_client() -> QdrantClient:
     global _client
-    if _client is None:
-        _client = QdrantClient(
-            url=settings.QDRANT_URL,
-            api_key=settings.QDRANT_API_KEY,
+    if _client is not None:
+        return _client
+
+    url = (settings.QDRANT_URL or "").strip()
+    api_key = settings.QDRANT_API_KEY or None
+
+    # Explicit in-memory mode — useful for local dev without a Qdrant server
+    if url in (":memory:", "memory", ""):
+        _client = QdrantClient(":memory:")
+        logger.info("Qdrant: using in-memory mode (data won't persist across restarts)")
+        return _client
+
+    # Try to connect to configured URL (local or cloud)
+    try:
+        candidate = QdrantClient(url=url, api_key=api_key)
+        candidate.get_collections()  # connection probe
+        _client = candidate
+        logger.info("Qdrant: connected to %s", url)
+    except Exception as exc:
+        logger.warning(
+            "Qdrant: cannot connect to %s (%s) — falling back to in-memory mode. "
+            "Document embeddings won't persist across restarts. "
+            "Set QDRANT_URL=:memory: in .env to silence this warning, "
+            "or configure a real Qdrant instance for persistence.",
+            url, exc,
         )
+        _client = QdrantClient(":memory:")
+
     return _client
 
 

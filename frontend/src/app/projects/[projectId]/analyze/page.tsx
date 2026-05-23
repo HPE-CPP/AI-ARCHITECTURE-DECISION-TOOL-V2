@@ -277,7 +277,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
                 </button>
               </div>
 
-              <div className="w-full relative z-10 glass-panel border border-[color:var(--border)] rounded-[2.5rem] sm:rounded-[4rem] p-6 sm:p-20 bg-[color:var(--surface)]/70 backdrop-blur-3xl shadow-2xl">
+              <div className="w-full relative z-10 glass-panel border border-[color:var(--border)] rounded-[2.5rem] sm:rounded-[4rem] p-5 sm:p-10 lg:p-20 bg-[color:var(--surface)]/70 backdrop-blur-3xl shadow-2xl">
                 {mode === "upload" && (
                   <DocumentUpload
                     projectId={projectId ?? undefined}

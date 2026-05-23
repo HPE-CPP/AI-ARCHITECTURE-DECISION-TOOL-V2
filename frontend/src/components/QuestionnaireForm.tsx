@@ -123,7 +123,8 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
     try {
       setSubmitting(true);
       setError(null);
-      const provider = localStorage.getItem("llm_provider") || "ollama";
+      const providerRaw = localStorage.getItem("llm_provider") || "openai";
+      const provider = providerRaw === "groq" ? "openai" : providerRaw;
       const result = await submitQuestionnaire(answers, provider, projectId);
 
       // Notify parent of analysis ID for project tracking

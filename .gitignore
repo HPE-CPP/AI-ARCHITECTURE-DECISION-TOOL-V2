@@ -140,3 +140,5 @@ generate_project_report.py
 
 # Generated PDF test files
 tests/pdf_versions/
+.vercel
+.env*

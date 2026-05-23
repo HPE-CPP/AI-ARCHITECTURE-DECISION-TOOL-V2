@@ -427,7 +427,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.97 }}
             transition={{ type: "spring", damping: 26, stiffness: 360 }}
-            className="fixed bottom-24 right-6 z-50 w-[370px] sm:w-[410px] flex flex-col rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.6)]"
+            className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] max-w-[410px] flex flex-col rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.6)]"
             style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, overflow: "hidden" }}
           >
             {/* Header */}

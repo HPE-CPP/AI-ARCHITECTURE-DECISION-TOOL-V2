@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { LenisProvider } from "@/components/LenisProvider";
@@ -7,6 +7,13 @@ import { GlobalBackgroundLoader } from "@/components/GlobalBackgroundLoader";
 import { Footer } from "@/components/Footer";
 import { AuthProvider } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+};
 
 export const metadata: Metadata = {
   title: {

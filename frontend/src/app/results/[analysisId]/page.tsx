@@ -717,30 +717,30 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                     }`}
                   >
                     {/* Signal header row */}
-                    <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3 sm:py-4">
                       {/* Signal name */}
-                      <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-[color:var(--text-secondary)] min-w-[140px]">
+                      <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[color:var(--text-secondary)] min-w-[100px] sm:min-w-[140px]">
                         {key.replace(/_/g, " ")}
                       </span>
 
                       {/* Value badge */}
                       {sig.value ? (
-                        <span className="px-3 py-1 rounded-lg bg-[color:var(--background)] border border-[color:var(--border)] text-sm font-bold text-[color:var(--text-primary)]">
+                        <span className="px-2 sm:px-3 py-1 rounded-lg bg-[color:var(--background)] border border-[color:var(--border)] text-xs sm:text-sm font-bold text-[color:var(--text-primary)]">
                           {sig.value.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                         </span>
                       ) : (
-                        <span className="px-3 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-bold text-red-500 flex items-center gap-1">
+                        <span className="px-2 sm:px-3 py-1 rounded-lg bg-red-500/10 border border-red-500/20 text-xs font-bold text-red-500 flex items-center gap-1">
                           <AlertCircle size={12} /> MISSING
                         </span>
                       )}
 
-                      {/* Confidence bar */}
+                      {/* Confidence bar + verification — pushed right, wraps gracefully on mobile */}
                       {sig.value && (
-                        <div className="flex items-center gap-2 ml-auto">
+                        <div className="flex items-center gap-1.5 sm:gap-2 ml-auto flex-wrap justify-end">
                           <div className="text-xs font-bold text-[color:var(--text-secondary)]">
                             {(sig.confidence * 100).toFixed(0)}%
                           </div>
-                          <div className="w-20 h-1.5 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] overflow-hidden">
+                          <div className="w-16 sm:w-20 h-1.5 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] overflow-hidden">
                             <div
                               className={`h-full rounded-full ${
                                 sig.confidence > 0.7
@@ -753,14 +753,14 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                             />
                           </div>
 
-                          {/* Verification badge */}
+                          {/* Verification badge — hidden on very small phones */}
                           {hasSource && (
                             isVerified ? (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase" title="Source verified in document">
+                              <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase" title="Source verified in document">
                                 <ShieldCheck size={10} /> Verified
                               </span>
                             ) : (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase" title="Source could not be exactly matched in document">
+                              <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase" title="Source could not be exactly matched in document">
                                 <ShieldAlert size={10} /> Unverified
                               </span>
                             )
@@ -870,7 +870,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                 <button
                   onClick={handleFollowUpSubmit}
                   disabled={submittingFollowUp || Object.keys(followUpAnswers).filter(k => followUpAnswers[k]).length === 0}
-                  className="flex items-center gap-3 px-10 py-4 rounded-full bg-white text-black border border-gray-200 font-bold text-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn shadow-sm"
+                  className="flex items-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 sm:py-4 rounded-full bg-white text-black border border-gray-200 font-bold text-sm sm:text-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn shadow-sm"
                 >
                   {submittingFollowUp ? (
                     <>

@@ -414,8 +414,8 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
             </div>
           )}
 
-          <div className="p-8">
-            <div className="flex items-start gap-6 mb-6">
+          <div className="p-4 sm:p-8">
+            <div className="flex items-start gap-4 sm:gap-6 mb-6">
               <div className="w-16 h-16 rounded-2xl bg-[color:var(--background)] flex items-center justify-center border border-[color:var(--border)] shrink-0 shadow-sm">
                 <FileText size={32} className="text-[color:var(--primary)]" />
               </div>
@@ -469,7 +469,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                 id="cancel-upload-btn"
                 onClick={() => { setFile(null); setError(null); setProgress(0); setStatusMessage(""); }}
                 disabled={uploading}
-                className="flex-1 py-4 px-6 rounded-full font-semibold border border-[color:var(--border)] hover:bg-[color:var(--background)] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-[color:var(--text-primary)]"
+                className="flex-1 py-3 sm:py-4 px-3 sm:px-6 rounded-full font-semibold border border-[color:var(--border)] hover:bg-[color:var(--background)] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-[color:var(--text-primary)] text-sm sm:text-base"
               >
                 Cancel
               </button>
@@ -477,7 +477,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                 id="begin-analysis-btn"
                 onClick={handleProcess}
                 disabled={uploading}
-                className="flex-[2] py-4 px-6 rounded-full font-bold bg-[color:var(--primary)] text-[color:var(--background)] shadow-lg hover:invert transition-all flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed disabled:transform-none"
+                className="flex-[2] py-3 sm:py-4 px-3 sm:px-6 rounded-full font-bold bg-[color:var(--primary)] text-[color:var(--background)] shadow-lg hover:invert transition-all flex items-center justify-center gap-2 disabled:opacity-80 disabled:cursor-not-allowed disabled:transform-none text-sm sm:text-base"
               >
                 {uploading ? (
                   <>
