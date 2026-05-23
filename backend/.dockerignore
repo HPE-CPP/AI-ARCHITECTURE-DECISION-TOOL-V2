@@ -1,0 +1,11 @@
+.env
+.env.*
+venv/
+__pycache__/
+*.pyc
+*.pyo
+faiss_index/
+*.log
+firebase-service-account.json
+.git/
+tests/
