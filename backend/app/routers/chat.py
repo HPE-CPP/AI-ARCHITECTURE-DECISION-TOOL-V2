@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ARCH_LABELS = {
     "RAG": "Retrieval-Augmented Generation (RAG)",
     "FineTuning": "Fine-Tuning",
-    "CAG": "Context-Augmented Generation (CAG)",
+    "CAG": "Cache-Augmented Generation (CAG)",
     "Hybrid": "Hybrid (RAG + Fine-Tuning)",
 }
 
