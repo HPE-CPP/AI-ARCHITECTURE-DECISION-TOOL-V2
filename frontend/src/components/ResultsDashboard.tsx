@@ -7,7 +7,6 @@ import {
 import { motion } from "framer-motion";
 import { CheckCircle, Download, Slash } from "lucide-react";
 import { exportAnalysis } from "@/lib/api";
-import WhatIfEditor from "@/components/WhatIfEditor";
 
 // B-14 FIX: Wrap in React.memo to prevent expensive Recharts SVG re-renders
 // when the parent component re-renders (e.g. on each polling tick) but the
@@ -223,7 +222,6 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           )}
         </motion.div>
       </div>
-      <WhatIfEditor result={result} />
     </div>
   );
 });

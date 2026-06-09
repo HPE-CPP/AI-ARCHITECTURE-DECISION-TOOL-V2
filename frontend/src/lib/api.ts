@@ -327,3 +327,9 @@ export async function scorePreview(
   return res.json();
 }
 
+export interface ScorePreviewResult {
+  scores: Record<string, number>;
+  recommended: string;
+  ranking: string[];
+  factor_breakdown: Record<string, Record<string, number>>;
+}

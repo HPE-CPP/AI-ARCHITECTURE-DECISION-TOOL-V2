@@ -249,20 +249,29 @@ export default function WhatIfEditor({ result, onResultUpdate }: WhatIfEditorPro
   }, []);
 
   const handleSaveConfirmed = useCallback(async () => {
-    setShowConfirm(false);
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const signals = sliderValuesToSignals(sliderValues);
-      const updated = await submitFollowUp(result.analysis_id, signals);
-      setPreviewResult(null);
-      onResultUpdate?.(updated);
-    } catch (e: any) {
-      setSaveError(e.message ?? "Save failed. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  }, [sliderValues, result.analysis_id, onResultUpdate]);
+  setShowConfirm(false);
+  setSaving(true);
+  setSaveError(null);
+  try {
+    const signals = sliderValuesToSignals(sliderValues);
+    await submitFollowUp(result.analysis_id, signals);
+    
+    // Re-fetch fresh result instead of using returned value
+    const { getAnalysis } = await import("@/lib/api");
+    const freshResult = await getAnalysis(result.analysis_id);
+// Preserve followup_questions so Refine Architecture stays visible
+const mergedResult = {
+  ...freshResult,
+  followup_questions: result.followup_questions,
+};
+setPreviewResult(null);
+onResultUpdate?.(mergedResult);
+  } catch (e: any) {
+    setSaveError(e.message ?? "Save failed. Please try again.");
+  } finally {
+    setSaving(false);
+  }
+}, [sliderValues, result.analysis_id, onResultUpdate]);
 
   // What to display
   const displayResult = previewResult ?? null;
@@ -319,6 +328,46 @@ export default function WhatIfEditor({ result, onResultUpdate }: WhatIfEditorPro
           </button>
         </div>
       </div>
+      {/* Current recommendation summary card */}
+<div className="mb-4 grid grid-cols-2 gap-3">
+  {/* Original */}
+  <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+    <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">
+      Original
+    </p>
+    <p className="text-base font-black mb-1" style={{ color: ARCH_COLOR_MAP[originalArch] ?? "var(--text-primary)" }}>
+      {result.architecture_details?.[originalArch]?.full_name ?? originalArch}
+    </p>
+    {originalCost && (
+      <p className="text-xs text-[var(--text-secondary)]">
+        {formatCost(originalCost[0])} – {formatCost(originalCost[1])}/mo
+      </p>
+    )}
+  </div>
+
+  {/* Current/Live */}
+  <div className={`p-4 rounded-2xl border transition-all duration-300 ${
+    recommendationChanged
+      ? "border-[var(--primary)]/30 bg-[var(--primary)]/5"
+      : "border-[var(--border)] bg-[var(--surface)]"
+  }`}>
+    <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">
+      {recommendationChanged ? "⚡ Changed to" : "Current"}
+    </p>
+    <p className="text-base font-black mb-1" style={{ color: ARCH_COLOR_MAP[displayRecommended] ?? "var(--text-primary)" }}>
+      {result.architecture_details?.[displayRecommended]?.full_name ?? displayRecommended}
+    </p>
+    {recommendationChanged && newArchCost ? (
+      <p className="text-xs text-[var(--text-secondary)]">
+        {formatCost(newArchCost[0])} – {formatCost(newArchCost[1])}/mo
+      </p>
+    ) : originalCost ? (
+      <p className="text-xs text-[var(--text-secondary)]">
+        {formatCost(originalCost[0])} – {formatCost(originalCost[1])}/mo
+      </p>
+    ) : null}
+  </div>
+</div>
 
       {/* Recommendation changed banner */}
       <AnimatePresence>
