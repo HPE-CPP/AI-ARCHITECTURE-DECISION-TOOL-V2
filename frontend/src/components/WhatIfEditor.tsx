@@ -73,9 +73,11 @@ const ARCH_COLOR_MAP: Record<string, string> = {
 function buildInitialValues(result: AnalysisResult): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [key, cfg] of Object.entries(SIGNAL_CONFIG)) {
-    const existingValue = result.signals?.[key]?.value ?? null;
-    const idx = existingValue ? cfg.options.indexOf(existingValue) : -1;
-    out[key] = idx >= 0 ? idx : Math.floor(cfg.options.length / 2);
+    const extractedValue = result.signals?.[key]?.value ?? null;
+    const idx = extractedValue ? cfg.options.indexOf(extractedValue) : -1;
+    // If signal was extracted, use its exact value
+    // If missing, default to index 0 (lowest/safest value)
+    out[key] = idx >= 0 ? idx : 0;
   }
   return out;
 }
@@ -216,12 +218,24 @@ export default function WhatIfEditor({ result, onResultUpdate }: WhatIfEditorPro
     }
   }, []);
 
-  const handleSliderChange = useCallback((signalKey: string, rawValue: number) => {
+  const handleSliderChange = useCallback(
+  (signalKey: string, rawValue: number) => {
     const updated = { ...sliderValues, [signalKey]: rawValue };
     setSliderValues(updated);
+
+    // If all sliders match original extracted values, clear preview
+    const initial = buildInitialValues(result);
+    const isReset = Object.keys(initial).every(k => initial[k] === updated[k]);
+    if (isReset) {
+      setPreviewResult(null);
+      return;
+    }
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => fetchPreview(updated), 300);
-  }, [sliderValues, fetchPreview]);
+  },
+  [sliderValues, fetchPreview, result]
+);
 
   const handleReset = useCallback(() => {
     const initial = buildInitialValues(result);
@@ -232,8 +246,7 @@ export default function WhatIfEditor({ result, onResultUpdate }: WhatIfEditorPro
 
   const handleOpen = useCallback(() => {
     setIsOpen(true);
-    fetchPreview(sliderValues);
-  }, [sliderValues, fetchPreview]);
+  }, []);
 
   const handleSaveConfirmed = useCallback(async () => {
     setShowConfirm(false);
