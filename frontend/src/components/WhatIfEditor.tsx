@@ -571,32 +571,86 @@ onResultUpdate?.(mergedResult);
             transition={{ duration: 0.3 }}
             className="mb-8 overflow-hidden"
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5 pt-2">
-              {Object.entries(SIGNAL_CONFIG).map(([key, cfg]) => {
-                const idx = sliderValues[key] ?? 0;
-                return (
-                  <div key={key}>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-sm text-[var(--text-secondary)]">{cfg.label}</span>
-                      <span className="text-sm font-bold text-[var(--text-primary)]">{cfg.optionLabels[idx]}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={cfg.options.length - 1}
-                      step={1}
-                      value={idx}
-                      onChange={e => handleSliderChange(key, Number(e.target.value))}
-                      className="w-full"
-                      style={{ accentColor: "var(--primary)" }}
-                    />
-                    <div className="flex justify-between text-[10px] text-[var(--text-secondary)] mt-0.5 opacity-60">
-                      <span>{cfg.optionLabels[0]}</span>
-                      <span>{cfg.optionLabels[cfg.optionLabels.length - 1]}</span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6 pt-2">
+  {Object.entries(SIGNAL_CONFIG).map(([key, cfg]) => {
+    const idx = sliderValues[key] ?? 0;
+    const total = cfg.options.length;
+    const pct = total > 1 ? (idx / (total - 1)) * 100 : 0;
+    return (
+      <div key={key}>
+        {/* Label row */}
+        <div className="flex justify-between items-center mb-3">
+          <span className="text-sm text-[var(--text-secondary)]">{cfg.label}</span>
+          <motion.span
+            key={cfg.optionLabels[idx]}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-sm font-bold text-[var(--text-primary)]"
+          >
+            {cfg.optionLabels[idx]}
+          </motion.span>
+        </div>
+
+        {/* Custom checkpoint track */}
+        <div className="relative h-8 flex items-center mx-2">
+          {/* Background track */}
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
+          {/* Filled track */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full transition-all duration-200"
+            style={{ width: `${pct}%`, background: "var(--primary)" }}
+          />
+          {/* Checkpoint dots */}
+          {cfg.options.map((_, dotIdx) => {
+            const dotPct = total > 1 ? (dotIdx / (total - 1)) * 100 : 0;
+            const isActive = dotIdx <= idx;
+            const isCurrent = dotIdx === idx;
+            return (
+              <button
+                key={dotIdx}
+                onClick={() => handleSliderChange(key, dotIdx)}
+                title={cfg.optionLabels[dotIdx]}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 transition-all duration-200 focus:outline-none"
+                style={{
+                  left: `calc(8px + (100% - 16px) * ${dotPct} / 100)`,
+                  width:  isCurrent ? 16 : 10,
+                  height: isCurrent ? 16 : 10,
+                  borderColor: isActive ? "var(--primary)" : "var(--border)",
+                  backgroundColor: isActive ? "var(--primary)" : "var(--surface)",
+                  boxShadow: isCurrent ? "0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent)" : "none",
+                  zIndex: isCurrent ? 2 : 1,
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* Checkpoint labels */}
+        <div className="relative mt-1.5" style={{ height: 14 }}>
+          {cfg.optionLabels.map((label, dotIdx) => {
+            const dotPct = total > 1 ? (dotIdx / (total - 1)) * 100 : 0;
+            const isCurrent = dotIdx === idx;
+            const align = dotIdx === 0 ? "left" : dotIdx === total - 1 ? "right" : "center";
+            return (
+              <span
+                key={dotIdx}
+                className="absolute text-[9px] transition-all duration-200 whitespace-nowrap"
+                style={{
+                  left: `calc(8px + (100% - 16px) * ${dotPct} / 100)`,
+                  transform: align === "center" ? "translateX(-50%)" : align === "right" ? "translateX(-100%)" : "none",
+                  color: isCurrent ? "var(--primary)" : "var(--text-secondary)",
+                  fontWeight: isCurrent ? 700 : 400,
+                  opacity: isCurrent ? 1 : 0.5,
+                }}
+              >
+                {label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  })}
             </div>
           </motion.div>
         )}
