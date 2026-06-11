@@ -69,6 +69,113 @@ const ARCH_COLOR_MAP: Record<string, string> = {
   Hybrid: "#f97316",
 };
 
+// ── Cost estimation (mirrors cost_analysis.py) ───────────────────────────────
+const _INFRA_COST: Record<string, Record<string, Record<string, Record<string, [number, number]>>>> = {
+  compute: {
+    dataset_size: {
+      small:      { RAG: [17000, 42000],     FineTuning: [67000, 168000],    CAG: [8500, 25000],     Hybrid: [84000, 210000] },
+      medium:     { RAG: [42000, 126000],    FineTuning: [168000, 420000],   CAG: [17000, 50000],    Hybrid: [210000, 504000] },
+      large:      { RAG: [126000, 336000],   FineTuning: [420000, 1008000],  CAG: [42000, 126000],   Hybrid: [504000, 1260000] },
+      very_large: { RAG: [336000, 840000],   FineTuning: [1008000, 2520000], CAG: [126000, 336000],  Hybrid: [1260000, 2940000] },
+    },
+    query_volume: {
+      low:       { RAG: [8500, 25000],    FineTuning: [4200, 12600],    CAG: [4200, 12600],    Hybrid: [12600, 33600] },
+      medium:    { RAG: [25000, 67000],   FineTuning: [12600, 33600],   CAG: [12600, 42000],   Hybrid: [33600, 84000] },
+      high:      { RAG: [67000, 168000],  FineTuning: [33600, 84000],   CAG: [42000, 126000],  Hybrid: [84000, 210000] },
+      very_high: { RAG: [168000, 420000], FineTuning: [84000, 210000],  CAG: [126000, 336000], Hybrid: [210000, 504000] },
+    },
+  },
+  storage: {
+    dataset_size: {
+      small:      { RAG: [1700, 4200],    FineTuning: [4200, 12600],   CAG: [420, 1700],     Hybrid: [5900, 16800] },
+      medium:     { RAG: [4200, 16800],   FineTuning: [12600, 33600],  CAG: [840, 4200],     Hybrid: [16800, 42000] },
+      large:      { RAG: [16800, 50400],  FineTuning: [33600, 84000],  CAG: [2500, 8400],    Hybrid: [42000, 126000] },
+      very_large: { RAG: [50400, 168000], FineTuning: [84000, 252000], CAG: [8400, 33600],   Hybrid: [126000, 336000] },
+    },
+  },
+  api_inference: {
+    query_volume: {
+      low:       { RAG: [8400, 25000],    FineTuning: [2500, 8400],    CAG: [6700, 21000],    Hybrid: [10900, 29400] },
+      medium:    { RAG: [25000, 84000],   FineTuning: [8400, 29400],   CAG: [21000, 67000],   Hybrid: [29400, 100800] },
+      high:      { RAG: [84000, 252000],  FineTuning: [29400, 84000],  CAG: [67000, 210000],  Hybrid: [100800, 294000] },
+      very_high: { RAG: [252000, 672000], FineTuning: [84000, 252000], CAG: [210000, 588000], Hybrid: [294000, 756000] },
+    },
+  },
+  networking: {
+    user_scale: {
+      small:      { RAG: [1700, 4200],   FineTuning: [840, 2500],    CAG: [840, 2500],    Hybrid: [2500, 5900] },
+      medium:     { RAG: [4200, 12600],  FineTuning: [2500, 6700],   CAG: [2500, 6700],   Hybrid: [5900, 16800] },
+      large:      { RAG: [12600, 33600], FineTuning: [6700, 16800],  CAG: [6700, 16800],  Hybrid: [16800, 42000] },
+      enterprise: { RAG: [33600, 84000], FineTuning: [16800, 42000], CAG: [16800, 42000], Hybrid: [42000, 100800] },
+    },
+  },
+};
+
+const _TRAINING_COST: Record<string, Record<string, Record<string, [number, number]>>> = {
+  dataset_size: {
+    small:      { RAG: [0, 0], FineTuning: [42000, 168000],    CAG: [0, 0], Hybrid: [42000, 168000] },
+    medium:     { RAG: [0, 0], FineTuning: [168000, 504000],   CAG: [0, 0], Hybrid: [168000, 504000] },
+    large:      { RAG: [0, 0], FineTuning: [504000, 1260000],  CAG: [0, 0], Hybrid: [504000, 1260000] },
+    very_large: { RAG: [0, 0], FineTuning: [1260000, 3360000], CAG: [0, 0], Hybrid: [1260000, 3360000] },
+  },
+  data_volatility: {
+    static:   { RAG: [0, 0], FineTuning: [0, 0],          CAG: [0, 0], Hybrid: [0, 0] },
+    low:      { RAG: [0, 0], FineTuning: [16800, 67000],   CAG: [0, 0], Hybrid: [16800, 67000] },
+    moderate: { RAG: [0, 0], FineTuning: [67000, 210000],  CAG: [0, 0], Hybrid: [67000, 210000] },
+    high:     { RAG: [0, 0], FineTuning: [210000, 504000], CAG: [0, 0], Hybrid: [210000, 504000] },
+  },
+};
+
+const _MAINTENANCE_MULTIPLIER: Record<string, Record<string, number>> = {
+  cloud:      { RAG: 1.0, FineTuning: 1.0, CAG: 1.0, Hybrid: 1.0 },
+  on_premise: { RAG: 1.4, FineTuning: 1.3, CAG: 1.2, Hybrid: 1.5 },
+  hybrid:     { RAG: 1.2, FineTuning: 1.2, CAG: 1.1, Hybrid: 1.3 },
+  edge:       { RAG: 1.5, FineTuning: 1.4, CAG: 1.3, Hybrid: 1.6 },
+};
+
+const _SECURITY_MULTIPLIER: Record<string, number> = {
+  standard: 1.0, elevated: 1.1, high: 1.25, critical: 1.5,
+};
+
+function _lookupInfra(category: string, signal: string, value: string, arch: string): [number, number] {
+  return (_INFRA_COST[category]?.[signal]?.[value]?.[arch] as [number, number]) ?? [0, 0];
+}
+function _lookupTraining(signal: string, value: string, arch: string): [number, number] {
+  return (_TRAINING_COST[signal]?.[value]?.[arch] as [number, number]) ?? [0, 0];
+}
+function _sumRanges(ranges: [number, number][]): [number, number] {
+  return [ranges.reduce((s, r) => s + r[0], 0), ranges.reduce((s, r) => s + r[1], 0)];
+}
+
+/** Estimate monthly cost range for a given arch + signal map (mirrors cost_analysis.py). */
+function estimateMonthlyCost(signals: Record<string, string>, arch: string): [number, number] {
+  const dataset_size   = signals.dataset_size   ?? "medium";
+  const query_volume   = signals.query_volume   ?? "medium";
+  const user_scale     = signals.user_scale     ?? "medium";
+  const data_vol       = signals.data_volatility ?? "low";
+  const deployment     = signals.deployment_preference ?? "cloud";
+  const security       = signals.security_level ?? "standard";
+
+  const secMult   = _SECURITY_MULTIPLIER[security]   ?? 1.0;
+  const maintMult = (_MAINTENANCE_MULTIPLIER[deployment] ?? _MAINTENANCE_MULTIPLIER.cloud)[arch] ?? 1.0;
+
+  const compute_ds  = _lookupInfra("compute",       "dataset_size", dataset_size,  arch);
+  const compute_qv  = _lookupInfra("compute",       "query_volume", query_volume,  arch);
+  const compute: [number, number]     = [compute_ds[0] + compute_qv[0], compute_ds[1] + compute_qv[1]];
+  const storage       = _lookupInfra("storage",       "dataset_size", dataset_size,  arch);
+  const api_inference = _lookupInfra("api_inference", "query_volume", query_volume,  arch);
+  const networking    = _lookupInfra("networking",    "user_scale",   user_scale,    arch);
+  const training_ds   = _lookupTraining("dataset_size",    dataset_size, arch);
+  const training_vol  = _lookupTraining("data_volatility", data_vol,     arch);
+  const training: [number, number]    = [training_ds[0] + training_vol[0], training_ds[1] + training_vol[1]];
+
+  const base = _sumRanges([compute, storage, api_inference, networking, training]);
+  const maintenance: [number, number] = [Math.round(base[0] * (maintMult - 1)), Math.round(base[1] * (maintMult - 1))];
+  const preSec = _sumRanges([base, maintenance]);
+  const secAddn: [number, number] = [Math.round(preSec[0] * (secMult - 1)), Math.round(preSec[1] * (secMult - 1))];
+  return _sumRanges([preSec, secAddn]);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function buildInitialValues(result: AnalysisResult): Record<string, number> {
   const out: Record<string, number> = {};
@@ -122,7 +229,7 @@ interface ConfirmModalProps {
 
 function ConfirmModal({ originalArch, newArch, originalCost, newCost, onConfirm, onCancel }: ConfirmModalProps) {
   return (
-    <div style={{ minHeight: 320, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--border-radius-lg)", padding: "1rem" }}>
+    <div style={{ minHeight: 320, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--border-radius-lg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -291,7 +398,10 @@ onResultUpdate?.(mergedResult);
   const originalArch = result.recommended ?? "";
   const newArch = previewResult?.recommended ?? "";
   const originalCost = result.cost_analysis?.architectures?.[originalArch]?.monthly_total ?? null;
-  const newArchCost = result.cost_analysis?.architectures?.[newArch]?.monthly_total ?? null;
+  // Compute newArchCost live from current slider signals (not stale cost table)
+  const newArchCost: [number, number] | null = previewResult && newArch
+    ? estimateMonthlyCost(sliderValuesToSignals(sliderValues), newArch)
+    : null;
 
   return (
     <motion.div
@@ -423,16 +533,16 @@ onResultUpdate?.(mergedResult);
               </p>
               <p className="text-[10px] text-[var(--text-secondary)] mt-1 opacity-60">per month</p>
             </div>
-            {/* New cost */}
-            <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-              <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">
-                New — {newArch}
-              </p>
-              <p className="text-lg font-black" style={{ color: ARCH_COLOR_MAP[newArch] ?? "var(--text-primary)" }}>
-                {formatCost(newArchCost[0])} – {formatCost(newArchCost[1])}
-              </p>
-              <p className="text-[10px] text-[var(--text-secondary)] mt-1">per month</p>
-            </div>
+           {/* New cost */}
+           <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+  <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2">
+    New — {newArch}
+  </p>
+  <p className="text-lg font-black" style={{ color: ARCH_COLOR_MAP[newArch] ?? "var(--text-primary)" }}>
+    {formatCost(newArchCost[0])} – {formatCost(newArchCost[1])}
+  </p>
+  <p className="text-[10px] text-[var(--text-secondary)] mt-1">per month</p>
+</div>
           </motion.div>
         )}
       </AnimatePresence>
