@@ -592,14 +592,29 @@ onResultUpdate?.(mergedResult);
         </div>
 
         {/* Custom checkpoint track */}
-        <div className="relative h-8 flex items-center mx-2">
-          {/* Background track */}
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
-          {/* Filled track */}
-          <div
-            className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full transition-all duration-200"
-            style={{ width: `${pct}%`, background: "var(--primary)" }}
-          />
+                    <div className="relative h-8 flex items-center">
+                      {/* Hidden native range -- handles drag/keyboard, sits above everything */}
+                      <input
+                        type="range"
+                        min={0}
+                        max={total - 1}
+                        step={1}
+                        value={idx}
+                        onChange={e => handleSliderChange(key, Number(e.target.value))}
+                        className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                        style={{ zIndex: 10 }}
+                      />
+                      {/* Background track */}
+                      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
+                      {/* Filled track */}
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full transition-all duration-200"
+                        style={{
+                          width: `${pct}%`,
+                          background: "var(--primary)",
+                        }}
+                      />
+
           {/* Checkpoint dots */}
           {cfg.options.map((_, dotIdx) => {
             const dotPct = total > 1 ? (dotIdx / (total - 1)) * 100 : 0;
