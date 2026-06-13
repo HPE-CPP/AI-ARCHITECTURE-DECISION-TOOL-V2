@@ -302,4 +302,34 @@ export async function exportCostAnalysis(result: AnalysisResult): Promise<void> 
   const url = URL.createObjectURL(await res.blob());
   _triggerDownload(url, `ArchGuide_Cost_Analysis_${result.analysis_id}.pdf`);
 }
+export interface ScorePreviewResult {
+  scores: Record<string, number>;
+  recommended: string;
+  ranking: string[];
+  factor_breakdown: Record<string, Record<string, number>>;
+}
+export async function scorePreview(
+  signals: Record<string, string>
+): Promise<ScorePreviewResult> {
+  const token = await getCachedAuthToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
+  const res = await fetchWithApiFallback("/api/v1/score-preview", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ signals }),
+  });
+
+  if (!res.ok) throw new Error("Score preview failed");
+  return res.json();
+}
+
+export interface ScorePreviewResult {
+  scores: Record<string, number>;
+  recommended: string;
+  ranking: string[];
+  factor_breakdown: Record<string, Record<string, number>>;
+}
