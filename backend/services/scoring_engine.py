@@ -126,7 +126,7 @@ ARCHITECTURE_DESCRIPTIONS = {
         "weaknesses": ["Expensive retraining", "Data staleness risk", "Requires labeled data"],
     },
     "CAG": {
-        "full_name": "Context-Augmented Generation",
+        "full_name": "Cache-Augmented Generation",
         "description": "Provides context directly in the prompt without vector DB. Best for small, well-defined knowledge sets.",
         "strengths": ["Simple architecture", "Low infrastructure cost", "Fast setup", "No vector DB needed"],
         "weaknesses": ["Context window limits", "Not scalable", "Higher per-query cost for large contexts"],
