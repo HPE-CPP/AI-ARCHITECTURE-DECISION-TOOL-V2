@@ -70,6 +70,18 @@ SIGNAL_OPTIONS: dict[str, list[dict[str, str]]] = {
         {"value": "large", "label": "Large (10K - 1M users)"},
         {"value": "enterprise", "label": "Enterprise (1M+ users, multi-tenant)"},
     ],
+    "citation_requirement": [
+    {"value": "low",      "label": "Low (No explanation needed)"},
+    {"value": "moderate", "label": "Moderate (Some reasoning expected)"},
+    {"value": "high",     "label": "High (Citations and sources required)"},
+    {"value": "critical", "label": "Critical (Full audit trail mandatory)"},
+],
+"context_size": [
+    {"value": "small",      "label": "Small (Fits in a prompt easily)"},
+    {"value": "medium",     "label": "Medium (Moderate knowledge base)"},
+    {"value": "large",      "label": "Large (Extensive knowledge required)"},
+    {"value": "very_large", "label": "Very Large (Massive corpus needed)"},
+],
 }
 
 QUESTION_TEMPLATES: dict[str, str] = {
@@ -83,6 +95,8 @@ QUESTION_TEMPLATES: dict[str, str] = {
     "cost_sensitivity": "What are your budget constraints?",
     "deployment_preference": "What is your preferred deployment environment?",
     "user_scale": "How many end users will use the system?",
+    "citation_requirement": "How important is it to explain or cite sources for answers?",
+"context_size": "How much knowledge or context needs to be available per query?",
 }
 
 MAX_FOLLOWUP_QUESTIONS = 5
@@ -156,5 +170,7 @@ def _get_signal_priority(signal_name: str) -> int:
         "cost_sensitivity": 2,
         "deployment_preference": 2,
         "user_scale": 2,
+        "citation_requirement": 2,
+        "context_size": 3,
     }
     return priorities.get(signal_name, 1)
