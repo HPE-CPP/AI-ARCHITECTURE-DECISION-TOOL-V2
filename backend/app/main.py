@@ -168,6 +168,7 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix=prefix, tags=["Users"])
     app.include_router(chat.router, prefix=prefix, tags=["Chat"])
     app.include_router(score_preview.router, prefix=prefix, tags=["ScorePreview"])
+    app.include_router(share_router.router, prefix=prefix, tags=["Share"])
 
     # Health check
     @app.get("/api/v1/health", tags=["Health"])

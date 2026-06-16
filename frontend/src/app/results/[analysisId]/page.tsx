@@ -12,6 +12,7 @@ import { updateProject, updateAnalysisHistoryEntry, getAnalysisHistory, Analysis
 import { useAuth } from "@/lib/auth-context";
 import { AnalysisHistory } from "@/components/AnalysisHistory";
 import { ArchGuideChat } from "@/components/ArchGuideChat";
+import ShareButton from "@/components/ShareButton";
 import WhatIfEditor from "@/components/WhatIfEditor";
 
 function formatElapsed(seconds: number): string {
@@ -482,25 +483,28 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     <div className="w-full max-w-screen-xl mx-auto pt-24 pb-20 px-4 sm:px-6 lg:px-8 space-y-8">
 
       {/* Back / Edit Button */}
-      <div className="flex items-center justify-between w-full">
-        <button
-          onClick={handleEditInputsClick}
-          className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
-        >
-          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          Edit Inputs
-        </button>
+<div className="flex items-center justify-between w-full">
+  <button
+    onClick={handleEditInputsClick}
+    className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium"
+  >
+    <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+    Edit Inputs
+  </button>
 
-        {projectId && (
-          <button
-            onClick={() => router.push("/projects")}
-            className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium text-sm"
-          >
-            My Projects
-            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-          </button>
-        )}
-      </div>
+  <div className="flex items-center gap-3">
+    <ShareButton analysisId={resolvedParams.analysisId} />
+    {projectId && (
+      <button
+        onClick={() => router.push("/projects")}
+        className="group flex items-center gap-2 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors font-medium text-sm"
+      >
+        My Projects
+        <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+      </button>
+    )}
+  </div>
+</div>
 
       {showEditOptions ? (
         <div className="w-full flex flex-col items-center max-w-2xl mx-auto mt-10 min-h-[50vh]">

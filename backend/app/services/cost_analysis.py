@@ -107,7 +107,7 @@ _ARCHITECTURES = ["RAG", "FineTuning", "CAG", "Hybrid"]
 _ARCH_FULL_NAMES = {
     "RAG":        "Retrieval-Augmented Generation",
     "FineTuning": "Fine-Tuning",
-    "CAG":        "Context-Augmented Generation",
+    "CAG":        "Cache-Augmented Generation",
     "Hybrid":     "Hybrid Architecture",
 }
 
