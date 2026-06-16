@@ -17,30 +17,28 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
     # Hybrid should only compete when signals genuinely require BOTH retrieval
     # flexibility AND fine-tuned model accuracy — not as a universal fallback.
     "dataset_size": {
-        "small":      {"RAG": 0.3, "FineTuning": 0.6, "CAG": 0.9, "Hybrid": 0.3},
-        "medium":     {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.5},
-        "large":      {"RAG": 0.9, "FineTuning": 0.5, "CAG": 0.2, "Hybrid": 0.65},
-        "very_large": {"RAG": 1.0, "FineTuning": 0.3, "CAG": 0.1, "Hybrid": 0.7},
+        "small":      {"RAG": 0.3,  "FineTuning": 0.6,  "CAG": 0.9,  "Hybrid": 0.3},
+        "medium":     {"RAG": 0.7,  "FineTuning": 0.7,  "CAG": 0.5,  "Hybrid": 0.5},
+        "large":      {"RAG": 0.9,  "FineTuning": 0.5,  "CAG": 0.2,  "Hybrid": 0.65},
+        "very_large": {"RAG": 1.0,  "FineTuning": 0.3,  "CAG": 0.1,  "Hybrid": 0.7},
     },
-    "query_volume": {
-        "low":       {"RAG": 0.5, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
-        "medium":    {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
-        "high":      {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.3, "Hybrid": 0.6},
-        "very_high": {"RAG": 0.6, "FineTuning": 0.9, "CAG": 0.1, "Hybrid": 0.7},
+   "query_volume": {
+        "low":       {"RAG": 0.5,  "FineTuning": 0.4,  "CAG": 0.9,  "Hybrid": 0.3},
+        "medium":    {"RAG": 0.7,  "FineTuning": 0.6,  "CAG": 0.5,  "Hybrid": 0.5},
+        "high":      {"RAG": 0.8,  "FineTuning": 0.8,  "CAG": 0.2,  "Hybrid": 0.6},
+        "very_high": {"RAG": 0.6,  "FineTuning": 0.9,  "CAG": 0.05, "Hybrid": 0.7},
     },
     "latency_requirement": {
-        # Hybrid adds a retrieval step — strict/ultra-low latency strongly disfavors it.
-        "relaxed":   {"RAG": 0.8, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.4},
-        "moderate":  {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.5},
-        "strict":    {"RAG": 0.4, "FineTuning": 0.9, "CAG": 0.3, "Hybrid": 0.55},
-        "ultra_low": {"RAG": 0.2, "FineTuning": 1.0, "CAG": 0.2, "Hybrid": 0.4},
+        "relaxed":   {"RAG": 0.8,  "FineTuning": 0.5,  "CAG": 0.3,  "Hybrid": 0.4},
+        "moderate":  {"RAG": 0.7,  "FineTuning": 0.7,  "CAG": 0.5,  "Hybrid": 0.5},
+        "strict":    {"RAG": 0.4,  "FineTuning": 0.9,  "CAG": 0.7,  "Hybrid": 0.55},
+        "ultra_low": {"RAG": 0.2,  "FineTuning": 1.0,  "CAG": 0.8,  "Hybrid": 0.4},
     },
     "data_volatility": {
-        # High volatility is RAG's unique strength — Hybrid's FT component hurts here.
-        "static":   {"RAG": 0.5, "FineTuning": 0.9, "CAG": 0.8, "Hybrid": 0.4},
-        "low":      {"RAG": 0.7, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.5},
-        "moderate": {"RAG": 0.9, "FineTuning": 0.4, "CAG": 0.3, "Hybrid": 0.6},
-        "high":     {"RAG": 1.0, "FineTuning": 0.2, "CAG": 0.1, "Hybrid": 0.5},
+        "static":   {"RAG": 0.6,  "FineTuning": 0.9,  "CAG": 0.8,  "Hybrid": 0.4},
+        "low":      {"RAG": 0.7,  "FineTuning": 0.7,  "CAG": 0.6,  "Hybrid": 0.5},
+        "moderate": {"RAG": 0.9,  "FineTuning": 0.4,  "CAG": 0.3,  "Hybrid": 0.6},
+        "high":     {"RAG": 1.0,  "FineTuning": 0.2,  "CAG": 0.1,  "Hybrid": 0.5},
     },
     "accuracy_requirement": {
         # Rebalanced: grounded retrieval with citations is RAG's defining
@@ -48,10 +46,10 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
         # the failure mode is "wrong answers / hallucinations". FT still
         # dominates 'critical' (regulatory/clinical) because that's where
         # internalised domain understanding matters more than citations.
-        "moderate":  {"RAG": 0.6, "FineTuning": 0.5, "CAG": 0.7, "Hybrid": 0.4},
-        "high":      {"RAG": 0.85, "FineTuning": 0.7, "CAG": 0.5, "Hybrid": 0.6},
-        "very_high": {"RAG": 0.9, "FineTuning": 0.8, "CAG": 0.4, "Hybrid": 0.7},
-        "critical":  {"RAG": 0.78, "FineTuning": 0.95, "CAG": 0.2, "Hybrid": 0.7},
+        "moderate":  {"RAG": 0.6,  "FineTuning": 0.5,  "CAG": 0.6,  "Hybrid": 0.4},
+        "high":      {"RAG": 0.85, "FineTuning": 0.7,  "CAG": 0.4,  "Hybrid": 0.6},
+        "very_high": {"RAG": 0.9,  "FineTuning": 0.8,  "CAG": 0.25, "Hybrid": 0.7},
+        "critical":  {"RAG": 0.78, "FineTuning": 0.95, "CAG": 0.1,  "Hybrid": 0.7},
     },
     "domain_specificity": {
         # Rebalanced: 'specialized' (internal company knowledge, standard
@@ -60,8 +58,8 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
         # research) genuinely needs FT for vocabulary/reasoning patterns
         # that prompting cannot convey. CAG remains low because, by
         # definition, specialized corpora are usually too large for context.
-        "general":            {"RAG": 0.7, "FineTuning": 0.3, "CAG": 0.8, "Hybrid": 0.3},
-        "moderate":           {"RAG": 0.8, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
+        "general":            {"RAG": 0.7,  "FineTuning": 0.3,  "CAG": 0.8,  "Hybrid": 0.3},
+        "moderate":           {"RAG": 0.8,  "FineTuning": 0.6,  "CAG": 0.5,  "Hybrid": 0.5},
         "specialized":        {"RAG": 0.85, "FineTuning": 0.75, "CAG": 0.45, "Hybrid": 0.6},
         "highly_specialized": {"RAG": 0.68, "FineTuning": 0.95, "CAG": 0.25, "Hybrid": 0.65},
     },
@@ -74,17 +72,17 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
     "cost_sensitivity": {
         # Hybrid is the most expensive option — high/very_high cost sensitivity should
         # strongly disfavor it.
-        "low":       {"RAG": 0.7, "FineTuning": 0.8, "CAG": 0.5, "Hybrid": 0.65},
-        "moderate":  {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.6, "Hybrid": 0.5},
-        "high":      {"RAG": 0.6, "FineTuning": 0.4, "CAG": 0.8, "Hybrid": 0.3},
-        "very_high": {"RAG": 0.5, "FineTuning": 0.2, "CAG": 0.9, "Hybrid": 0.2},
+        "low":       {"RAG": 0.7,  "FineTuning": 0.65, "CAG": 0.5,  "Hybrid": 0.65},
+        "moderate":  {"RAG": 0.7,  "FineTuning": 0.6,  "CAG": 0.6,  "Hybrid": 0.5},
+        "high":      {"RAG": 0.6,  "FineTuning": 0.4,  "CAG": 0.8,  "Hybrid": 0.3},
+        "very_high": {"RAG": 0.5,  "FineTuning": 0.2,  "CAG": 0.9,  "Hybrid": 0.2},
     },
     "deployment_preference": {
         # FIX: "hybrid deployment" (cloud + on-prem mix) ≠ "Hybrid architecture".
         # Removed circular 1.0 self-boost; Hybrid gets a modest advantage (0.75) since
         # hybrid deployment environments benefit from its flexibility, not a perfect score.
         "cloud":      {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.6, "Hybrid": 0.6},
-        "on_premise": {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.7, "Hybrid": 0.6},
+        "on_premise": {"RAG": 0.5, "FineTuning": 0.8, "CAG": 0.4, "Hybrid": 0.6},
         "hybrid":     {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.4, "Hybrid": 0.75},
         "edge":       {"RAG": 0.3, "FineTuning": 0.9, "CAG": 0.5, "Hybrid": 0.4},
     },
@@ -95,6 +93,18 @@ SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
         "medium":     {"RAG": 0.7, "FineTuning": 0.6, "CAG": 0.5, "Hybrid": 0.5},
         "large":      {"RAG": 0.9, "FineTuning": 0.7, "CAG": 0.2, "Hybrid": 0.65},
         "enterprise": {"RAG": 0.8, "FineTuning": 0.8, "CAG": 0.1, "Hybrid": 0.75},
+    },
+    "citation_requirement": {
+        "low":      {"RAG": 0.6,  "FineTuning": 0.6,  "CAG": 0.6,  "Hybrid": 0.5},
+        "moderate": {"RAG": 0.75, "FineTuning": 0.5,  "CAG": 0.6,  "Hybrid": 0.6},
+        "high":     {"RAG": 0.9,  "FineTuning": 0.35, "CAG": 0.55, "Hybrid": 0.65},
+        "critical": {"RAG": 0.95, "FineTuning": 0.2,  "CAG": 0.5,  "Hybrid": 0.7},
+    },
+    "context_size": {
+        "small":      {"RAG": 0.5,  "FineTuning": 0.6,  "CAG": 0.95, "Hybrid": 0.3},
+        "medium":     {"RAG": 0.75, "FineTuning": 0.6,  "CAG": 0.55, "Hybrid": 0.5},
+        "large":      {"RAG": 0.9,  "FineTuning": 0.5,  "CAG": 0.2,  "Hybrid": 0.65},
+        "very_large": {"RAG": 0.95, "FineTuning": 0.4,  "CAG": 0.05, "Hybrid": 0.7},
     },
 }
 
@@ -107,9 +117,11 @@ SIGNAL_WEIGHTS: dict[str, float] = {
     "accuracy_requirement": 1.2,
     "domain_specificity": 1.1,
     "security_level": 0.9,
-    "cost_sensitivity": 0.8,
+    "cost_sensitivity": 0.95,
     "deployment_preference": 0.7,
     "user_scale": 0.8,
+    "citation_requirement": 1.0,
+    "context_size": 1.1,
 }
 
 ARCHITECTURE_DESCRIPTIONS = {
@@ -127,9 +139,9 @@ ARCHITECTURE_DESCRIPTIONS = {
     },
     "CAG": {
         "full_name": "Cache-Augmented Generation",
-        "description": "Provides context directly in the prompt without vector DB. Best for small, well-defined knowledge sets.",
-        "strengths": ["Simple architecture", "Low infrastructure cost", "Fast setup", "No vector DB needed"],
-        "weaknesses": ["Context window limits", "Not scalable", "Higher per-query cost for large contexts"],
+        "description": "Pre-loads the entire knowledge base into the LLM's KV cache so repeated queries reuse cached computation. Best for small, stable knowledge sets with high query volume.",
+        "strengths": [ "Zero retrieval latency — no vector DB lookup needed","Consistent answers — same context every time","Simple architecture — no retrieval pipeline","Fast repeated queries via KV cache reuse"],
+        "weaknesses": ["Limited by LLM context window size","High memory usage to hold KV cache","Not suitable for large or frequently changing data","Cache must be rebuilt when knowledge base changes"],
     },
     "Hybrid": {
         "full_name": "Hybrid Architecture",

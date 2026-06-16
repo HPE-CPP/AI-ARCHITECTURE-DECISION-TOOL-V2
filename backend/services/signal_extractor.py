@@ -73,6 +73,14 @@ SIGNAL_SCHEMA = {
         "description": "Number of end users (small/medium/large/enterprise)",
         "keywords": ["users", "user base", "scale", "organization", "team", "enterprise", "consumer", "public"],
     },
+    "citation_requirement": {
+    "description": "How important it is to explain or cite sources for answers (low/moderate/high/critical)",
+    "keywords": ["explainability", "explain", "citation", "cite sources", "audit trail", "transparency", "interpretable", "traceable", "reasoning", "justification"],
+},
+"context_size": {
+    "description": "How much knowledge/context needs to be available per query (small/medium/large/very_large)",
+    "keywords": ["context window", "context size", "knowledge base size", "corpus size", "fits in context", "bounded corpus", "context length"],
+},
 }
 
 # Flat keyword set — registered with document_parser so it can score pages
@@ -94,6 +102,8 @@ SIGNAL NAMES AND ALLOWED VALUES — you must use EXACTLY these strings for "valu
   cost_sensitivity:      "low" | "moderate" | "high" | "very_high"
   deployment_preference: "cloud" | "on_premise" | "hybrid" | "edge"
   user_scale:            "small" | "medium" | "large" | "enterprise"
+  citation_requirement:  "low" | "moderate" | "high" | "critical"
+  context_size:          "small" | "medium" | "large" | "very_large"
 
 HOW TO PICK THE RIGHT VALUE — infer from context even if not stated word-for-word:
   dataset_size:          GB/TB of documents or millions of records → "large"; hundreds of GBs or billions of records → "very_large"; thousands of records → "small"
@@ -106,6 +116,8 @@ HOW TO PICK THE RIGHT VALUE — infer from context even if not stated word-for-w
   cost_sensitivity:      "cost efficiency important / budget conscious" → "high"; "strict budget constraints" → "very_high"; unlimited budget → "low"
   deployment_preference: "on-premise / private cloud / self-hosted" → "on_premise"; AWS/GCP/Azure → "cloud"; "both cloud and on-prem" → "hybrid"; IoT/edge devices → "edge"
   user_scale:            "<100 users / small team" → "small"; "100-1000" → "medium"; "1000-10000" → "large"; ">10000 or enterprise-wide" → "enterprise"
+  citation_requirement: "audit trail / must cite sources / regulatory traceability" → "critical"; "citations required" → "high"; "some reasoning" → "moderate"; internal tool no explanation needed → "low"
+  context_size:               fits in a prompt / bounded corpus → "small"; moderate KB → "medium"; large document corpus → "large"; massive multi-domain corpus → "very_large"
 
 CONFIDENCE SCALE:
   0.0   = signal not mentioned at all (use null for value too)
@@ -194,6 +206,18 @@ SIGNAL_OPTIONS = {
         {"value": "large", "label": "Large (1k - 10k users)"},
         {"value": "enterprise", "label": "Enterprise (> 10k users)"},
     ],
+    "citation_requirement": [
+    {"value": "low",      "label": "Low (No explanation needed)"},
+    {"value": "moderate", "label": "Moderate (Some reasoning expected)"},
+    {"value": "high",     "label": "High (Citations required)"},
+    {"value": "critical", "label": "Critical (Full audit trail mandatory)"},
+],
+"context_size": [
+    {"value": "small",      "label": "Small (Fits in a prompt)"},
+    {"value": "medium",     "label": "Medium (Moderate knowledge base)"},
+    {"value": "large",      "label": "Large (Extensive knowledge)"},
+    {"value": "very_large", "label": "Very Large (Massive corpus)"},
+],
 }
 
 
@@ -690,6 +714,19 @@ class SignalExtractor:
             (r"\bsmall\s+(?:team|company|startup)\b|\bfew\s+(?:users?|employees?|people)\b", "small", 0.65),
             (r"\bpilot\b|\bprototype\b|\bproof\s+of\s+concept\b|\bPoC\b", "small", 0.58),
         ],
+        "citation_requirement": [
+    (r"\baudit\s+trail\b|\bfull\s+(?:audit|traceability)\b|\bregulatory\s+(?:audit|compliance)\b", "critical", 0.82),
+    (r"\bcite\s+sources?\b|\bsource\s+citation\b|\btraceab\w+\b|\bverif\w+\s+sources?\b", "high", 0.78),
+    (r"\bexplain\w*\s+(?:the\s+)?(?:answer|reasoning|decision)\b|\btransparent\b|\binterpretab\w+\b", "high", 0.72),
+    (r"\bsome\s+(?:reasoning|explanation)\b|\bjustif\w+\b", "moderate", 0.62),
+    (r"\bno\s+(?:explanation|citation)\s+(?:needed|required)\b|\binternal\s+tool\b", "low", 0.58),
+],
+"context_size": [
+    (r"\bfits?\s+(?:in|within)\s+(?:the\s+)?(?:context|prompt)\b|\bbounded\s+corpus\b|\bsmall\s+(?:and\s+)?(?:bounded|fixed)\s+(?:corpus|dataset)\b", "small", 0.80),
+    (r"\bmassive\s+(?:corpus|knowledge\s+base|dataset)\b|\bmulti[\s-]?domain\b", "very_large", 0.75),
+    (r"\blarge\s+(?:corpus|knowledge\s+base|document\s+set)\b", "large", 0.72),
+    (r"\bmoderate[\s-]?sized?\s+(?:corpus|knowledge\s+base)\b", "medium", 0.65),
+],
     }
 
     # Compiled once at class-definition time
