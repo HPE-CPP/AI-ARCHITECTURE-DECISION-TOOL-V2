@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AnalysisHistory } from "@/components/AnalysisHistory";
 import { ArchGuideChat } from "@/components/ArchGuideChat";
 import ShareButton from "@/components/ShareButton";
+import WhatIfEditor from "@/components/WhatIfEditor";
 
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -671,8 +672,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
         </div>
       ) : (
         <>
-          <ResultsDashboard result={result} />
-
+          <ResultsDashboard  result={result} />
       {/* Analysis History strip — shown when project has 2+ runs */}
       {projectId && analysisHistory.length >= 2 && (
         <AnalysisHistory
@@ -684,8 +684,13 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
       {/* Cost Analysis Section */}
       {result.cost_analysis && (
-        <CostAnalysis data={result.cost_analysis} result={result} />
+        <CostAnalysis  data={result.cost_analysis} result={result} />
       )}
+      {/* What-If Editor */}
+      <WhatIfEditor 
+        result={result} 
+        onResultUpdate={(updated) => setResult(updated)} 
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
         <div className="lg:col-span-8 space-y-10 min-w-0">
