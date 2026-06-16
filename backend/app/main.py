@@ -28,7 +28,7 @@ from app.db.base import Base
 from app.db.session import engine
 import app.db.models  # noqa: F401 — registers all models with Base
 
-from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview
+from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview, share_router
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
