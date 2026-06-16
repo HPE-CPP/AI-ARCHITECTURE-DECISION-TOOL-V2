@@ -60,6 +60,16 @@ const SIGNAL_CONFIG: Record<string, { label: string; options: string[]; optionLa
     options: ["small", "medium", "large", "enterprise"],
     optionLabels: ["Small", "Medium", "Large", "Enterprise"],
   },
+  citation_requirement: {
+  label: "Explainability requirement",
+  options: ["low", "moderate", "high", "critical"],
+  optionLabels: ["Low", "Moderate", "High", "Critical"],
+},
+context_size: {
+  label: "Context size",
+  options: ["small", "medium", "large", "very_large"],
+  optionLabels: ["Small", "Medium", "Large", "Very large"],
+},
 };
 
 const ARCH_COLOR_MAP: Record<string, string> = {
