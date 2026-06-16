@@ -638,8 +638,8 @@ onResultUpdate?.(mergedResult);
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 transition-all duration-200 focus:outline-none"
                 style={{
                   left: `calc(8px + (100% - 16px) * ${dotPct} / 100)`,
-                  width:  isCurrent ? 16 : 10,
-                  height: isCurrent ? 16 : 10,
+                  width:  isCurrent ? 22 : 16,
+                  height: isCurrent ? 22 : 16,
                   borderColor: isActive ? "var(--primary)" : "var(--border)",
                   backgroundColor: isActive ? "var(--primary)" : "var(--surface)",
                   boxShadow: isCurrent ? "0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent)" : "none",
