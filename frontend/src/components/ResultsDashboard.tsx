@@ -224,4 +224,4 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
       </div>
     </div>
   );
-});
+});
