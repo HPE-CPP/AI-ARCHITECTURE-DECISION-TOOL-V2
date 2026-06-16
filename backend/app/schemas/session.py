@@ -52,3 +52,5 @@ class QuestionnaireInput(BaseModel):
     cost_sensitivity: Optional[str] = None
     deployment_preference: Optional[str] = None
     user_scale: Optional[str] = None
+    citation_requirement: Optional[str] = None
+    context_size: Optional[str] = None
