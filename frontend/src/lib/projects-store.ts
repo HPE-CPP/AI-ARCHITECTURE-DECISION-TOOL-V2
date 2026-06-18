@@ -26,6 +26,7 @@ export interface Project {
   status: ProjectStatus;
   analysis_id?: string;
   mode?: "upload" | "questionnaire";
+  recommended_architecture?: string;
   created_at: string;
   updated_at: string;
 }

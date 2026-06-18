@@ -38,7 +38,7 @@ export default function ShareButton({ analysisId }: ShareButtonProps) {
     <div className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--background)] transition-colors text-sm font-semibold text-[var(--text-primary)]"
+        className="flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] hover:border-[var(--text-primary)] transition-colors duration-200 text-sm font-semibold text-[var(--text-primary)]"
       >
         <Share2 size={15} />
         Share

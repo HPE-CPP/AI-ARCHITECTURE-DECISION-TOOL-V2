@@ -26,6 +26,23 @@
     --border: rgba(255, 255, 255, 0.1);
 
     --glass-bg: rgba(10, 10, 10, 0.6);
+
+    /* Architecture Specific Colors */
+    --rag-color: #ffffff;
+    --rag-bg: #064e3b; /* Dark Green (emerald-900) */
+    --rag-border: rgba(52, 211, 153, 0.45);
+
+    --finetuning-color: #ffffff;
+    --finetuning-bg: #1e3a8a; /* Blue (blue-900) */
+    --finetuning-border: rgba(96, 165, 250, 0.45);
+
+    --cag-color: #ffffff;
+    --cag-bg: #713f12; /* Yellow/Amber (yellow-900) */
+    --cag-border: rgba(234, 179, 8, 0.45);
+
+    --hybrid-color: #ffffff;
+    --hybrid-bg: #7f1d1d; /* Red (red-900) */
+    --hybrid-border: rgba(248, 113, 113, 0.45);
   }
 
   [data-theme="light"] {
@@ -38,6 +55,23 @@
     --border: rgba(0, 0, 0, 0.1);
 
     --glass-bg: rgba(255, 255, 255, 0.6);
+
+    /* Architecture Specific Colors - Match dark mode shades for readability in light mode */
+    --rag-color: #ffffff;
+    --rag-bg: #064e3b;
+    --rag-border: rgba(52, 211, 153, 0.45);
+
+    --finetuning-color: #ffffff;
+    --finetuning-bg: #1e3a8a;
+    --finetuning-border: rgba(96, 165, 250, 0.45);
+
+    --cag-color: #ffffff;
+    --cag-bg: #713f12;
+    --cag-border: rgba(234, 179, 8, 0.45);
+
+    --hybrid-color: #ffffff;
+    --hybrid-bg: #7f1d1d;
+    --hybrid-border: rgba(248, 113, 113, 0.45);
   }
 
   * {
