@@ -19,8 +19,29 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _to_response(project: Project) -> dict:
+def _to_response(project: Project, db: DBSession = None, arch_map: dict = None) -> dict:
     """Serialise ORM Project to the original API response shape."""
+    recommended_arch = None
+    if project.status == "completed" and project.analysis_id:
+        if arch_map is not None and project.analysis_id in arch_map:
+            recommended_arch = arch_map[project.analysis_id]
+        elif db is not None:
+            from app.db.models import Result
+            try:
+                aid_uuid = uuid.UUID(project.analysis_id)
+                res = db.query(Result.recommended_architecture).filter(
+                    Result.session_id == aid_uuid
+                ).first()
+                if res:
+                    recommended_arch = res[0]
+            except ValueError:
+                pass
+        else:
+            for session in project.sessions:
+                if str(session.id) == project.analysis_id:
+                    if session.result:
+                        recommended_arch = session.result.recommended_architecture
+                    break
     return {
         "id": str(project.id),
         "user_id": project.user_id,
@@ -29,6 +50,7 @@ def _to_response(project: Project) -> dict:
         "status": project.status,
         "analysis_id": project.analysis_id,
         "mode": project.mode,
+        "recommended_architecture": recommended_arch,
         "created_at": project.created_at.isoformat(),
         "updated_at": project.updated_at.isoformat(),
     }
@@ -71,7 +93,7 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
-    return _to_response(project)
+    return _to_response(project, db=db)
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +122,26 @@ def list_projects(
     q = db.query(Project).filter(Project.user_id == actual_user_id)
     total = q.count()
     projects = q.order_by(Project.updated_at.desc()).offset(offset).limit(limit).all()
+
+    # Batch fetch recommended architectures to prevent N+1 query overhead
+    arch_map = {}
+    analysis_ids = [p.analysis_id for p in projects if p.status == "completed" and p.analysis_id]
+    if analysis_ids:
+        from app.db.models import Result
+        valid_uuids = []
+        for aid in analysis_ids:
+            try:
+                valid_uuids.append(uuid.UUID(aid))
+            except ValueError:
+                pass
+        if valid_uuids:
+            results = db.query(Result.session_id, Result.recommended_architecture).filter(
+                Result.session_id.in_(valid_uuids)
+            ).all()
+            arch_map = {str(r.session_id): r.recommended_architecture for r in results}
+
     return {
-        "projects": [_to_response(p) for p in projects],
+        "projects": [_to_response(p, db=db, arch_map=arch_map) for p in projects],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -141,7 +181,7 @@ def get_project(
     if not uid and not project.user_id.startswith("guest_"):
         raise HTTPException(401, "Authentication required for non-guest users")
 
-    return _to_response(project)
+    return _to_response(project, db=db)
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +235,7 @@ def update_project(
     project.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(project)
-    return _to_response(project)
+    return _to_response(project, db=db)
 
 
 # ---------------------------------------------------------------------------
