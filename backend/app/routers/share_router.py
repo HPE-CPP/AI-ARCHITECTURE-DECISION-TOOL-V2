@@ -8,20 +8,22 @@ but skips all ownership checks so anyone with the link can view it.
 Only works for COMPLETED analyses — processing/error states return 404
 so half-baked results are never exposed publicly.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session as DBSession
  
 from app.db.session import get_db
 from app.db.models import Session as SessionModel
 from app.services import signal_service, recommendation_service, cache_service
 from app.services.cost_analysis import generate_cost_analysis
+from app.limiter import limiter
 import uuid
  
 router = APIRouter()
  
  
 @router.get("/share/{session_id}")
-def get_shared_analysis(session_id: str, db: DBSession = Depends(get_db)):
+@limiter.limit("30/minute")  # public no-auth endpoint — prevent brute-force enumeration
+def get_shared_analysis(request: Request, session_id: str, db: DBSession = Depends(get_db)):
     """
     Public read-only analysis result.
     No auth, no ownership check — just fetch and return.
@@ -40,8 +42,7 @@ def get_shared_analysis(session_id: str, db: DBSession = Depends(get_db)):
         raise HTTPException(404, "Analysis not found")
  
     # Only expose completed analyses publicly
-    # Only expose completed analyses publicly
-    if session_row.status not in ("complete", "completed"):
+    if session_row.status != "completed":
         raise HTTPException(404, "Analysis not available for sharing")
  
     # Try Redis cache first
