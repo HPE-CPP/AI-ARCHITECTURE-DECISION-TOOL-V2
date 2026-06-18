@@ -3,7 +3,6 @@ Document Processing Service
 Handles PDF, DOCX, and TXT file parsing with page-level text extraction.
 """
 import os
-import tempfile
 from typing import Optional
 import fitz  # PyMuPDF
 from docx import Document

@@ -12,10 +12,9 @@ Optimizations applied:
 """
 import asyncio
 import hashlib
-import json
 import logging
 import re
-from typing import Optional, Any
+from typing import Optional
 
 from services.llm_client import LLMClient
 from services.extraction_cache import extraction_cache

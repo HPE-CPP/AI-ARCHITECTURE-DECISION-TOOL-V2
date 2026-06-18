@@ -10,7 +10,6 @@ Scenarios:
   - MixedUser: realistic weighted combination
 """
 from locust import HttpUser, task, between, events
-import json
 import time
 import random
 import io
@@ -247,7 +246,7 @@ def on_test_start(environment, **kwargs):
 @events.test_stop.add_listener
 def on_test_stop(environment, **kwargs):
     stats = environment.stats
-    print(f"\n[LOAD TEST COMPLETE]")
+    print("\n[LOAD TEST COMPLETE]")
     print(f"  Total requests:  {stats.total.num_requests}")
     print(f"  Failures:        {stats.total.num_failures}")
     print(f"  Failure rate:    {stats.total.fail_ratio:.1%}")

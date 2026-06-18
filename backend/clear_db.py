@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
     from app.db.session import engine
     from app.db.base import Base
-    import app.db.models
     
     table_names = [table.name for table in reversed(Base.metadata.sorted_tables)]
     

@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
     # --- STARTUP ---
     logger.info("Verifying database connection...")
     try:
-        with engine.connect() as connection:
+        with engine.connect() as _:
             logger.info("PostgreSQL connection successful!")
     except Exception as e:
         logger.error(f"PostgreSQL connection failed: {e}")

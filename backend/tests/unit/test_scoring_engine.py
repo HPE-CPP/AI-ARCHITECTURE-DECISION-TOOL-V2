@@ -4,7 +4,7 @@ Tests deterministic scoring logic, edge cases, normalization,
 zero-signal fallback, sensitivity analysis, and why_not generation.
 """
 import pytest
-from services.scoring_engine import ScoringEngine, SCORING_RULES, SIGNAL_WEIGHTS, ARCHITECTURE_DESCRIPTIONS
+from services.scoring_engine import ScoringEngine
 
 
 @pytest.mark.unit

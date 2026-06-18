@@ -3,11 +3,10 @@ Signal service — extracts signals, persists them to PostgreSQL,
 and caches results in Redis.
 """
 import logging
-from typing import Optional
 
 from sqlalchemy.orm import Session as DBSession
 
-from app.db.models import Signal, Session as SessionModel
+from app.db.models import Signal
 from app.services import cache_service
 from app.services.vector_service import retrieve_context
 from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA

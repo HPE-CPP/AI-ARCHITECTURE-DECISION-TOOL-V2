@@ -3,9 +3,7 @@ UNIT TESTS — Document Parser
 Tests PDF/DOCX/TXT parsing, file validation, section detection,
 page relevance scoring, and edge cases (empty, corrupt, unicode).
 """
-import os
 import pytest
-import tempfile
 from services.document_parser import (
     DocumentParser, detect_sections, score_page_relevance,
     get_relevant_pages, register_signal_keywords

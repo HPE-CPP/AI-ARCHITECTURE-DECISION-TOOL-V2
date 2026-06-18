@@ -4,11 +4,10 @@ Entry point: uvicorn app.main:app --reload
 """
 import logging
 import sys
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
@@ -23,12 +22,12 @@ from dotenv import load_dotenv
 load_dotenv() #Reads backend/.env file and loads all variables (DATABASE_URL,
 #   REDIS_URL, etc.) into the environment before anything else runs.
 
-from config import settings
-from app.db.base import Base
-from app.db.session import engine
-import app.db.models  # noqa: F401 — registers all models with Base
+from config import settings  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.db.session import engine  # noqa: E402
+import app.db.models  # noqa: F401, E402 — registers all models with Base
 
-from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview, share_router
+from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview, share_router  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
@@ -36,7 +35,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-from app.limiter import limiter
+from app.limiter import limiter  # noqa: E402
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,7 +44,7 @@ async def lifespan(app: FastAPI):
     # --- STARTUP ---
     logger.info("Verifying database connection...")
     try:
-        with engine.connect() as connection:
+        with engine.connect() as _:
             logger.info("PostgreSQL connection successful!")
     except Exception as e:
         logger.error(f"PostgreSQL connection failed: {e}")

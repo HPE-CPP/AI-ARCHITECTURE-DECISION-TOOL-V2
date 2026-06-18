@@ -81,7 +81,8 @@ class TestOllamaFailureRecovery:
 
     def test_ollama_connection_refused_raises_error(self):
         """LLMClient must raise RuntimeError on connection refused."""
-        import asyncio, httpx
+        import asyncio
+        import httpx
         from services.llm_client import LLMClient
 
         client = LLMClient(provider="ollama")

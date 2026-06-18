@@ -242,7 +242,7 @@ class TestUsersSyncEndpoint:
         from app.db.models import User
         uid = f"nullname_{uuid.uuid4().hex[:8]}"
         client.post("/api/v1/users/sync", json={
-            "uid": uid, "email": f"johndoe@example.com",
+            "uid": uid, "email": "johndoe@example.com",
             "displayName": None, "photoURL": None,
         })
         user = db_session.query(User).filter(User.id == uid).first()

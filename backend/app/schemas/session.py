@@ -2,9 +2,8 @@
 Pydantic schemas for Analysis Sessions and Results.
 Keeps the response shape identical to the original in-memory API.
 """
-import uuid
 from typing import Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 # ---------------------------------------------------------------------------

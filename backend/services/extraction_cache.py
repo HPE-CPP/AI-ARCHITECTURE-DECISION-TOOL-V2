@@ -48,7 +48,8 @@ class ExtractionCache:
     def _init_redis():
         """Return a Redis client or None if unavailable."""
         try:
-            import os, redis as redis_lib
+            import os
+            import redis as redis_lib
             url = os.getenv("REDIS_URL", "")
             token = os.getenv("REDIS_TOKEN", "")
             if not url:
