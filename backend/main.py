@@ -12,7 +12,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 
 from config import settings
-from app.db.base import Base
 from app.db.session import engine, SessionLocal
 import app.db.models  # noqa: F401
 
