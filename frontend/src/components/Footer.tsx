@@ -2,12 +2,11 @@
 
 import React from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Hexagon } from "lucide-react";
 import { m, Variants } from "framer-motion";
 
 export function Footer() {
-  const router = useRouter();
   const pathname = usePathname();
 
   // Handle hash links — smooth scroll if already on home, navigate otherwise
@@ -135,22 +134,11 @@ export function Footer() {
         </div>
 
         <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-4 text-xs font-medium text-[color:var(--text-secondary)]">
-          <Link
-            href="/#features"
-            onClick={(e) => handleHashClick(e, "/#features")}
-            className="hover:text-[color:var(--text-primary)] transition-colors"
-          >
-            About ArchGuide
+          <Link href="/privacy-policy" className="hover:text-[color:var(--text-primary)] transition-colors">
+            Privacy Policy
           </Link>
-          <Link href="/projects" className="hover:text-[color:var(--text-primary)] transition-colors">
-            My Projects
-          </Link>
-          <Link
-            href="/#how-it-works"
-            onClick={(e) => handleHashClick(e, "/#how-it-works")}
-            className="hover:text-[color:var(--text-primary)] transition-colors"
-          >
-            How It Works
+          <Link href="/terms-of-service" className="hover:text-[color:var(--text-primary)] transition-colors">
+            Terms of Service
           </Link>
         </div>
       </div>
