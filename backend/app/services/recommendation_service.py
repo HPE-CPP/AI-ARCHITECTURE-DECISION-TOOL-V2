@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session as DBSession
 
-from app.db.models import Result, Session as SessionModel
+from app.db.models import Result
 from app.services import cache_service
 from services.scoring_engine import ScoringEngine
 from services.followup_generator import generate_followup_questions

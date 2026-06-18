@@ -6,7 +6,7 @@ malformed output recovery, and timeout behavior.
 import json
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from services.llm_client import LLMClient, sanitize_json_string, get_llm_client
+from services.llm_client import sanitize_json_string, get_llm_client
 
 
 @pytest.mark.unit
@@ -209,7 +209,6 @@ class TestExtractionCache:
     def test_redis_l2_hit_populates_l1(self):
         """Verify that an L2 hit (Redis) correctly populates the L1 (in-memory) cache."""
         from services.extraction_cache import ExtractionCache
-        import json
         cache = ExtractionCache()
         cache._redis = MagicMock()
         cache._redis.get.return_value = json.dumps({"redis": "data"})

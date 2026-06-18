@@ -5,7 +5,7 @@ Redis cache interactions (mocked), and FAISS retrieval (mocked).
 """
 import uuid
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 
 @pytest.mark.integration
@@ -137,7 +137,7 @@ class TestUpdateSignals:
         db_session.commit()
 
         with patch("app.services.cache_service.delete"):
-            updated = signal_service.update_signals(
+            _ = signal_service.update_signals(
                 db=db_session,
                 session_id=str(sid),
                 updates={"dataset_size": "large"},

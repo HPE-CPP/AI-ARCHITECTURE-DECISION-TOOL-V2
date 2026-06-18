@@ -1,6 +1,6 @@
 import os
 import json
-from fastapi import Request, HTTPException, Security
+from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Lazy import of firebase_admin — allows the module to be imported
@@ -61,7 +61,7 @@ def _get_firebase_app():
 security = HTTPBearer(auto_error=False)
 
 
-from typing import Optional
+from typing import Optional  # noqa: E402
 
 def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> Optional[str]:
     """

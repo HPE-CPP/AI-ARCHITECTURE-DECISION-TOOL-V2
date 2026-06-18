@@ -68,7 +68,8 @@ def client(db_session):
       - Redis disabled (cache_service._client = None)
       - Firebase auth bypassed (returns TEST_USER_UID for all requests)
     """
-    import sys, os
+    import sys
+    import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
     from app.db.session import get_db
@@ -102,7 +103,8 @@ def auth_client(db_session):
     TestClient WITHOUT auth bypass — tests that require real auth validation.
     Firebase auth will fail with no/invalid token.
     """
-    import sys, os
+    import sys
+    import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
     from app.db.session import get_db

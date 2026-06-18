@@ -5,7 +5,7 @@ signal merging, questionnaire conversion, cache behavior, and
 anti-hallucination controls.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA, SIGNAL_OPTIONS
 
 

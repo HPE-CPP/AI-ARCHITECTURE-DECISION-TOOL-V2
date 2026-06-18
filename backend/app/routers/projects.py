@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
 from app.db.models import Project
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
+from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.core.security import verify_firebase_token
 
 router = APIRouter()

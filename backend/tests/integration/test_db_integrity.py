@@ -15,7 +15,7 @@ class TestDatabaseCascadeDeletes:
 
     def test_delete_session_cascades_signals(self, db_session, seed_session, complete_signals):
         """Deleting a Session must cascade-delete its Signal rows."""
-        from app.db.models import Signal, Session as SessionModel
+        from app.db.models import Signal
         # Persist some signals
         for name, data in complete_signals.items():
             db_session.add(Signal(
@@ -39,7 +39,7 @@ class TestDatabaseCascadeDeletes:
 
     def test_delete_session_cascades_result(self, db_session, seed_result, seed_session):
         """Deleting a Session must cascade-delete its Result row."""
-        from app.db.models import Result, Session as SessionModel
+        from app.db.models import Result
         result_count = db_session.query(Result).filter(Result.session_id == seed_session.id).count()
         assert result_count == 1
 
@@ -214,7 +214,7 @@ class TestSessionStatusTransitions:
         db_session.commit()  # Must not raise
 
 
-import os
+import os  # noqa: E402
 
 @pytest.mark.integration
 @pytest.mark.skipif("sqlite" in os.environ.get("DATABASE_URL", ""), reason="SQLite does not handle concurrent writes well")

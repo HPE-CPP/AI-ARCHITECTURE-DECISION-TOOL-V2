@@ -5,7 +5,6 @@ Deterministic rule-based scoring for RAG, Fine-Tuning, CAG, and Hybrid architect
 import copy
 import logging
 from collections import OrderedDict
-from typing import Optional
 from services.signal_extractor import SIGNAL_SCHEMA
 
 logger = logging.getLogger(__name__)

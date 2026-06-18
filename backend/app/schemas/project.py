@@ -3,7 +3,6 @@ Pydantic schemas for Projects — request bodies and response shapes.
 Mirrors the API contract of the original in-memory implementation exactly.
 """
 import uuid
-from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 

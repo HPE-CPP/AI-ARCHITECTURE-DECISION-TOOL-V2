@@ -9,7 +9,7 @@ test that the system behaves correctly at every confidence level.
 """
 import copy
 import pytest
-from services.scoring_engine import ScoringEngine, SCORING_RULES, SIGNAL_WEIGHTS
+from services.scoring_engine import ScoringEngine, SCORING_RULES
 
 
 @pytest.mark.ai
@@ -124,7 +124,6 @@ class TestRecommendationDeterminism:
 
     def test_signal_order_doesnt_affect_result(self, complete_signals):
         """Dict insertion order must not affect scoring."""
-        import collections
         reversed_signals = dict(reversed(list(complete_signals.items())))
         result_normal = self.engine.score(complete_signals)
         result_reversed = self.engine.score(reversed_signals)
@@ -341,7 +340,7 @@ class TestAdversarialInputs:
     async def test_conflicting_requirements_produce_low_confidence(self):
         """If the document contains directly conflicting statements, the system should still handle it without crashing."""
         from services.signal_extractor import SignalExtractor
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
 
         # Given conflicting text, the LLM might return lower confidence or pick one. 
         # The scoring engine must not crash when fed the resulting signals.

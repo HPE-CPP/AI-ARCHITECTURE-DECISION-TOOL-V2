@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
     from app.db.session import engine
     from app.db.base import Base
-    import app.db.models
     
     print("Dropping all tables...")
     Base.metadata.drop_all(bind=engine)

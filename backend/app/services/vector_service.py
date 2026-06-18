@@ -4,7 +4,6 @@ for uploaded documents. Also provides a retrieve() helper for signal
 extraction that returns the most relevant chunks for a session.
 """
 import logging
-from typing import Optional
 
 from app.utils.embeddings import chunk_text, embed_texts
 from app.utils import faiss_store

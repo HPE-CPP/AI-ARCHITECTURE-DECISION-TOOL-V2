@@ -195,7 +195,7 @@ class TestUserDataIsolation:
         # Attempt to read another user's projects by spoofing user_id
         response = client.get("/api/v1/projects?user_id=attacker_uid_000")
         if response.status_code == 200:
-            data = response.json()
+            _ = response.json()
             # If we can list another user's projects, that's a data isolation failure
             # We mark this as xfail because the vulnerability is known (SEC-001)
             pytest.xfail(

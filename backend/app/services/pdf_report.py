@@ -2,7 +2,7 @@
 PDF report generator — clean, premium ArchGuide analysis report.
 """
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
@@ -368,7 +368,6 @@ def generate_pdf(result: dict) -> bytes:
                 pdf.set_font("Helvetica", "", 8)
                 pdf.set_text_color(*_INK)
                 # Estimate height
-                lines = max(1, len(_s(item)) // 45 + 1)
                 pdf.multi_cell(col_w - 10, 4.5, _s(item))
                 y = pdf.get_y() + 1
         s_end_y = pdf.get_y()
@@ -594,7 +593,6 @@ def generate_pdf(result: dict) -> bytes:
 
         is_stable  = sensitivity.get("is_stable", True)
         stab_score = float(sensitivity.get("stability_score") or 0)
-        warning    = sensitivity.get("warning")
         instabs    = sensitivity.get("instabilities") or []
 
         y = pdf.get_y()

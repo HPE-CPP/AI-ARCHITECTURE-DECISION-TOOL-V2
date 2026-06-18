@@ -7,15 +7,15 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Query, Depends, HTTPException, Request
+from fastapi import APIRouter, Query, Depends, Request
 from sqlalchemy.orm import Session as DBSession
 
 from app.db.session import get_db
 from app.db.models import Session as SessionModel, Signal
-from app.services import recommendation_service, cache_service
+from app.services import recommendation_service
 from app.schemas.session import QuestionnaireInput, AnalysisResponse
 from app.core.security import verify_firebase_token
-from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
+from services.signal_extractor import SignalExtractor
 from services.llm_client import get_llm_client
 from config import settings
 from app.limiter import limiter
