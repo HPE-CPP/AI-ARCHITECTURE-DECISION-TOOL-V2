@@ -34,53 +34,53 @@ CHUNK_OVERLAP     = 500     # overlap so signals spanning chunk boundaries are c
 
 SIGNAL_SCHEMA = {
     "dataset_size": {
-        "description": "Volume of data (small/medium/large/very_large)",
+        "description": "Volume of data",
         "keywords": ["dataset", "data size", "records", "documents", "entries", "rows", "corpus", "training data", "million", "billion", "terabyte", "gigabyte"],
     },
     "query_volume": {
-        "description": "Expected query/request throughput (low/medium/high/very_high)",
+        "description": "Expected query/request throughput",
         "keywords": ["query", "queries per", "requests", "qps", "throughput", "concurrent", "traffic", "load"],
     },
     "latency_requirement": {
-        "description": "Response time needs (relaxed/moderate/strict/ultra_low)",
+        "description": "Response time needs",
         "keywords": ["latency", "response time", "real-time", "millisecond", "fast", "speed", "delay", "sla"],
     },
     "data_volatility": {
-        "description": "How frequently data changes (static/low/moderate/high)",
+        "description": "How frequently data changes",
         "keywords": ["update", "frequency", "volatile", "dynamic", "refresh", "change", "real-time data", "streaming"],
     },
     "accuracy_requirement": {
-        "description": "Accuracy/precision needs (moderate/high/very_high/critical)",
+        "description": "Accuracy/precision needs",
         "keywords": ["accuracy", "precision", "recall", "f1", "quality", "correct", "reliable", "hallucination"],
     },
     "domain_specificity": {
-        "description": "How specialized the domain is (general/moderate/specialized/highly_specialized)",
+        "description": "How specialized the domain is",
         "keywords": ["domain", "specialized", "expert", "medical", "legal", "financial", "technical", "niche", "industry"],
     },
     "security_level": {
-        "description": "Security/privacy requirements (standard/elevated/high/critical)",
+        "description": "Security/privacy requirements",
         "keywords": ["security", "privacy", "compliance", "gdpr", "hipaa", "pci", "encryption", "classified", "confidential"],
     },
     "cost_sensitivity": {
-        "description": "Budget constraints (low/moderate/high/very_high)",
+        "description": "Budget constraints",
         "keywords": ["cost", "budget", "expensive", "cheap", "affordable", "pricing", "roi", "resource"],
     },
     "deployment_preference": {
-        "description": "Where to deploy (cloud/on_premise/hybrid/edge)",
+        "description": "Where to deploy",
         "keywords": ["deploy", "cloud", "on-premise", "on-prem", "edge", "local", "aws", "azure", "gcp", "self-hosted"],
     },
     "user_scale": {
-        "description": "Number of end users (small/medium/large/enterprise)",
+        "description": "Number of end users",
         "keywords": ["users", "user base", "scale", "organization", "team", "enterprise", "consumer", "public"],
     },
     "citation_requirement": {
-    "description": "How important it is to explain or cite sources for answers (low/moderate/high/critical)",
+    "description": "How important it is to explain or cite sources for answers",
     "keywords": ["explainability", "explain", "citation", "cite sources", "audit trail", "transparency", "interpretable", "traceable", "reasoning", "justification"],
-},
-"context_size": {
-    "description": "How much knowledge/context needs to be available per query (small/medium/large/very_large)",
+    },
+    "context_size": {
+    "description": "How much knowledge/context needs to be available per query",
     "keywords": ["context window", "context size", "knowledge base size", "corpus size", "fits in context", "bounded corpus", "context length"],
-},
+    },
 }
 
 # Flat keyword set — registered with document_parser so it can score pages
@@ -207,17 +207,17 @@ SIGNAL_OPTIONS = {
         {"value": "enterprise", "label": "Enterprise (> 10k users)"},
     ],
     "citation_requirement": [
-    {"value": "low",      "label": "Low (No explanation needed)"},
-    {"value": "moderate", "label": "Moderate (Some reasoning expected)"},
-    {"value": "high",     "label": "High (Citations required)"},
-    {"value": "critical", "label": "Critical (Full audit trail mandatory)"},
-],
-"context_size": [
-    {"value": "small",      "label": "Small (Fits in a prompt)"},
-    {"value": "medium",     "label": "Medium (Moderate knowledge base)"},
-    {"value": "large",      "label": "Large (Extensive knowledge)"},
-    {"value": "very_large", "label": "Very Large (Massive corpus)"},
-],
+        {"value": "low",      "label": "Low (No explanation needed)"},
+        {"value": "moderate", "label": "Moderate (Some reasoning expected)"},
+        {"value": "high",     "label": "High (Citations required)"},
+        {"value": "critical", "label": "Critical (Full audit trail mandatory)"},
+    ],
+    "context_size": [
+        {"value": "small",      "label": "Can fit a few documents in memory"},
+        {"value": "medium",     "label": "Can fit dozens of documents in memory"},
+        {"value": "large",      "label": "Can fit hundreds of documents in memory"},
+        {"value": "very_large", "label": "Too much information to keep in memory at once"},
+    ],
 }
 
 
