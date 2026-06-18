@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Pencil, Trash2, Copy, ArrowRight, CheckCircle2, Clock, FileText } from "lucide-react";
+import { Pencil, Trash2, Copy, ArrowRight, CheckCircle2, Clock, FileText, Share2, Check } from "lucide-react";
 import { Project } from "@/lib/projects-store";
 import { useRouter } from "next/navigation";
 
@@ -30,6 +30,41 @@ const statusConfig: Record<Project["status"], { label: string; color: string; ic
   },
 };
 
+const archConfigs: Record<string, { label: string; style: { color: string; border: string; background: string } }> = {
+  RAG: {
+    label: "RAG",
+    style: {
+      color: "var(--rag-color)",
+      border: "1px solid var(--rag-border)",
+      background: "var(--rag-bg)"
+    }
+  },
+  FineTuning: {
+    label: "Fine-Tuning",
+    style: {
+      color: "var(--finetuning-color)",
+      border: "1px solid var(--finetuning-border)",
+      background: "var(--finetuning-bg)"
+    }
+  },
+  CAG: {
+    label: "CAG",
+    style: {
+      color: "var(--cag-color)",
+      border: "1px solid var(--cag-border)",
+      background: "var(--cag-bg)"
+    }
+  },
+  Hybrid: {
+    label: "Hybrid",
+    style: {
+      color: "var(--hybrid-color)",
+      border: "1px solid var(--hybrid-border)",
+      background: "var(--hybrid-bg)"
+    }
+  }
+};
+
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -45,7 +80,28 @@ function formatRelativeTime(iso: string): string {
 export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectCardProps) {
   const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { label, color, icon } = statusConfig[project.status];
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!project.analysis_id) return;
+    const shareUrl = `${window.location.origin}/r/${project.analysis_id}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const input = document.createElement("input");
+      input.value = shareUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const handleCardClick = () => {
     if (project.status === "completed" && project.analysis_id) {
@@ -93,6 +149,19 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
             className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => e.stopPropagation()}
           >
+            {project.status === "completed" && project.analysis_id && (
+              <button
+                onClick={handleShare}
+                title={copied ? "Link copied!" : "Share analysis"}
+                className={`w-7 h-7 flex items-center justify-center rounded-full border transition-all ${
+                  copied
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                    : "border-[color:var(--border)] text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] hover:border-[color:var(--text-primary)]/30"
+                }`}
+              >
+                {copied ? <Check size={12} /> : <Share2 size={12} />}
+              </button>
+            )}
             <button
               onClick={() => onDuplicate(project.id)}
               title="Duplicate project"
@@ -116,6 +185,27 @@ export function ProjectCard({ project, onEdit, onDelete, onDuplicate }: ProjectC
             </button>
           </div>
         </div>
+
+        {/* Architecture Tag */}
+        {project.status === "completed" && project.recommended_architecture && archConfigs[project.recommended_architecture] && (
+          <div className="mb-2 flex">
+            {(() => {
+              const conf = archConfigs[project.recommended_architecture];
+              return (
+                <span
+                  style={{
+                    color: conf.style.color,
+                    border: conf.style.border,
+                    background: conf.style.background
+                  }}
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest"
+                >
+                  {conf.label}
+                </span>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Project Name */}
         <h3 className="font-black text-lg tracking-tight text-[color:var(--text-primary)] mb-1.5 leading-snug line-clamp-2">
