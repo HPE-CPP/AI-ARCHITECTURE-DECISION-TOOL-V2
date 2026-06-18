@@ -68,7 +68,6 @@ artifacts/
 
 # Test configuration & dependencies
 **/pytest.ini
-**/requirements-test.txt
 
 # Type checking
 .mypy_cache/
