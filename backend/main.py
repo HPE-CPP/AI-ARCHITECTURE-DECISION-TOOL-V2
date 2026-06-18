@@ -13,10 +13,10 @@ from app.db.base import Base
 from app.db.session import engine
 import app.db.models  # noqa: F401
 
-from app.routers import upload, analysis, questionnaire, projects, users, chat
+from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview, share_router
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from app.limiter import limiter
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -102,7 +102,6 @@ async def lifespan(app: FastAPI):
 
 
 # --- App ---
-limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -136,6 +135,8 @@ app.include_router(questionnaire.router, prefix=prefix, tags=["Questionnaire"])
 app.include_router(projects.router, prefix=prefix, tags=["Projects"])
 app.include_router(users.router, prefix=prefix, tags=["Users"])
 app.include_router(chat.router, prefix=prefix, tags=["Chat"])
+app.include_router(score_preview.router, prefix=prefix, tags=["ScorePreview"])
+app.include_router(share_router.router, prefix=prefix, tags=["Share"])
 
 @app.get("/api/v1/health", tags=["Health"])
 def health():

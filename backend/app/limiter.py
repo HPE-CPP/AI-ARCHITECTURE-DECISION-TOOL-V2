@@ -4,5 +4,6 @@ Kept in its own module to avoid circular imports between main.py and routers.
 """
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from config import settings
 
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
