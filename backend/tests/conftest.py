@@ -15,6 +15,12 @@ from datetime import datetime, timezone
 # ─── MUST BE SET BEFORE ANY APP IMPORTS ────────────────────────────────────
 os.environ["DATABASE_URL"] = "sqlite:///./test_temp.db"
 os.environ["ENVIRONMENT"] = "test"
+
+import sys
+from pathlib import Path
+backend_dir = str(Path(__file__).resolve().parents[1])
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 # ────────────────────────────────────────────────────────────────────────────
 
 from fastapi.testclient import TestClient

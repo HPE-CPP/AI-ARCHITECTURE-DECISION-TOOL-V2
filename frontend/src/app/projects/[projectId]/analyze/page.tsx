@@ -317,7 +317,6 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
                 {mode === "questionnaire" && (
                   <QuestionnaireForm
                     projectId={projectId ?? undefined}
-                    requireAuth={requireAuth}
                     onAnalysisStart={handleAnalysisStart}
                   />
                 )}

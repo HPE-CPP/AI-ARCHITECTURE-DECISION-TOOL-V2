@@ -39,9 +39,9 @@ function fmtAvg(r: [number, number]): number {
   return Math.round((r[0] + r[1]) / 2);
 }
 
-const CustomYAxisTick = (props: { x?: number; y?: number; payload?: { value?: string }; isNarrow?: boolean }) => {
+const CustomYAxisTick = (props: { x?: number | string; y?: number | string; payload?: { value?: string }; isNarrow?: boolean }) => {
   const { x, y, payload, isNarrow } = props;
-  const name = payload.value || "";
+  const name = payload?.value || "";
   let line1 = name;
   let line2 = "";
 
@@ -53,8 +53,11 @@ const CustomYAxisTick = (props: { x?: number; y?: number; payload?: { value?: st
     }
   }
 
+  const xVal = typeof x === 'number' ? x : Number(x) || 0;
+  const yVal = typeof y === 'number' ? y : Number(y) || 0;
+
   return (
-    <g transform={`translate(${x - 8},${y})`}>
+    <g transform={`translate(${xVal - 8},${yVal})`}>
       <text x={0} y={0} dy={line2 ? -4 : 4} textAnchor="end" fill="var(--text-primary)" fontSize={isNarrow ? 9 : 11} fontWeight={600}>
         {line1}
       </text>

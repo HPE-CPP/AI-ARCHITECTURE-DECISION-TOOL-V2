@@ -1,0 +1,572 @@
+﻿commit d5f639dea659ad3703c438bb073066e47537b6a5
+Author: Hrithik875 <160313400+Hrithik875@users.noreply.github.com>
+Date:   Thu Jun 18 23:07:11 2026 +0530
+
+    fix: resolve all ruff linting errors in backend
+
+diff --git a/backend/alembic/versions/ffd822f56bdb_project_models.py b/backend/alembic/versions/ffd822f56bdb_project_models.py
+index 27b532b4..00486948 100644
+--- a/backend/alembic/versions/ffd822f56bdb_project_models.py
++++ b/backend/alembic/versions/ffd822f56bdb_project_models.py
+@@ -7,8 +7,6 @@ Create Date: 2026-03-27 00:50:06.919014
+ """
+ from typing import Sequence, Union
+ 
+-from alembic import op
+-import sqlalchemy as sa
+ 
+ 
+ # revision identifiers, used by Alembic.
+diff --git a/backend/app/core/security.py b/backend/app/core/security.py
+index 996d3864..435765b8 100644
+--- a/backend/app/core/security.py
++++ b/backend/app/core/security.py
+@@ -1,6 +1,6 @@
+ import os
+ import json
+-from fastapi import Request, HTTPException, Security
++from fastapi import HTTPException, Security
+ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+ 
+ # Lazy import of firebase_admin ΓÇö allows the module to be imported
+@@ -61,7 +61,7 @@ def _get_firebase_app():
+ security = HTTPBearer(auto_error=False)
+ 
+ 
+-from typing import Optional
++from typing import Optional  # noqa: E402
+ 
+ def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> Optional[str]:
+     """
+diff --git a/backend/app/main.py b/backend/app/main.py
+index e2c46880..18a45c3c 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -4,11 +4,10 @@ Entry point: uvicorn app.main:app --reload
+ """
+ import logging
+ import sys
+-import os
+ from contextlib import asynccontextmanager
+ from pathlib import Path
+ 
+-from fastapi import FastAPI, Request
++from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+ from fastapi.responses import JSONResponse
+ from slowapi.errors import RateLimitExceeded
+@@ -23,12 +22,12 @@ from dotenv import load_dotenv
+ load_dotenv() #Reads backend/.env file and loads all variables (DATABASE_URL,
+ #   REDIS_URL, etc.) into the environment before anything else runs.
+ 
+-from config import settings
+-from app.db.base import Base
+-from app.db.session import engine
+-import app.db.models  # noqa: F401 ΓÇö registers all models with Base
++from config import settings  # noqa: E402
++from app.db.base import Base  # noqa: E402
++from app.db.session import engine  # noqa: E402
++import app.db.models  # noqa: F401, E402 ΓÇö registers all models with Base
+ 
+-from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview, share_router
++from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview, share_router  # noqa: E402
+ 
+ logging.basicConfig(level=logging.INFO)
+ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+@@ -36,7 +35,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+ logger = logging.getLogger(__name__)
+ 
+ 
+-from app.limiter import limiter
++from app.limiter import limiter  # noqa: E402
+ 
+ @asynccontextmanager
+ async def lifespan(app: FastAPI):
+@@ -45,7 +44,7 @@ async def lifespan(app: FastAPI):
+     # --- STARTUP ---
+     logger.info("Verifying database connection...")
+     try:
+-        with engine.connect() as connection:
++        with engine.connect() as _:
+             logger.info("PostgreSQL connection successful!")
+     except Exception as e:
+         logger.error(f"PostgreSQL connection failed: {e}")
+diff --git a/backend/app/routers/projects.py b/backend/app/routers/projects.py
+index 8ca2daea..29a51b72 100644
+--- a/backend/app/routers/projects.py
++++ b/backend/app/routers/projects.py
+@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session as DBSession
+ 
+ from app.db.session import get_db
+ from app.db.models import Project
+-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse
++from app.schemas.project import ProjectCreate, ProjectUpdate
+ from app.core.security import verify_firebase_token
+ 
+ router = APIRouter()
+diff --git a/backend/app/routers/questionnaire.py b/backend/app/routers/questionnaire.py
+index 953a763e..7e74189b 100644
+--- a/backend/app/routers/questionnaire.py
++++ b/backend/app/routers/questionnaire.py
+@@ -7,15 +7,15 @@ import logging
+ from datetime import datetime, timezone
+ from typing import Optional
+ 
+-from fastapi import APIRouter, Query, Depends, HTTPException, Request
++from fastapi import APIRouter, Query, Depends, Request
+ from sqlalchemy.orm import Session as DBSession
+ 
+ from app.db.session import get_db
+ from app.db.models import Session as SessionModel, Signal
+-from app.services import recommendation_service, cache_service
++from app.services import recommendation_service
+ from app.schemas.session import QuestionnaireInput, AnalysisResponse
+ from app.core.security import verify_firebase_token
+-from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
++from services.signal_extractor import SignalExtractor
+ from services.llm_client import get_llm_client
+ from config import settings
+ from app.limiter import limiter
+diff --git a/backend/app/schemas/project.py b/backend/app/schemas/project.py
+index 1aa4b8b9..5eed5d06 100644
+--- a/backend/app/schemas/project.py
++++ b/backend/app/schemas/project.py
+@@ -3,7 +3,6 @@ Pydantic schemas for Projects ΓÇö request bodies and response shapes.
+ Mirrors the API contract of the original in-memory implementation exactly.
+ """
+ import uuid
+-from datetime import datetime
+ from typing import Optional
+ from pydantic import BaseModel, Field, ConfigDict
+ 
+diff --git a/backend/app/schemas/session.py b/backend/app/schemas/session.py
+index dc4c09b2..30b4e961 100644
+--- a/backend/app/schemas/session.py
++++ b/backend/app/schemas/session.py
+@@ -2,9 +2,8 @@
+ Pydantic schemas for Analysis Sessions and Results.
+ Keeps the response shape identical to the original in-memory API.
+ """
+-import uuid
+ from typing import Optional, Any
+-from pydantic import BaseModel, Field
++from pydantic import BaseModel
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/backend/app/services/pdf_report.py b/backend/app/services/pdf_report.py
+index 7592f9fc..f22233ae 100644
+--- a/backend/app/services/pdf_report.py
++++ b/backend/app/services/pdf_report.py
+@@ -2,7 +2,7 @@
+ PDF report generator ΓÇö clean, premium ArchGuide analysis report.
+ """
+ from __future__ import annotations
+-from datetime import datetime, timezone
++from datetime import datetime
+ from fpdf import FPDF
+ from fpdf.enums import XPos, YPos
+ 
+@@ -368,7 +368,6 @@ def generate_pdf(result: dict) -> bytes:
+                 pdf.set_font("Helvetica", "", 8)
+                 pdf.set_text_color(*_INK)
+                 # Estimate height
+-                lines = max(1, len(_s(item)) // 45 + 1)
+                 pdf.multi_cell(col_w - 10, 4.5, _s(item))
+                 y = pdf.get_y() + 1
+         s_end_y = pdf.get_y()
+@@ -594,7 +593,6 @@ def generate_pdf(result: dict) -> bytes:
+ 
+         is_stable  = sensitivity.get("is_stable", True)
+         stab_score = float(sensitivity.get("stability_score") or 0)
+-        warning    = sensitivity.get("warning")
+         instabs    = sensitivity.get("instabilities") or []
+ 
+         y = pdf.get_y()
+diff --git a/backend/app/services/recommendation_service.py b/backend/app/services/recommendation_service.py
+index 05734090..afeeea52 100644
+--- a/backend/app/services/recommendation_service.py
++++ b/backend/app/services/recommendation_service.py
+@@ -8,7 +8,7 @@ from datetime import datetime, timezone
+ 
+ from sqlalchemy.orm import Session as DBSession
+ 
+-from app.db.models import Result, Session as SessionModel
++from app.db.models import Result
+ from app.services import cache_service
+ from services.scoring_engine import ScoringEngine
+ from services.followup_generator import generate_followup_questions
+diff --git a/backend/app/services/signal_service.py b/backend/app/services/signal_service.py
+index ba218a42..b212fbb4 100644
+--- a/backend/app/services/signal_service.py
++++ b/backend/app/services/signal_service.py
+@@ -3,11 +3,10 @@ Signal service ΓÇö extracts signals, persists them to PostgreSQL,
+ and caches results in Redis.
+ """
+ import logging
+-from typing import Optional
+ 
+ from sqlalchemy.orm import Session as DBSession
+ 
+-from app.db.models import Signal, Session as SessionModel
++from app.db.models import Signal
+ from app.services import cache_service
+ from app.services.vector_service import retrieve_context
+ from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA
+diff --git a/backend/app/services/vector_service.py b/backend/app/services/vector_service.py
+index 7aa9ac15..62f30b70 100644
+--- a/backend/app/services/vector_service.py
++++ b/backend/app/services/vector_service.py
+@@ -4,7 +4,6 @@ for uploaded documents. Also provides a retrieve() helper for signal
+ extraction that returns the most relevant chunks for a session.
+ """
+ import logging
+-from typing import Optional
+ 
+ from app.utils.embeddings import chunk_text, embed_texts
+ from app.utils import faiss_store
+diff --git a/backend/app/utils/embeddings.py b/backend/app/utils/embeddings.py
+index ced85295..42a20412 100644
+--- a/backend/app/utils/embeddings.py
++++ b/backend/app/utils/embeddings.py
+@@ -2,7 +2,6 @@
+ Text chunking + OpenAI embedding utilities.
+ """
+ import logging
+-from typing import Optional
+ 
+ import numpy as np
+ import tiktoken
+diff --git a/backend/clear_db.py b/backend/clear_db.py
+index 9df516c2..36c3a8e9 100644
+--- a/backend/clear_db.py
++++ b/backend/clear_db.py
+@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
+ try:
+     from app.db.session import engine
+     from app.db.base import Base
+-    import app.db.models
+     
+     table_names = [table.name for table in reversed(Base.metadata.sorted_tables)]
+     
+diff --git a/backend/main.py b/backend/main.py
+index 6bdf8a55..9213fc73 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
+     # --- STARTUP ---
+     logger.info("Verifying database connection...")
+     try:
+-        with engine.connect() as connection:
++        with engine.connect() as _:
+             logger.info("PostgreSQL connection successful!")
+     except Exception as e:
+         logger.error(f"PostgreSQL connection failed: {e}")
+diff --git a/backend/reset_db.py b/backend/reset_db.py
+index 4be02c45..66aa936c 100644
+--- a/backend/reset_db.py
++++ b/backend/reset_db.py
+@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
+ try:
+     from app.db.session import engine
+     from app.db.base import Base
+-    import app.db.models
+     
+     print("Dropping all tables...")
+     Base.metadata.drop_all(bind=engine)
+diff --git a/backend/services/document_parser.py b/backend/services/document_parser.py
+index 87083543..5682c7d1 100644
+--- a/backend/services/document_parser.py
++++ b/backend/services/document_parser.py
+@@ -3,7 +3,6 @@ Document Processing Service
+ Handles PDF, DOCX, and TXT file parsing with page-level text extraction.
+ """
+ import os
+-import tempfile
+ from typing import Optional
+ import fitz  # PyMuPDF
+ from docx import Document
+diff --git a/backend/services/extraction_cache.py b/backend/services/extraction_cache.py
+index 9e256592..1acdaf86 100644
+--- a/backend/services/extraction_cache.py
++++ b/backend/services/extraction_cache.py
+@@ -48,7 +48,8 @@ class ExtractionCache:
+     def _init_redis():
+         """Return a Redis client or None if unavailable."""
+         try:
+-            import os, redis as redis_lib
++            import os
++            import redis as redis_lib
+             url = os.getenv("REDIS_URL", "")
+             token = os.getenv("REDIS_TOKEN", "")
+             if not url:
+diff --git a/backend/services/scoring_engine.py b/backend/services/scoring_engine.py
+index e68b8a6a..f1727363 100644
+--- a/backend/services/scoring_engine.py
++++ b/backend/services/scoring_engine.py
+@@ -5,7 +5,6 @@ Deterministic rule-based scoring for RAG, Fine-Tuning, CAG, and Hybrid architect
+ import copy
+ import logging
+ from collections import OrderedDict
+-from typing import Optional
+ from services.signal_extractor import SIGNAL_SCHEMA
+ 
+ logger = logging.getLogger(__name__)
+diff --git a/backend/services/signal_extractor.py b/backend/services/signal_extractor.py
+index 8c4855e3..0f3f4590 100644
+--- a/backend/services/signal_extractor.py
++++ b/backend/services/signal_extractor.py
+@@ -12,10 +12,9 @@ Optimizations applied:
+ """
+ import asyncio
+ import hashlib
+-import json
+ import logging
+ import re
+-from typing import Optional, Any
++from typing import Optional
+ 
+ from services.llm_client import LLMClient
+ from services.extraction_cache import extraction_cache
+diff --git a/backend/tests/ai/test_ai_reliability.py b/backend/tests/ai/test_ai_reliability.py
+index 5a83cf86..0c2a0cc7 100644
+--- a/backend/tests/ai/test_ai_reliability.py
++++ b/backend/tests/ai/test_ai_reliability.py
+@@ -9,7 +9,7 @@ test that the system behaves correctly at every confidence level.
+ """
+ import copy
+ import pytest
+-from services.scoring_engine import ScoringEngine, SCORING_RULES, SIGNAL_WEIGHTS
++from services.scoring_engine import ScoringEngine, SCORING_RULES
+ 
+ 
+ @pytest.mark.ai
+@@ -124,7 +124,6 @@ class TestRecommendationDeterminism:
+ 
+     def test_signal_order_doesnt_affect_result(self, complete_signals):
+         """Dict insertion order must not affect scoring."""
+-        import collections
+         reversed_signals = dict(reversed(list(complete_signals.items())))
+         result_normal = self.engine.score(complete_signals)
+         result_reversed = self.engine.score(reversed_signals)
+@@ -341,7 +340,7 @@ class TestAdversarialInputs:
+     async def test_conflicting_requirements_produce_low_confidence(self):
+         """If the document contains directly conflicting statements, the system should still handle it without crashing."""
+         from services.signal_extractor import SignalExtractor
+-        from unittest.mock import AsyncMock, patch
++        from unittest.mock import AsyncMock
+ 
+         # Given conflicting text, the LLM might return lower confidence or pick one. 
+         # The scoring engine must not crash when fed the resulting signals.
+diff --git a/backend/tests/api/test_endpoints.py b/backend/tests/api/test_endpoints.py
+index 21dc4c1c..0b595d53 100644
+--- a/backend/tests/api/test_endpoints.py
++++ b/backend/tests/api/test_endpoints.py
+@@ -6,7 +6,7 @@ Covers: happy paths, error paths, malformed requests, security, DB integrity.
+ import io
+ import uuid
+ import pytest
+-from unittest.mock import AsyncMock, MagicMock, patch
++from unittest.mock import AsyncMock, patch
+ 
+ 
+ # ============================================================================
+diff --git a/backend/tests/api/test_projects_users.py b/backend/tests/api/test_projects_users.py
+index 0ec05259..270779fe 100644
+--- a/backend/tests/api/test_projects_users.py
++++ b/backend/tests/api/test_projects_users.py
+@@ -242,7 +242,7 @@ class TestUsersSyncEndpoint:
+         from app.db.models import User
+         uid = f"nullname_{uuid.uuid4().hex[:8]}"
+         client.post("/api/v1/users/sync", json={
+-            "uid": uid, "email": f"johndoe@example.com",
++            "uid": uid, "email": "johndoe@example.com",
+             "displayName": None, "photoURL": None,
+         })
+         user = db_session.query(User).filter(User.id == uid).first()
+diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
+index 90894f96..a06ae348 100644
+--- a/backend/tests/conftest.py
++++ b/backend/tests/conftest.py
+@@ -68,7 +68,8 @@ def client(db_session):
+       - Redis disabled (cache_service._client = None)
+       - Firebase auth bypassed (returns TEST_USER_UID for all requests)
+     """
+-    import sys, os
++    import sys
++    import os
+     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+ 
+     from app.db.session import get_db
+@@ -102,7 +103,8 @@ def auth_client(db_session):
+     TestClient WITHOUT auth bypass ΓÇö tests that require real auth validation.
+     Firebase auth will fail with no/invalid token.
+     """
+-    import sys, os
++    import sys
++    import os
+     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+ 
+     from app.db.session import get_db
+diff --git a/backend/tests/integration/test_db_integrity.py b/backend/tests/integration/test_db_integrity.py
+index 64c1aafa..35ecf08d 100644
+--- a/backend/tests/integration/test_db_integrity.py
++++ b/backend/tests/integration/test_db_integrity.py
+@@ -15,7 +15,7 @@ class TestDatabaseCascadeDeletes:
+ 
+     def test_delete_session_cascades_signals(self, db_session, seed_session, complete_signals):
+         """Deleting a Session must cascade-delete its Signal rows."""
+-        from app.db.models import Signal, Session as SessionModel
++        from app.db.models import Signal
+         # Persist some signals
+         for name, data in complete_signals.items():
+             db_session.add(Signal(
+@@ -39,7 +39,7 @@ class TestDatabaseCascadeDeletes:
+ 
+     def test_delete_session_cascades_result(self, db_session, seed_result, seed_session):
+         """Deleting a Session must cascade-delete its Result row."""
+-        from app.db.models import Result, Session as SessionModel
++        from app.db.models import Result
+         result_count = db_session.query(Result).filter(Result.session_id == seed_session.id).count()
+         assert result_count == 1
+ 
+@@ -214,7 +214,7 @@ class TestSessionStatusTransitions:
+         db_session.commit()  # Must not raise
+ 
+ 
+-import os
++import os  # noqa: E402
+ 
+ @pytest.mark.integration
+ @pytest.mark.skipif("sqlite" in os.environ.get("DATABASE_URL", ""), reason="SQLite does not handle concurrent writes well")
+diff --git a/backend/tests/integration/test_failure_recovery.py b/backend/tests/integration/test_failure_recovery.py
+index 278480e9..43104a36 100644
+--- a/backend/tests/integration/test_failure_recovery.py
++++ b/backend/tests/integration/test_failure_recovery.py
+@@ -81,7 +81,8 @@ class TestOllamaFailureRecovery:
+ 
+     def test_ollama_connection_refused_raises_error(self):
+         """LLMClient must raise RuntimeError on connection refused."""
+-        import asyncio, httpx
++        import asyncio
++        import httpx
+         from services.llm_client import LLMClient
+ 
+         client = LLMClient(provider="ollama")
+diff --git a/backend/tests/integration/test_services.py b/backend/tests/integration/test_services.py
+index 93fe9242..a43434b7 100644
+--- a/backend/tests/integration/test_services.py
++++ b/backend/tests/integration/test_services.py
+@@ -5,7 +5,7 @@ Redis cache interactions (mocked), and FAISS retrieval (mocked).
+ """
+ import uuid
+ import pytest
+-from unittest.mock import AsyncMock, MagicMock, patch
++from unittest.mock import AsyncMock, patch
+ 
+ 
+ @pytest.mark.integration
+@@ -137,7 +137,7 @@ class TestUpdateSignals:
+         db_session.commit()
+ 
+         with patch("app.services.cache_service.delete"):
+-            updated = signal_service.update_signals(
++            _ = signal_service.update_signals(
+                 db=db_session,
+                 session_id=str(sid),
+                 updates={"dataset_size": "large"},
+diff --git a/backend/tests/load/locustfile.py b/backend/tests/load/locustfile.py
+index fb3587cb..c0e1645e 100644
+--- a/backend/tests/load/locustfile.py
++++ b/backend/tests/load/locustfile.py
+@@ -10,7 +10,6 @@ Scenarios:
+   - MixedUser: realistic weighted combination
+ """
+ from locust import HttpUser, task, between, events
+-import json
+ import time
+ import random
+ import io
+@@ -247,7 +246,7 @@ def on_test_start(environment, **kwargs):
+ @events.test_stop.add_listener
+ def on_test_stop(environment, **kwargs):
+     stats = environment.stats
+-    print(f"\n[LOAD TEST COMPLETE]")
++    print("\n[LOAD TEST COMPLETE]")
+     print(f"  Total requests:  {stats.total.num_requests}")
+     print(f"  Failures:        {stats.total.num_failures}")
+     print(f"  Failure rate:    {stats.total.fail_ratio:.1%}")
+diff --git a/backend/tests/security/test_security.py b/backend/tests/security/test_security.py
+index 21f309d6..77665ba0 100644
+--- a/backend/tests/security/test_security.py
++++ b/backend/tests/security/test_security.py
+@@ -195,7 +195,7 @@ class TestUserDataIsolation:
+         # Attempt to read another user's projects by spoofing user_id
+         response = client.get("/api/v1/projects?user_id=attacker_uid_000")
+         if response.status_code == 200:
+-            data = response.json()
++            _ = response.json()
+             # If we can list another user's projects, that's a data isolation failure
+             # We mark this as xfail because the vulnerability is known (SEC-001)
+             pytest.xfail(
+diff --git a/backend/tests/unit/test_document_parser.py b/backend/tests/unit/test_document_parser.py
+index a91873bf..60a3d3b1 100644
+--- a/backend/tests/unit/test_document_parser.py
++++ b/backend/tests/unit/test_document_parser.py
+@@ -3,9 +3,7 @@ UNIT TESTS ΓÇö Document Parser
+ Tests PDF/DOCX/TXT parsing, file validation, section detection,
+ page relevance scoring, and edge cases (empty, corrupt, unicode).
+ """
+-import os
+ import pytest
+-import tempfile
+ from services.document_parser import (
+     DocumentParser, detect_sections, score_page_relevance,
+     get_relevant_pages, register_signal_keywords
+diff --git a/backend/tests/unit/test_llm_client.py b/backend/tests/unit/test_llm_client.py
+index 780afda6..4e96b32d 100644
+--- a/backend/tests/unit/test_llm_client.py
++++ b/backend/tests/unit/test_llm_client.py
+@@ -6,7 +6,7 @@ malformed output recovery, and timeout behavior.
+ import json
+ import pytest
+ from unittest.mock import AsyncMock, patch, MagicMock
+-from services.llm_client import LLMClient, sanitize_json_string, get_llm_client
++from services.llm_client import sanitize_json_string, get_llm_client
+ 
+ 
+ @pytest.mark.unit
+@@ -209,7 +209,6 @@ class TestExtractionCache:
+     def test_redis_l2_hit_populates_l1(self):
+         """Verify that an L2 hit (Redis) correctly populates the L1 (in-memory) cache."""
+         from services.extraction_cache import ExtractionCache
+-        import json
+         cache = ExtractionCache()
+         cache._redis = MagicMock()
+         cache._redis.get.return_value = json.dumps({"redis": "data"})
+diff --git a/backend/tests/unit/test_scoring_engine.py b/backend/tests/unit/test_scoring_engine.py
+index 467d8374..3b4d1716 100644
+--- a/backend/tests/unit/test_scoring_engine.py
++++ b/backend/tests/unit/test_scoring_engine.py
+@@ -4,7 +4,7 @@ Tests deterministic scoring logic, edge cases, normalization,
+ zero-signal fallback, sensitivity analysis, and why_not generation.
+ """
+ import pytest
+-from services.scoring_engine import ScoringEngine, SCORING_RULES, SIGNAL_WEIGHTS, ARCHITECTURE_DESCRIPTIONS
++from services.scoring_engine import ScoringEngine
+ 
+ 
+ @pytest.mark.unit
+diff --git a/backend/tests/unit/test_signal_extractor.py b/backend/tests/unit/test_signal_extractor.py
+index c60c2304..3209a124 100644
+--- a/backend/tests/unit/test_signal_extractor.py
++++ b/backend/tests/unit/test_signal_extractor.py
+@@ -5,7 +5,7 @@ signal merging, questionnaire conversion, cache behavior, and
+ anti-hallucination controls.
+ """
+ import pytest
+-from unittest.mock import AsyncMock, MagicMock, patch
++from unittest.mock import MagicMock
+ from services.signal_extractor import SignalExtractor, SIGNAL_SCHEMA, SIGNAL_OPTIONS
+ 
+ 
