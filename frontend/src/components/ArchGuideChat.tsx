@@ -372,7 +372,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
     } catch (err: unknown) {
       setStreaming("");
       console.error("[Chat] Stream failed:", err);
-      setError("Unable to process your message right now.");
+      setError(err instanceof Error ? err.message : "Unable to process your message right now.");
     } finally {
       setLoading(false);
     }
