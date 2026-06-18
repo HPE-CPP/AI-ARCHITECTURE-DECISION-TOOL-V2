@@ -25,7 +25,7 @@ function SharedResultsInner({ params }: { params: Promise<{ id: string }> }) {
   useEffect(() => {
     getSharedAnalysis(id)
       .then(setResult)
-      .catch((e) => setError(e.message))
+      .catch((e) => { console.error("[SharedResults] Failed to load analysis:", e); setError("Unable to load this analysis."); })
       .finally(() => setLoading(false));
   }, [id]);
 

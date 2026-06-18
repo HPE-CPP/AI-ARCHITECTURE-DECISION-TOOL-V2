@@ -164,7 +164,8 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       }, 800);
 
     } catch (err: any) {
-      setError(err.message || "Submission failed");
+      console.error("[Questionnaire] Submit failed:", err);
+      setError("Unable to submit your answers. Please try again.");
       setSubmitting(false);
     }
   };

@@ -49,18 +49,19 @@ export function getApiBase(): string {
 }
 
 export function toUserFacingFetchError(error: unknown): Error {
+  console.error("[API] Network error:", error);
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     if (msg.includes("failed to fetch") || msg.includes("networkerror")) {
       return new Error(
-        "Cannot reach the backend API. Check that the backend is running and that NEXT_PUBLIC_API_URL is configured correctly."
+        "Unable to connect to the service. Please check your internet connection and try again."
       );
     }
     return error;
   }
 
   return new Error(
-    "Cannot reach the backend API. Check that the backend is running and that NEXT_PUBLIC_API_URL is configured correctly."
+    "Unable to connect to the service. Please check your internet connection and try again."
   );
 }
 

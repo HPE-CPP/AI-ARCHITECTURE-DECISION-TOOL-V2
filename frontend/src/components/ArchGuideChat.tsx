@@ -371,7 +371,8 @@ export function ArchGuideChat({ analysisId, result }: Props) {
       setFollowUps(buildFollowUps(trimmed, result));
     } catch (err: any) {
       setStreaming("");
-      setError(err.message || "Something went wrong. Please try again.");
+      console.error("[Chat] Stream failed:", err);
+      setError("Unable to process your message right now.");
     } finally {
       setLoading(false);
     }

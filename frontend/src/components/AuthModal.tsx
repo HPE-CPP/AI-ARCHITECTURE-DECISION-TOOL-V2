@@ -46,7 +46,8 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
       } else if (err?.code === "auth/configuration-not-found" || err?.code === "auth/invalid-api-key") {
         setError("Firebase is not configured. Please add your Firebase credentials to .env.local or skip to continue.");
       } else {
-        setError(err?.message || "Sign-in failed. Please try again.");
+        console.error("[Auth] Sign-in failed:", err);
+        setError("Sign-in failed. Please try again later.");
       }
     } finally {
       setLoading(false);
