@@ -1,11 +1,42 @@
+# Environment & secrets — never bake these into the image
 .env
 .env.*
+*.env
+
+# Python artifacts
 venv/
 __pycache__/
 *.pyc
 *.pyo
-faiss_index/
-*.log
-firebase-service-account.json
-.git/
+*.pyd
+.pytest_cache/
+
+# Test-related files — not needed in production image
 tests/
+pytest.ini
+requirements-test.txt
+test_temp.db
+*.db
+
+# Dev/debug scripts
+diagnose_pipeline.py
+verify_scoring.py
+clear_db.py
+reset_db.py
+scratch/
+
+# Alembic — migrations are run separately, not baked into image
+# (keep alembic/ if you want to run migrations at startup, remove otherwise)
+# alembic/
+
+# Vector index — large binary, mounted as a volume in production
+faiss_index/
+
+# Firebase service account — injected via env var in production
+firebase-service-account.json
+
+# Build tooling / IDE
+.git/
+.gitignore
+*.log
+*.md
