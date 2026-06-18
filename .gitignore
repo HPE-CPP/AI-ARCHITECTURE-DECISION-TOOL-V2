@@ -60,10 +60,7 @@ blob-report/
 **/__snapshots__/
 
 # Test directories & assets
-# (User requested to ignore all test related files)
-tests/
-backend/tests/
-frontend/tests/
+# (Tests are now tracked for CI)
 artifacts/
 
 # Test configuration & dependencies
