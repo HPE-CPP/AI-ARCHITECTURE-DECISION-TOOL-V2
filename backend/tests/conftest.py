@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Master conftest.py — shared fixtures for all backend test suites.
 
