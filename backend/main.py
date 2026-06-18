@@ -109,9 +109,11 @@ async def lifespan(app: FastAPI):
 
     try:
         from app.utils.faiss_store import cleanup_old_indexes
-        cleanup_old_indexes(max_age_days=7)
+        cleaned = cleanup_old_indexes(max_age_days=30)
+        if cleaned:
+            logger.info("Qdrant: removed vectors for %d old sessions", cleaned)
     except Exception as e:
-        logger.error("FAISS cleanup failed: %s", e)
+        logger.error("Qdrant cleanup failed: %s", e)
 
     # Recover orphaned sessions: any session stuck in "processing" after a
     # server crash or OOM kill will never self-heal. Mark them as "error" on

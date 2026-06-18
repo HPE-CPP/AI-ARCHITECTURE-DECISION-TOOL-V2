@@ -184,6 +184,37 @@ def delete_session_index(session_id: str) -> None:
     logger.info("Qdrant: deleted vectors for session %s", session_id)
 
 
-def cleanup_old_indexes(max_age_days: int = 7) -> int:
-    """No-op: Qdrant is persistent, no local file cleanup needed."""
-    return 0
+def cleanup_old_indexes(max_age_days: int = 30) -> int:
+    """Delete Qdrant vectors for sessions older than max_age_days.
+
+    Returns the number of session indexes cleaned up.
+    """
+    from datetime import datetime, timedelta, timezone
+    from app.db.session import SessionLocal
+    from app.db.models import Session as SessionModel
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    db = SessionLocal()
+    try:
+        old_sessions = (
+            db.query(SessionModel.id)
+            .filter(
+                SessionModel.status.in_(["completed", "draft", "error"]),
+                SessionModel.created_at < cutoff,
+            )
+            .all()
+        )
+    finally:
+        db.close()
+
+    count = 0
+    for (sid,) in old_sessions:
+        try:
+            delete_session_index(str(sid))
+            count += 1
+        except Exception:
+            logger.debug("Qdrant: could not delete vectors for session %s", sid)
+
+    if count:
+        logger.info("Qdrant: cleaned up %d old session indexes (>%d days)", count, max_age_days)
+    return count
