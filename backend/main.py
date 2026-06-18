@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
@@ -23,7 +24,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 # Load environment variables
 load_dotenv()
@@ -184,8 +185,78 @@ app.include_router(score_preview.router, prefix=prefix, tags=["ScorePreview"])
 app.include_router(share_router.router, prefix=prefix, tags=["Share"])
 
 @app.get("/api/v1/health", tags=["Health"])
-def health():
-    return {"status": "ok", "version": settings.APP_VERSION}
+async def health():
+    """Deep health check — tests PostgreSQL, Redis, Qdrant, and LLM provider.
+
+    Returns per-service status so load balancers and dashboards get real signal,
+    not a blind {"status": "ok"} that hides broken dependencies.
+    """
+    checks: dict[str, str] = {}
+
+    # PostgreSQL
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "up"
+    except Exception:
+        checks["database"] = "down"
+
+    # Redis
+    try:
+        from app.services import cache_service
+        if cache_service._client:
+            cache_service._client.ping()
+            checks["redis"] = "up"
+        else:
+            checks["redis"] = "not_configured"
+    except Exception:
+        checks["redis"] = "down"
+
+    # Qdrant
+    try:
+        from app.utils.faiss_store import _get_client
+        _get_client().get_collections()
+        checks["qdrant"] = "up"
+    except Exception:
+        checks["qdrant"] = "down"
+
+    # LLM provider — quick connectivity check (no inference)
+    try:
+        provider = getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama").lower()
+        if provider == "openai":
+            if settings.OPENAI_API_KEY:
+                checks["llm"] = "configured"
+            elif settings.GROQ_API_KEY:
+                checks["llm"] = "configured_groq_fallback"
+            else:
+                checks["llm"] = "no_api_key"
+        elif provider == "ollama":
+            import httpx
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.0)) as client:
+                resp = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+                if resp.status_code == 200:
+                    models = resp.json().get("models", [])
+                    expected = getattr(settings, "OLLAMA_MODEL", "")
+                    checks["llm"] = "up" if any(expected in m.get("name", "") for m in models) else "model_missing"
+                else:
+                    checks["llm"] = "down"
+        else:
+            checks["llm"] = "unknown_provider"
+    except Exception:
+        checks["llm"] = "down"
+
+    all_up = all(v in ("up", "configured", "configured_groq_fallback", "not_configured") for v in checks.values())
+    overall = "healthy" if all_up else "degraded"
+    status_code = 200 if all_up else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": overall,
+            "version": settings.APP_VERSION,
+            "checks": checks,
+        },
+    )
 
 if __name__ == "__main__":
     import uvicorn
