@@ -504,12 +504,6 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     Edit Inputs
   </button>
 
-  {result.project_name && (
-    <h1 className="text-sm font-bold text-[color:var(--text-primary)] truncate max-w-[40%] text-center">
-      {result.project_name}
-    </h1>
-  )}
-
   <div className="flex items-center gap-3">
     <ShareButton analysisId={resolvedParams.analysisId} />
     {projectId && (
