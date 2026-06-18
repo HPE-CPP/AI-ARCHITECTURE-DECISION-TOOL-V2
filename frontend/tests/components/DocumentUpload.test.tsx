@@ -10,7 +10,7 @@ import DocumentUpload from '@/components/DocumentUpload'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
-  uploadDocumentWithProgress: vi.fn(),
+  uploadDocument: vi.fn(),
 }))
 
 const mockRouter = { push: vi.fn() }
@@ -79,7 +79,7 @@ describe('DocumentUpload', () => {
 
   // ─── Upload flow ─────────────────────────────────────────────────────────
   it('calls uploadDocument when Begin Analysis is clicked', async () => {
-    vi.mocked(api.uploadDocumentWithProgress).mockResolvedValueOnce({
+    vi.mocked(api.uploadDocument).mockResolvedValueOnce({
       analysis_id: 'new-analysis-123',
       status: 'complete',
     } as any)
@@ -88,14 +88,14 @@ describe('DocumentUpload', () => {
     await userEvent.upload(input, VALID_FILE)
     const btn = screen.getByRole('button', { name: /begin analysis/i })
     await userEvent.click(btn)
-    expect(api.uploadDocumentWithProgress).toHaveBeenCalledOnce()
-    expect(api.uploadDocumentWithProgress).toHaveBeenCalledWith(
-      VALID_FILE, 'ollama', undefined, expect.any(Function)
+    expect(api.uploadDocument).toHaveBeenCalledOnce()
+    expect(api.uploadDocument).toHaveBeenCalledWith(
+      VALID_FILE, 'ollama', undefined
     )
   })
 
   it('passes projectId to uploadDocument when provided', async () => {
-    vi.mocked(api.uploadDocumentWithProgress).mockResolvedValueOnce({
+    vi.mocked(api.uploadDocument).mockResolvedValueOnce({
       analysis_id: 'proj-analysis-abc',
       status: 'complete',
     } as any)
@@ -104,12 +104,12 @@ describe('DocumentUpload', () => {
     await userEvent.upload(input, VALID_FILE)
     const btn = screen.getByRole('button', { name: /begin analysis/i })
     await userEvent.click(btn)
-    expect(api.uploadDocumentWithProgress).toHaveBeenCalledWith(VALID_FILE, 'ollama', 'proj-xyz', expect.any(Function))
+    expect(api.uploadDocument).toHaveBeenCalledWith(VALID_FILE, 'ollama', 'proj-xyz')
   })
 
   it('shows Analyzing text while uploading', async () => {
     let resolveUpload!: (v: any) => void
-    vi.mocked(api.uploadDocumentWithProgress).mockReturnValueOnce(
+    vi.mocked(api.uploadDocument).mockReturnValueOnce(
       new Promise((resolve) => { resolveUpload = resolve })
     )
     render(<DocumentUpload />)
@@ -125,7 +125,7 @@ describe('DocumentUpload', () => {
 
   it('calls onAnalysisStart with analysis_id on success', async () => {
     const onStart = vi.fn()
-    vi.mocked(api.uploadDocumentWithProgress).mockResolvedValueOnce({
+    vi.mocked(api.uploadDocument).mockResolvedValueOnce({
       analysis_id: 'result-id-789',
       status: 'complete',
     } as any)
@@ -137,7 +137,7 @@ describe('DocumentUpload', () => {
   })
 
   it('navigates to results page on successful upload', async () => {
-    vi.mocked(api.uploadDocumentWithProgress).mockResolvedValueOnce({
+    vi.mocked(api.uploadDocument).mockResolvedValueOnce({
       analysis_id: 'nav-id-000',
       status: 'complete',
     } as any)
@@ -152,7 +152,7 @@ describe('DocumentUpload', () => {
 
   // ─── Error handling ───────────────────────────────────────────────────────
   it('shows error message when upload fails', async () => {
-    vi.mocked(api.uploadDocumentWithProgress).mockRejectedValueOnce(new Error('Server error'))
+    vi.mocked(api.uploadDocument).mockRejectedValueOnce(new Error('Server error'))
     render(<DocumentUpload />)
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     await userEvent.upload(input, VALID_FILE)
@@ -174,7 +174,7 @@ describe('DocumentUpload', () => {
   })
 
   it('dismisses error on X click', async () => {
-    vi.mocked(api.uploadDocumentWithProgress).mockRejectedValueOnce(new Error('Network error'))
+    vi.mocked(api.uploadDocument).mockRejectedValueOnce(new Error('Network error'))
     render(<DocumentUpload />)
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     await userEvent.upload(input, VALID_FILE)
@@ -198,7 +198,7 @@ describe('DocumentUpload', () => {
 
   it('cancel button is disabled while uploading', async () => {
     let resolveUpload!: (v: any) => void
-    vi.mocked(api.uploadDocumentWithProgress).mockReturnValueOnce(
+    vi.mocked(api.uploadDocument).mockReturnValueOnce(
       new Promise((resolve) => { resolveUpload = resolve })
     )
     render(<DocumentUpload />)
@@ -215,7 +215,7 @@ describe('DocumentUpload', () => {
   // ─── LLM provider from localStorage ──────────────────────────────────────
   it('reads llm_provider from localStorage', async () => {
     localStorage.setItem('llm_provider', 'openai')
-    vi.mocked(api.uploadDocumentWithProgress).mockResolvedValueOnce({
+    vi.mocked(api.uploadDocument).mockResolvedValueOnce({
       analysis_id: 'prov-test',
       status: 'complete',
     } as any)
@@ -224,7 +224,7 @@ describe('DocumentUpload', () => {
     await userEvent.upload(input, VALID_FILE)
     await userEvent.click(screen.getByRole('button', { name: /begin analysis/i }))
     await waitFor(() => {
-      expect(api.uploadDocumentWithProgress).toHaveBeenCalledWith(VALID_FILE, 'openai', undefined, expect.any(Function))
+      expect(api.uploadDocument).toHaveBeenCalledWith(VALID_FILE, 'openai', undefined)
     })
   })
 })
