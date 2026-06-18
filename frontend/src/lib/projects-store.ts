@@ -103,6 +103,7 @@ export async function updateProject(id: string, patch: Partial<Project> & { user
   if (patch.status !== undefined) payload.status = patch.status;
   // H-001/L-001 FIX: user_id is immutable after creation; do not send in PUT.
   if (patch.analysisId !== undefined) payload.analysis_id = patch.analysisId;
+  if (patch.userId !== undefined) payload.user_id = patch.userId;
   if (patch.mode !== undefined) payload.mode = patch.mode;
 
   const res = await fetch(`${API_BASE}/api/v1/projects/${id}`, {

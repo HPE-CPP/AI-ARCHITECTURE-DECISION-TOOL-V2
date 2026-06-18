@@ -30,11 +30,13 @@ SQLITE_URL = "sqlite:///:memory:"
 def engine():
     """Create a single in-memory SQLite engine for the test session."""
     from app.db.base import Base
+    from app.limiter import limiter
     eng = create_engine(
         SQLITE_URL,
         connect_args={"check_same_thread": False},
     )
     Base.metadata.create_all(eng)
+    limiter.enabled = False
     yield eng
     Base.metadata.drop_all(eng)
 

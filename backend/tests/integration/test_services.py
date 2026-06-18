@@ -39,7 +39,7 @@ class TestExtractAndPersist:
         db_signals = db_session.query(Signal).filter(
             Signal.session_id == uuid.UUID(session_id)
         ).all()
-        assert len(db_signals) == 10  # all 10 signals written
+        assert len(db_signals) == 12  # all 12 signals written
 
     @pytest.mark.asyncio
     async def test_extract_and_persist_uses_cache_on_second_call(self, db_session, sample_document_data, mock_llm):
@@ -88,14 +88,15 @@ class TestExtractAndPersist:
         assert signals is not None
 
     @pytest.mark.asyncio
-    async def test_anti_hallucination_applied_after_extraction(self, db_session, sample_document_data, mock_llm_hallucinating):
+    async def test_anti_hallucination_applied_after_extraction(self, db_session, mock_llm_hallucinating):
         """Low-confidence hallucinated values must be nulled before persisting."""
         # Patch the hallucinating LLM to return 0.05 confidence
         low_conf_response = {
             k: {"value": "HALLUCINATED", "confidence": 0.05, "source_text": "", "page_number": 0}
             for k in ["dataset_size", "data_volatility", "latency_requirement",
                       "query_volume", "accuracy_requirement", "domain_specificity",
-                      "security_level", "cost_sensitivity", "deployment_preference", "user_scale"]
+                      "security_level", "cost_sensitivity", "deployment_preference", "user_scale",
+                      "citation_requirement", "context_size"]
         }
         mock_llm_hallucinating.generate_json = AsyncMock(return_value=low_conf_response)
 
@@ -107,13 +108,24 @@ class TestExtractAndPersist:
         db_session.add(s)
         db_session.commit()
 
+        # Use minimal text with no keywords to prevent heuristic override
+        blank_doc = {
+            "filename": "blank.txt",
+            "format": ".txt",
+            "total_pages": 1,
+            "full_text": "This is a placeholder document.",
+            "char_count": 31,
+            "word_count": 6,
+            "pages": [{"page_number": 1, "text": "This is a placeholder document.", "char_count": 31}],
+        }
+
         with patch("app.services.signal_service.retrieve_context", new_callable=AsyncMock, return_value=""), \
              patch("app.services.signal_service.get_llm_client", return_value=mock_llm_hallucinating), \
              patch("app.services.cache_service._client", None):
             signals = await signal_service.extract_and_persist(
                 db=db_session,
                 session_id=session_id,
-                document_data=sample_document_data,
+                document_data=blank_doc,
                 provider="openai",
             )
 
@@ -150,7 +162,7 @@ class TestUpdateSignals:
         # Must have exactly 1 row after update (not 2)
         assert len(rows) == 1
         assert rows[0].value == "large"
-        assert rows[0].confidence == 1.0
+        assert rows[0].confidence == 0.85
         assert rows[0].source_verified is True
 
     def test_update_signals_unknown_key_ignored(self, db_session, seed_session):

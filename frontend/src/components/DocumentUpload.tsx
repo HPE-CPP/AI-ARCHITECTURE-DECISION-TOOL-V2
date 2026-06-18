@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { UploadCloud, FileText, AlertCircle, Loader2, CheckCircle2, X, AlertTriangle, FileX, RefreshCw } from "lucide-react";
 import { getProjectKey } from "@/lib/projects-store";
-import { getApiBase } from "@/lib/api-base";
-import { getCachedAuthToken } from "@/lib/auth-token";
+import { uploadDocumentWithProgress } from "@/lib/api";
 
 const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 const WARN_SIZE_BYTES = 20 * 1024 * 1024;
@@ -114,113 +113,7 @@ function parseUploadError(message: string): ParsedError {
   };
 }
 
-async function uploadWithProgress(
-  file: File,
-  provider: string,
-  projectId: string | undefined,
-  onProgress: (pct: number, msg: string) => void,
-): Promise<{ analysis_id: string; status: string }> {
-  return new Promise(async (resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const qs = new URLSearchParams({ provider });
-    if (projectId) qs.append("project_id", projectId);
 
-    xhr.open("POST", `${getApiBase()}/api/v1/upload?${qs.toString()}`);
-
-    const token = await getCachedAuthToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-
-    let currentPct = 0;
-    let interval: ReturnType<typeof setInterval> | undefined = undefined;
-    // Guards against the race where xhr.onload fires before xhr.upload.onload
-    // (fast network / localhost). Without this flag, the interval would be
-    // started AFTER the XHR is already done and would run forever.
-    let xhrDone = false;
-
-    const stopInterval = () => {
-      xhrDone = true;
-      if (interval !== undefined) {
-        clearInterval(interval);
-        interval = undefined;
-      }
-    };
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        const uploadPct = Math.round((e.loaded / e.total) * 10);
-        if (uploadPct > currentPct) {
-          currentPct = uploadPct;
-          onProgress(currentPct, "Uploading document");
-        }
-      }
-    };
-
-    xhr.upload.onload = () => {
-      // If xhr.onload already fired (very fast upload), don't start interval
-      if (xhrDone) return;
-
-      let currentPctFloat = currentPct;
-      interval = setInterval(() => {
-        if (xhrDone) {
-          stopInterval();
-          return;
-        }
-        if (currentPctFloat < 99) {
-          if (currentPctFloat > 85) {
-            currentPctFloat += 0.2;
-          } else if (currentPctFloat > 60) {
-            currentPctFloat += 0.5;
-          } else {
-            currentPctFloat += 1;
-          }
-
-          const displayPct = Math.floor(currentPctFloat);
-
-          let msg = "Uploading document";
-          if (displayPct >= 90) msg = "Finalizing results";
-          else if (displayPct >= 75) msg = "Computing scores";
-          else if (displayPct >= 60) msg = "Running analysis";
-          else if (displayPct >= 45) msg = "Generating embeddings";
-          else if (displayPct >= 30) msg = "Chunking content";
-          else if (displayPct >= 15) msg = "Extracting text";
-
-          onProgress(displayPct, msg);
-        }
-      }, 300);
-    };
-
-    xhr.onload = () => {
-      stopInterval();
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText));
-        } catch {
-          reject(new Error("Invalid response from server"));
-        }
-      } else {
-        try {
-          const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.detail || "Upload failed"));
-        } catch {
-          reject(new Error(`Upload failed (${xhr.status})`));
-        }
-      }
-    };
-
-    xhr.onerror = () => {
-      stopInterval();
-      reject(new Error("Network error - check your connection and try again"));
-    };
-    xhr.ontimeout = () => {
-      stopInterval();
-      reject(new Error("Upload timed out"));
-    };
-
-    const formData = new FormData();
-    formData.append("file", file);
-    xhr.send(formData);
-  });
-}
 
 export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart }: DocumentUploadProps) {
   const router = useRouter();
@@ -269,12 +162,12 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
       setUploadPhase("uploading");
       setError(null);
       setProgress(0);
-      setStatusMessage("Preparing upload...");
+      setStatusMessage("Analyzing...");
 
-      const providerRaw = localStorage.getItem("llm_provider") || "openai";
+      const providerRaw = localStorage.getItem("llm_provider") || "ollama";
       const provider = providerRaw === "groq" ? "openai" : providerRaw;
 
-      const res = await uploadWithProgress(file, provider, projectId, (pct, msg) => {
+      const res = await uploadDocumentWithProgress(file, provider, projectId, (pct, msg) => {
         setProgress(pct);
         setStatusMessage(msg);
       });
@@ -391,7 +284,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
                 Max 50 MB
               </span>
               <span className="inline-flex items-center px-3 py-1 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] text-xs font-bold text-[color:var(--text-secondary)]">
-                PDF · DOCX · TXT
+                PDF, DOCX, TXT
               </span>
             </div>
           </div>

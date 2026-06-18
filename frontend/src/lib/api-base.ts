@@ -54,14 +54,14 @@ export function toUserFacingFetchError(error: unknown): Error {
     const msg = error.message.toLowerCase();
     if (msg.includes("failed to fetch") || msg.includes("networkerror")) {
       return new Error(
-        "Unable to connect to the service. Please check your internet connection and try again."
+        "Cannot reach the backend API. Please check your connection and try again."
       );
     }
     return error;
   }
 
   return new Error(
-    "Unable to connect to the service. Please check your internet connection and try again."
+    "Cannot reach the backend API. Please check your connection and try again."
   );
 }
 
@@ -84,9 +84,12 @@ export async function fetchWithApiFallback(
     }
 
     try {
-      return await fetch(`${LOCAL_API_FALLBACK_ALT}${path}`, init);
+      const altRes = await fetch(`${LOCAL_API_FALLBACK_ALT}${path}`, init);
+      // Validate we got an actual Response (mocks may return undefined)
+      if (altRes instanceof Response) return altRes;
+      throw toUserFacingFetchError(error);
     } catch (secondError) {
-      throw toUserFacingFetchError(secondError);
+      throw toUserFacingFetchError(error);
     }
   }
 }

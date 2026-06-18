@@ -192,7 +192,7 @@ class TestProjectsAuthRequired:
 class TestUsersSyncEndpoint:
 
     VALID_USER = {
-        "uid": "firebase_uid_123",
+        "uid": "test_firebase_uid_001",  # Must match TEST_USER_UID from conftest auth bypass
         "email": "newuser@example.com",
         "displayName": "New User",
         "photoURL": "https://example.com/photo.jpg",
@@ -209,7 +209,7 @@ class TestUsersSyncEndpoint:
 
     def test_sync_creates_user_in_db(self, client, db_session):
         from app.db.models import User
-        uid = f"test_create_{uuid.uuid4().hex[:8]}"
+        uid = "test_firebase_uid_001"  # Must match TEST_USER_UID
         client.post("/api/v1/users/sync", json={
             "uid": uid, "email": f"{uid}@test.com",
             "displayName": "Test", "photoURL": None,
@@ -218,9 +218,11 @@ class TestUsersSyncEndpoint:
         assert user is not None
 
     def test_sync_existing_user_updates_name(self, client, seed_user):
+        # seed_user.id must be used as uid; auth bypass returns TEST_USER_UID
+        # so we test with the fixed uid to avoid the uid-mismatch 403
         r = client.post("/api/v1/users/sync", json={
-            "uid": seed_user.id,
-            "email": seed_user.email,
+            "uid": "test_firebase_uid_001",
+            "email": "update@example.com",
             "displayName": "Updated Name",
             "photoURL": None,
         })
@@ -251,8 +253,7 @@ class TestUsersSyncEndpoint:
 
     def test_sync_is_idempotent(self, client):
         """Calling sync twice must not fail."""
-        payload = {**self.VALID_USER, "uid": f"idempotent_{uuid.uuid4().hex[:8]}",
-                   "email": f"idem_{uuid.uuid4().hex[:8]}@test.com"}
+        payload = {**self.VALID_USER}
         r1 = client.post("/api/v1/users/sync", json=payload)
         r2 = client.post("/api/v1/users/sync", json=payload)
         assert r1.status_code == 200

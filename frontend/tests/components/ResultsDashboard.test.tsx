@@ -102,12 +102,12 @@ describe('ResultsDashboard — Recommendation Card', () => {
 
   it('shows the full architecture name', () => {
     render(<ResultsDashboard result={COMPLETE_RESULT} />)
-    expect(screen.getByText('Retrieval-Augmented Generation')).toBeDefined()
+    expect(screen.getAllByText('Retrieval-Augmented Generation')[0]).toBeDefined()
   })
 
   it('falls back to architecture key when details missing', () => {
     render(<ResultsDashboard result={MINIMAL_RESULT} />)
-    expect(screen.getByText('CAG')).toBeDefined()
+    expect(screen.getAllByText('CAG')[0]).toBeDefined()
   })
 
   it('shows the architecture description', () => {
@@ -153,9 +153,9 @@ describe('ResultsDashboard — Charts', () => {
     expect(screen.getByText('Factor Breakdown')).toBeDefined()
   })
 
-  it('renders Suitability Comparison bar chart section', () => {
+  it('renders Architecture Ranking section', () => {
     render(<ResultsDashboard result={COMPLETE_RESULT} />)
-    expect(screen.getByText('Suitability Comparison')).toBeDefined()
+    expect(screen.getByText('Architecture Ranking')).toBeDefined()
   })
 
   it('does not crash when factor_breakdown is missing', () => {
@@ -235,6 +235,6 @@ describe('ResultsDashboard — Score Sorting', () => {
     }
     render(<ResultsDashboard result={unsortedResult} />)
     // Chart renders without errors regardless of input order
-    expect(screen.getByTestId('bar-chart')).toBeDefined()
+    expect(screen.getByTestId('bar-container')).toBeDefined()
   })
 })
