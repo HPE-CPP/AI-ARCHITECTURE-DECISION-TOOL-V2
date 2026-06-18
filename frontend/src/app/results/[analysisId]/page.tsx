@@ -184,7 +184,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
           return; // stop polling
         }
       } catch (err: any) {
-        setError(err.message || "Failed to fetch analysis");
+        console.error("[ResultsPage] Polling failed:", err);
+        setError("Unable to retrieve the analysis results right now.");
         setLoading(false);
         return; // stop polling on error
       }
@@ -261,8 +262,9 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       setResult(data);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
+      console.error("[ResultsPage] Follow-up submit failed:", err);
       // FIX: use component error state instead of native alert() which blocks the thread
-      setError(err.message || "Failed to submit follow-up answers");
+      setError("Unable to submit your answers at this time.");
     } finally {
       setSubmittingFollowUp(false);
     }
@@ -306,7 +308,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       setIsEditingInputs(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
-      setError(err.message || "Failed to update inputs");
+      console.error("[ResultsPage] Edit submit failed:", err);
+      setError("Unable to update your inputs right now.");
     } finally {
       setSubmittingFollowUp(false);
     }
@@ -461,16 +464,24 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
           <div className="bg-red-500/10 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-red-500/20">
             <AlertCircle className="text-red-500" size={40} />
           </div>
-          <h2 className="text-3xl font-bold text-red-500 mb-4 tracking-tight">Analysis Failed</h2>
-          <p className="text-[color:var(--text-secondary)] font-medium leading-relaxed">
-            {error || result?.error || "Unknown error occurred"}
+          <h2 className="text-3xl font-bold text-red-500 mb-4 tracking-tight">Analysis Unavailable</h2>
+          <p className="text-[color:var(--text-secondary)] font-medium leading-relaxed mb-8">
+            Something went wrong while processing your request. Please try again.
           </p>
-          <button
-            onClick={() => router.back()}
-            className="mt-8 px-6 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition-colors font-bold"
-          >
-            Go Back
-          </button>
+          <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2.5 bg-red-500 text-white rounded-full font-bold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+            >
+              Refresh Page
+            </button>
+            <button
+              onClick={() => router.back()}
+              className="px-6 py-2.5 bg-[color:var(--surface)] border border-[color:var(--border)] text-[color:var(--text-primary)] rounded-full hover:bg-[color:var(--background)] transition-colors font-bold"
+            >
+              Go Back
+            </button>
+          </div>
         </div>
       </div>
     );

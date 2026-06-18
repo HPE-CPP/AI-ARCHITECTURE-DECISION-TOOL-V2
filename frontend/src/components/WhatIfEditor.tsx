@@ -384,7 +384,8 @@ const mergedResult = {
 setPreviewResult(null);
 onResultUpdate?.(mergedResult);
   } catch (e: any) {
-    setSaveError(e.message ?? "Save failed. Please try again.");
+    console.error("[WhatIfEditor] Save failed:", e);
+    setSaveError("Save failed. Please try again later.");
   } finally {
     setSaving(false);
   }
