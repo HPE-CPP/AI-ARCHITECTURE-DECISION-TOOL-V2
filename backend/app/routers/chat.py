@@ -9,7 +9,7 @@ import unicodedata
 import uuid
 from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.db.session import get_db
 from app.db.models import Session as SessionModel, Result, Signal
 from app.core.security import verify_firebase_token
+from app.limiter import limiter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -238,7 +239,9 @@ def _get_session(body: ChatRequest, db: DBSession):
 # ── Streaming endpoint (primary — used by frontend) ───────────────────────────
 
 @router.post("/chat/stream")
+@limiter.limit("5/minute")  # LLM calls are expensive — strict per-user cap
 async def chat_stream(
+    request: Request,
     body: ChatRequest,
     uid: Optional[str] = Depends(verify_firebase_token),
     db: DBSession = Depends(get_db),
@@ -285,7 +288,9 @@ async def chat_stream(
 # ── Non-streaming fallback ────────────────────────────────────────────────────
 
 @router.post("/chat", response_model=ChatResponse)
+@limiter.limit("10/minute")  # non-streaming less common, but still costs per LLM call
 async def chat(
+    request: Request,
     body: ChatRequest,
     uid: Optional[str] = Depends(verify_firebase_token),
     db: DBSession = Depends(get_db),
