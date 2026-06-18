@@ -28,6 +28,23 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _get_project_info(session_row: SessionModel, db: DBSession) -> tuple[Optional[str], Optional[str]]:
+    """Return (project_name, project_id) for a session's parent project."""
+    if not session_row.project_id:
+        return None, None
+    project = db.query(Project).filter(Project.id == session_row.project_id).first()
+    if project:
+        return project.name, str(project.id)
+    return None, str(session_row.project_id)
+
+
+def _inject_project_info(result: dict, session_row: SessionModel, db: DBSession) -> None:
+    """Add project_name and project_id to a result dict in-place."""
+    name, pid = _get_project_info(session_row, db)
+    result["project_name"] = name
+    result["project_id"] = pid
+
+
 def _check_session_ownership(
     session_row: SessionModel,
     uid: Optional[str],
@@ -129,6 +146,7 @@ def get_analysis(
     if cached:
         if cached.get("status") == "complete" and cached.get("recommended"):
             cached["cost_analysis"] = generate_cost_analysis(cached)
+        _inject_project_info(cached, session_row, db)
         return cached
 
     # Session still processing or errored
@@ -147,6 +165,7 @@ def get_analysis(
     if result.get("status") == "complete" and result.get("recommended"):
         result["cost_analysis"] = generate_cost_analysis(result)
 
+    _inject_project_info(result, session_row, db)
     return result
 
 
@@ -189,6 +208,7 @@ def submit_followup(
     if result.get("status") == "complete" and result.get("recommended"):
         result["cost_analysis"] = generate_cost_analysis(result)
 
+    _inject_project_info(result, session_row, db)
     return result
 
 

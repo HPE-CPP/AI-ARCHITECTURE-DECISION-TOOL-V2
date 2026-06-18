@@ -12,6 +12,8 @@ from pydantic import BaseModel
 class AnalysisResponse(BaseModel):
     analysis_id: str
     status: str
+    project_name: Optional[str] = None
+    project_id: Optional[str] = None
     signals: Optional[dict[str, Any]] = None
     scores: Optional[dict[str, Any]] = None
     recommended: Optional[str] = None
