@@ -176,8 +176,8 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
             setLoading(false);
           } else if (isQuestionnaire) {
             // Questionnaire is synchronous — backend is already done.
-            // Skip the stage animation and show results immediately.
-            setLoading(false);
+            // Fast-forward through all loading stages before revealing results.
+            setResultReady(true);
           } else {
             setResultReady(true); // trigger stage fast-forward before revealing results
           }
