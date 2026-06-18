@@ -146,8 +146,44 @@ _REFUSAL = (
 )
 
 
+# Patterns that clearly indicate an off-topic query — rejected before any LLM call.
+_OFF_TOPIC_PATTERNS = re.compile(
+    r"\b(suicide|kill\s+(myself|yourself|me)|self[-\s]?harm|depress(ed|ion)|"
+    r"anxiety|therapy|mental\s+health|counsel(ling|ing)|trauma|abuse|"
+    r"code|python|javascript|types?cript|program(ming)?|function|algorithm|"
+    r"2\s*\+\s*2|math|calculate|write\s+(a|me)\s+(code|script|program|function)|"
+    r"debug|fix\s+(this|my)\s+(code|bug)|weather|news|sports?|recipe|"
+    r"tell\s+(me\s+)?a\s+(joke|story)|what\s+(is|are)\s+your\s+(name|favorite)|"
+    r"who\s+(are|is)\s+(you|your)|president|politics|election|religion|"
+    r"sing|poem|song|lyrics?|movie|film|actor|celebrity|game|play|"
+    r"translate|language|google|facebook|twitter|instagram|tiktok|"
+    r"youtube|striver|video|watch|tutorial|course|learn|study|"
+    r"why\s+(do\s+not|don['\u2019]t|does\s+not|doesn['\u2019]t)\s+(we|i|you)\s+(study|learn|watch))\b",
+    re.IGNORECASE,
+)
+
+# Phrases that anchor a query to THIS specific analysis — always passes relevance check.
+_STRONG_ANCHOR = re.compile(
+    r"\b(my\s+(document|analysis|project|use[\s-]?case|requirements|result|"
+    r"recommendation|architecture|score)|"
+    r"this\s+(architecture|recommendation|analysis|document|result|project)|"
+    r"our\s+(document|analysis|project|use[\s-]?case))\b",
+    re.IGNORECASE,
+)
+
+
 def _is_unsafe(message: str) -> bool:
     return bool(_SENSITIVE_PATTERNS.search(message))
+
+
+def _is_relevant(message: str) -> bool:
+    """Reject queries that are clearly off-topic unless they contain strong anchors
+    that tie the question to THIS specific analysis (not just mentioning RAG/CAG generically)."""
+    if _STRONG_ANCHOR.search(message):
+        return True   # "my document", "this analysis", etc. — always allow
+    if _OFF_TOPIC_PATTERNS.search(message):
+        return False  # clearly off-topic and no anchor to this analysis
+    return True       # ambiguous — let LLM handle it
 
 
 def _build_system_prompt(session, result, signals) -> str:
@@ -209,7 +245,7 @@ async def chat_stream(
 ):
     from services.llm_client import LLMClient
 
-    if _is_unsafe(body.message):
+    if _is_unsafe(body.message) or not _is_relevant(body.message):
         async def _refusal_stream():
             yield f"data: {json.dumps({'t': _REFUSAL})}\n\n"
             yield f"data: {json.dumps({'done': True})}\n\n"
@@ -256,7 +292,7 @@ async def chat(
 ):
     from services.llm_client import LLMClient
 
-    if _is_unsafe(body.message):
+    if _is_unsafe(body.message) or not _is_relevant(body.message):
         return ChatResponse(response=_REFUSAL, analysis_id=body.analysis_id)
 
     session = _get_session(body, db)
