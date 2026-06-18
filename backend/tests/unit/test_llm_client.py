@@ -6,7 +6,7 @@ malformed output recovery, and timeout behavior.
 import json
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from services.llm_client import LLMClient, sanitize_json_string, get_llm_client
+from services.llm_client import sanitize_json_string, get_llm_client
 
 
 @pytest.mark.unit

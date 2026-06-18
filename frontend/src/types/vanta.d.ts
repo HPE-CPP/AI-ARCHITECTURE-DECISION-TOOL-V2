@@ -1,4 +1,4 @@
 declare module "vanta/dist/*" {
-  const vantaEffect: any;
+  const vantaEffect: unknown;
   export default vantaEffect;
 }

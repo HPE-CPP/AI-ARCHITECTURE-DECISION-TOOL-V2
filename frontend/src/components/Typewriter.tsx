@@ -14,14 +14,15 @@ export function Typewriter({ text, speed = 50, delay = 0, className = "", cursor
   const [displayedText, setDisplayedText] = useState("");
   const [started, setStarted] = useState(false);
 
+  const [prevText, setPrevText] = useState(text);
+
   // FIX FE-007: When the `text` prop changes, reset animation state from scratch.
-  // Without this, switching text mid-animation left displayedText partially typed
-  // and started=true, causing the new text to skip the initial delay and render
-  // garbled characters (mixing old + new text positions).
-  useEffect(() => {
+  // Using derived state pattern (calling setState during render) to avoid cascading renders.
+  if (text !== prevText) {
+    setPrevText(text);
     setDisplayedText("");
     setStarted(false);
-  }, [text]);
+  }
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;

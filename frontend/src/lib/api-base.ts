@@ -88,7 +88,7 @@ export async function fetchWithApiFallback(
       // Validate we got an actual Response (mocks may return undefined)
       if (altRes instanceof Response) return altRes;
       throw toUserFacingFetchError(error);
-    } catch (secondError) {
+    } catch {
       throw toUserFacingFetchError(error);
     }
   }

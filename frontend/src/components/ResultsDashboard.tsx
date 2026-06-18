@@ -21,7 +21,7 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
     if (!factor_breakdown) return [];
     const signals = Object.keys(Object.values(factor_breakdown)[0] || {});
     return signals.map(signal => {
-      const dataPoint: any = { subject: signal.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) };
+      const dataPoint: Record<string, unknown> = { subject: signal.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase()) };
       Object.keys(factor_breakdown).forEach(arch => {
         dataPoint[arch] = factor_breakdown[arch][signal];
       });
@@ -66,10 +66,10 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
             onClick={async () => {
               try {
                 await exportAnalysis(result);
-              } catch (err) {
+              } catch (e: unknown) {
                 // Export failures are non-fatal: the user stays on the results page.
                 // A future iteration can surface a toast notification here.
-                console.error("[ResultsDashboard] PDF export failed:", err);
+                console.error("[ResultsDashboard] PDF export failed:", e);
               }
             }}
             className="mt-6 sm:mt-10 flex items-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn text-sm sm:text-base"
