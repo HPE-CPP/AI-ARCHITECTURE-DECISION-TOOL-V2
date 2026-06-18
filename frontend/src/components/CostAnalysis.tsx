@@ -2,7 +2,7 @@
 import React, { useMemo, useRef, useEffect, useState } from "react";
 import { AnalysisResult, CostAnalysisData, exportCostAnalysis } from "@/lib/api";
 import {
-  BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { motion } from "framer-motion";
 import { IndianRupee, Download, TrendingUp, Zap, AlertTriangle } from "lucide-react";
@@ -39,9 +39,7 @@ function fmtAvg(r: [number, number]): number {
   return Math.round((r[0] + r[1]) / 2);
 }
 
-const COLORS = ["var(--primary)", "var(--accent)", "var(--text-secondary)", "#f59e0b"];
-
-const CustomYAxisTick = (props: any) => {
+const CustomYAxisTick = (props: { x?: number; y?: number; payload?: { value?: string }; isNarrow?: boolean }) => {
   const { x, y, payload, isNarrow } = props;
   const name = payload.value || "";
   let line1 = name;
@@ -91,7 +89,7 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
     if (!rec) return [];
     const totalAvg = fmtAvg(rec.monthly_total);
     return Object.entries(rec.breakdown)
-      .map(([key, item]) => ({
+      .map(([, item]) => ({
         name: item.label,
         cost: fmtAvg(item.monthly),
         range: item.monthly,
@@ -112,9 +110,6 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
       .sort((a, b) => b.efficiency - a.efficiency);
   }, [summary, architectures]);
 
-  const recArch = architectures[summary.recommended];
-  if (!recArch) return null;
-
   // Measure the chart container so YAxis width and labels adapt to the available space.
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(600);
@@ -127,6 +122,9 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  const recArch = architectures[summary.recommended];
+  if (!recArch) return null;
 
   const isNarrow = chartWidth < 420;
   // YAxis label column width: wide enough to read on desktop, minimal on mobile

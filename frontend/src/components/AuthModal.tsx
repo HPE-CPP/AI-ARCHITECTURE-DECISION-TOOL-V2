@@ -19,8 +19,8 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
   const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "transfer-confirm" | "transfer-collision">("main");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [signedInUser, setSignedInUser] = useState<any>(null);
-  const [anonProject, setAnonProject] = useState<any>(null);
+  const [signedInUser, setSignedInUser] = useState<{ displayName: string | null; uid: string; email: string | null } | null>(null);
+  const [anonProject, setAnonProject] = useState<{ id: string; name: string } | null>(null);
   const [collidingProjectId, setCollidingProjectId] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
@@ -39,6 +39,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
       } else {
         onAuthSuccess(user);
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       // Handle user closing popup gracefully
       if (err?.code === "auth/popup-closed-by-user" || err?.code === "auth/cancelled-popup-request") {
@@ -280,7 +281,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       Transfer Project?
                     </h3>
                     <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
-                      Do you want to transfer your unsaved project <span className="text-[color:var(--text-primary)] font-bold">"{anonProject?.name}"</span> to this account?
+                      Do you want to transfer your unsaved project <span className="text-[color:var(--text-primary)] font-bold">&quot;{anonProject?.name}&quot;</span> to this account?
                     </p>
                     <div className="flex flex-col gap-2 w-full">
                       <button
@@ -320,7 +321,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       Project Already Exists
                     </h3>
                     <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
-                      Your account already has a project named <span className="text-[color:var(--text-primary)] font-bold">"{anonProject?.name}"</span>. Do you want to replace it?
+                      Your account already has a project named <span className="text-[color:var(--text-primary)] font-bold">&quot;{anonProject?.name}&quot;</span>. Do you want to replace it?
                     </p>
                     <div className="flex flex-col gap-2 w-full">
                       <button
@@ -367,7 +368,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                         onClick={handleConfirmRejection}
                         className="w-full py-3.5 px-6 rounded-full border border-red-500/20 bg-red-500/10 text-red-500 font-bold text-sm hover:bg-red-500/20 transition-all active:scale-[0.98]"
                       >
-                        Yes, I'm sure
+                        Yes, I&apos;m sure
                       </button>
                       <button
                         onClick={() => setStep("transfer")}

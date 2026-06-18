@@ -9,11 +9,12 @@ interface AnimatedTextProps {
   once?: boolean;
 }
 
-export function AnimatedText({ text, className = "", el: Wrapper = "p" as any, once = true }: AnimatedTextProps) {
+export function AnimatedText({ text, className = "", el: Wrapper = "p" as React.ElementType, once = true }: AnimatedTextProps) {
   const ref = useRef(null);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMobile(window.innerWidth < 768);
   }, []);
 
@@ -72,6 +73,7 @@ export function AnimatedSection({
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMobile(window.innerWidth < 768);
   }, []);
 

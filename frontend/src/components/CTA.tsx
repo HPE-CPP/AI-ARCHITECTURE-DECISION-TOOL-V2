@@ -26,8 +26,11 @@ export function DottedSurface({ className }: DottedSurfaceProps) {
         if (!container) return;
 
         let animationId = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let renderer: any = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let geometry: any = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let material: any = null;
         let cancelled = false;
 
@@ -123,6 +126,7 @@ export function DottedSurface({ className }: DottedSurfaceProps) {
             animate();
 
             // Store resize handler so we can remove it on cleanup
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (renderer as any).__handleResize = handleResize;
         };
 
@@ -165,6 +169,7 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMounted(true);
     }, []);
 

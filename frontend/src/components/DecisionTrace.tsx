@@ -14,7 +14,7 @@ export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
       scale: 0.95,
       filter: "blur(4px)"
     },
-    visible: (i: number) => ({
+    visible: () => ({
       opacity: 1,
       x: 0,
       scale: 1,

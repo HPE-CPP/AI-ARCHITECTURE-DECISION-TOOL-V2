@@ -187,8 +187,8 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
         router.push(`/results/${res.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
       }, 400);
 
-    } catch (err: any) {
-      setError(err.message || "Failed to upload document");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to upload document");
       setUploading(false);
       setProgress(0);
       setStatusMessage("");

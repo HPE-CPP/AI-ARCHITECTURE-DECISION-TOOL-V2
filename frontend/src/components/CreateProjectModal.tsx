@@ -46,7 +46,7 @@ export function CreateProjectModal({
       setLoading(true);
       await onSubmit(name.trim(), description.trim());
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[CreateProject] Failed to save project:", err);
       setNameError("Unable to save project right now.");
     } finally {
