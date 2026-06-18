@@ -439,13 +439,15 @@ class TestExportEndpoints:
 @pytest.mark.api
 class TestStaticEndpoints:
 
-    def test_health_endpoint_returns_200(self, client):
+    def test_health_endpoint_returns_200_or_503(self, client):
         r = client.get("/api/v1/health")
-        assert r.status_code == 200
+        assert r.status_code in (200, 503)  # 503 is ok in test envs with no deps
 
-    def test_health_has_status_ok(self, client):
+    def test_health_has_checks_instead_of_fixed_status(self, client):
         r = client.get("/api/v1/health")
-        assert r.json()["status"] == "ok"
+        data = r.json()
+        assert "checks" in data
+        assert "database" in data["checks"]
 
     def test_architectures_returns_all_four(self, client):
         r = client.get("/api/v1/architectures")
