@@ -25,6 +25,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
   // Determine storage keys (per-project if projectId is set)
   const answersKey = projectId ? getProjectKey(projectId, "answers") : "questionnaire_answers";
   const stepKey = projectId ? getProjectKey(projectId, "questionnaire_step") : "questionnaire_step";
+  const lastAnswersKey = projectId ? getProjectKey(projectId, "last_answers") : "questionnaire_last_answers";
 
   useEffect(() => {
     getQuestionnaireOptions()
@@ -41,6 +42,18 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       } catch (e) {
         console.error("Failed to parse saved answers", e);
       }
+    } else {
+      // No in-progress answers — restore last submitted answers so edit mode
+      // pre-highlights previously chosen options.
+      const lastSaved = localStorage.getItem(lastAnswersKey);
+      if (lastSaved) {
+        try {
+          const parsed = JSON.parse(lastSaved);
+          setAnswers(parsed);
+        } catch (e) {
+          console.error("Failed to parse last submitted answers", e);
+        }
+      }
     }
 
     // Restore current step — so closing the tab mid-flow resumes where you left off
@@ -56,7 +69,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
     if (projectId) {
       localStorage.removeItem("questionnaire_answers");
     }
-  }, [answersKey, stepKey, projectId]);
+  }, [answersKey, stepKey, lastAnswersKey, projectId]);
 
   // Sort signals: Required first, then Optional
   const sortedSignals = useMemo(() => {
@@ -82,6 +95,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       return;
     }
     setError(null);
+    setResumed(false); // dismiss resume banner when moving forward
     if (currentStep < totalSteps - 1) {
       goToStep(currentStep + 1);
     } else {
@@ -96,6 +110,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
 
   const handleSkip = () => {
     setError(null);
+    setResumed(false); // dismiss resume banner when skipping
     if (currentStep < totalSteps - 1) {
       goToStep(currentStep + 1);
     } else {
@@ -130,6 +145,8 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
       // Notify parent of analysis ID for project tracking
       onAnalysisStart?.(result.analysis_id);
 
+      // Save answers before clearing so edit mode can restore them later
+      localStorage.setItem(lastAnswersKey, JSON.stringify(answers));
       // Clear saved progress now that submission succeeded
       localStorage.removeItem(answersKey);
       localStorage.removeItem(stepKey);
@@ -172,6 +189,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
   const handleStartOver = () => {
     localStorage.removeItem(answersKey);
     localStorage.removeItem(stepKey);
+    localStorage.removeItem(lastAnswersKey);
     setAnswers({});
     setCurrentStep(0);
     setResumed(false);

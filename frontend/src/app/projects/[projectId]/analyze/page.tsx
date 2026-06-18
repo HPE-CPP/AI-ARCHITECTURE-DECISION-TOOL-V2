@@ -44,6 +44,29 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
     }
   }, [projectId]);
 
+  // Detect whether the user has in-progress questionnaire answers saved
+  const [hasQAnswers, setHasQAnswers] = useState(false);
+  useEffect(() => {
+    const answersKey = getProjectKey(projectId, "answers");
+    try {
+      const saved = localStorage.getItem(answersKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setHasQAnswers(Object.keys(parsed).length > 0);
+      } else {
+        setHasQAnswers(false);
+      }
+    } catch {
+      setHasQAnswers(false);
+    }
+  }, [projectId]);
+
+  // Derive the hover label for the questionnaire card based on project state
+  const questionnaireHoverLabel =
+    project?.status === "completed" ? "Edit Inputs" :
+    hasQAnswers ? "Continue Answering" :
+    "Start";
+
   useEffect(() => {
     window.scrollTo(0, 0);
     const savedProvider = localStorage.getItem("llm_provider");
@@ -255,7 +278,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
                   Answer a few structured questions to help us understand your use case and recommend the best architecture.
                 </p>
                 <div className="absolute bottom-6 sm:bottom-10 opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-500 font-bold text-[color:var(--background)] flex items-center gap-2 sm:gap-3 uppercase tracking-tighter text-[10px] sm:text-sm">
-                  START <ArrowRight size={14} className="sm:w-5 sm:h-5" />
+                  {questionnaireHoverLabel} <ArrowRight size={14} className="sm:w-5 sm:h-5" />
                 </div>
               </div>
             </motion.div>

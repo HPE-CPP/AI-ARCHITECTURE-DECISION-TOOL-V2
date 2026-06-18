@@ -283,6 +283,7 @@ def get_questionnaire_options():
                 "required": key in [
                     "dataset_size", "data_volatility", "accuracy_requirement",
                     "latency_requirement", "domain_specificity",
+                    "user_scale", "citation_requirement", "context_size",
                 ],
             }
             for key, schema in SIGNAL_SCHEMA.items()
