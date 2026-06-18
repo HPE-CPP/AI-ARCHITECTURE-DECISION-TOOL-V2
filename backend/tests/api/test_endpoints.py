@@ -228,18 +228,18 @@ class TestUploadSecurityEdgeCases:
         # Must not 500
         assert r.status_code != 500
 
-    def test_no_auth_token_returns_401(self, auth_client, sample_txt_content):
-        """Without auth token, upload must return 401."""
+    def test_no_auth_token_returns_401(self, auth_client, sample_txt_content, seed_project_other_user):
+        """Without auth token, upload to a non-guest project must return 401."""
         r = auth_client.post(
-            self.URL,
+            self.URL + f"?project_id={seed_project_other_user.id}",
             files={"file": ("req.txt", io.BytesIO(sample_txt_content), "text/plain")},
         )
         assert r.status_code == 401
 
-    def test_invalid_auth_token_returns_401(self, auth_client, sample_txt_content):
+    def test_invalid_auth_token_returns_401(self, auth_client, sample_txt_content, seed_project_other_user):
         """An invalid Bearer token must be rejected."""
         r = auth_client.post(
-            self.URL,
+            self.URL + f"?project_id={seed_project_other_user.id}",
             files={"file": ("req.txt", io.BytesIO(sample_txt_content), "text/plain")},
             headers={"Authorization": "Bearer invalid.token.here"},
         )
@@ -453,11 +453,11 @@ class TestStaticEndpoints:
         data = r.json()
         assert set(data["architectures"].keys()) == {"RAG", "FineTuning", "CAG", "Hybrid"}
 
-    def test_questionnaire_options_has_10_signals(self, client):
+    def test_questionnaire_options_has_12_signals(self, client):
         r = client.get("/api/v1/questionnaire/options")
         assert r.status_code == 200
         data = r.json()
-        assert len(data["signals"]) == 10
+        assert len(data["signals"]) == 12
 
     def test_questionnaire_options_schema_complete(self, client):
         r = client.get("/api/v1/questionnaire/options")

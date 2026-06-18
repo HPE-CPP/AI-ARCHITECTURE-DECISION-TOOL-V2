@@ -248,21 +248,24 @@ def delete_project(
     uid: Optional[str] = Depends(verify_firebase_token)
 ):
     """Delete a project."""
+    if not uid:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     try:
         pid = uuid.UUID(project_id)
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    q = db.query(Project).filter(Project.id == pid)
-    if uid:
-        q = q.filter(Project.user_id == uid)
-
-    project = q.first()
+    project = db.query(Project).filter(
+        Project.id == pid,
+        Project.user_id == uid,
+    ).first()
     if not project:
         raise HTTPException(404, "Project not found")
-
-    if not uid and not project.user_id.startswith("guest_"):
-        raise HTTPException(401, "Authentication required for non-guest users")
 
     db.delete(project)
     db.commit()

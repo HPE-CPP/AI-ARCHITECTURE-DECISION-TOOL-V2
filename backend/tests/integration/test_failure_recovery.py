@@ -75,9 +75,7 @@ class TestOllamaFailureRecovery:
             mock_factory.return_value = mock_http
 
             with pytest.raises((RuntimeError, asyncio.TimeoutError)):
-                asyncio.get_event_loop().run_until_complete(
-                    client.generate("test prompt")
-                )
+                asyncio.run(client.generate("test prompt"))
 
     def test_ollama_connection_refused_raises_error(self):
         """LLMClient must raise RuntimeError on connection refused."""
@@ -94,9 +92,7 @@ class TestOllamaFailureRecovery:
             mock_factory.return_value = mock_http
 
             with pytest.raises(RuntimeError):
-                asyncio.get_event_loop().run_until_complete(
-                    client.generate("test prompt")
-                )
+                asyncio.run(client.generate("test prompt"))
 
     def test_vector_service_failure_is_non_fatal(self, client, sample_txt_content):
         """FAISS indexing failure must not fail the upload — it must be non-fatal."""
@@ -152,9 +148,7 @@ class TestContextWindowProtection:
             return '{"result": "ok"}'
 
         llm._ollama_generate = mock_ollama
-        asyncio.get_event_loop().run_until_complete(
-            llm.generate(short_prompt)
-        )
+        asyncio.run(llm.generate(short_prompt))
         assert captured and "[TRUNCATED" not in captured[0]
 
     def test_huge_prompt_gets_truncated(self):
@@ -172,9 +166,7 @@ class TestContextWindowProtection:
             return '{"result": "ok"}'
 
         llm._ollama_generate = mock_ollama
-        asyncio.get_event_loop().run_until_complete(
-            llm.generate(huge_prompt)
-        )
+        asyncio.run(llm.generate(huge_prompt))
         assert captured and "[TRUNCATED" in captured[0]
 
 

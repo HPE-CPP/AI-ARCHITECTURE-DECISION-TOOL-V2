@@ -25,8 +25,8 @@ class TestSignalExtractorQuestionnaire:
     def test_provided_answers_have_confidence_one(self):
         answers = {"dataset_size": "large"}
         result = self.extractor.extract_from_questionnaire(answers)
-        assert result["dataset_size"]["confidence"] == 1.0
         assert result["dataset_size"]["value"] == "large"
+        assert result["dataset_size"]["confidence"] == 0.85
         assert result["dataset_size"]["source_verified"] is True
 
     def test_missing_answers_have_null_value(self):
@@ -141,12 +141,13 @@ class TestSourceVerification:
         result = self.extractor._verify_sources(signals, doc_text, [])
         assert result["dataset_size"]["source_verified"] is False
 
-    def test_confidence_penalized_on_failed_verification(self):
+    def test_confidence_not_penalized_on_failed_verification(self):
         doc_text = "Our system processes 10 million records daily."
         signals = self._make_signals_with_source("Totally invented text nowhere in the doc.")
         original_conf = signals["dataset_size"]["confidence"]
         result = self.extractor._verify_sources(signals, doc_text, [])
-        assert result["dataset_size"]["confidence"] < original_conf
+        assert result["dataset_size"]["confidence"] == original_conf
+        assert result["dataset_size"]["source_verified"] is False
 
     def test_fuzzy_recovery_finds_partial_match(self):
         doc_text = "The system handles millions of records efficiently."
@@ -256,6 +257,8 @@ class TestEmptySignalsHelper:
         missing = self.extractor.get_missing_signals(empty_signals)
         assert set(missing) == set(SIGNAL_SCHEMA.keys())
 
-    def test_get_missing_signals_empty_when_all_complete(self, complete_signals):
-        missing = self.extractor.get_missing_signals(complete_signals)
+    def test_get_missing_signals_empty_when_all_complete(self):
+        from services.signal_extractor import SIGNAL_SCHEMA
+        complete = {k: {"value": "some_val", "confidence": 0.9} for k in SIGNAL_SCHEMA}
+        missing = self.extractor.get_missing_signals(complete)
         assert missing == []

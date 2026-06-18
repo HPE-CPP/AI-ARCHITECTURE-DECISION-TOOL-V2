@@ -378,7 +378,7 @@ describe('QuestionnaireForm — Submission', () => {
     await fillAndReachAnalyze()
     await userEvent.click(screen.getByRole('button', { name: /analyze/i }))
     await waitFor(() => {
-      expect(screen.getByText(/backend unavailable/i)).toBeDefined()
+      expect(screen.getByText(/unable to submit your answers/i)).toBeDefined()
     })
   })
 

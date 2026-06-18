@@ -47,7 +47,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
         setError("Firebase is not configured. Please add your Firebase credentials to .env.local or skip to continue.");
       } else {
         console.error("[Auth] Sign-in failed:", err);
-        setError("Sign-in failed. Please try again later.");
+        setError(err?.message || "Sign-in failed. Please try again later.");
       }
     } finally {
       setLoading(false);

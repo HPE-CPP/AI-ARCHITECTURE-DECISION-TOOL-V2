@@ -650,7 +650,7 @@ class SignalExtractor:
             (r"\breal[\s-]?time\s+(?:streaming|data|feeds?|updates?|ingestion|market\s+data)\b", "high", 0.78),
             (r"\b(?:continuously?|constantly|frequently)\s+(?:updat|chang|refresh)", "high", 0.68),
             (r"\bstream(?:ing|ed)\s+(?:data|feeds?|updates?)\b", "high", 0.74),
-            (r"\b(?:add|updat|refresh)\w*\s+(?:daily|every\s+day)\b", "moderate", 0.72),
+            (r"\b(?:add|updat|refresh)\w*\s+(?:daily|every\s+day)\b", "low", 0.72),
             (r"\b(?:add|updat|refresh)\w*\s+(?:hourly|every\s+hour)\b", "moderate", 0.75),
             (r"\b(?:add|updat|refresh)\w*\s+(?:weekly|every\s+week|each\s+week)\b", "low", 0.72),
             (r"\b(?:add|updat|refresh)\w*\s+(?:monthly|every\s+month)\b", "low", 0.68),
@@ -957,6 +957,24 @@ class SignalExtractor:
             key: {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0}
             for key in SIGNAL_SCHEMA
         }
+
+    def _infer_deployment(self, text: str) -> str | None:
+        """
+        Infer deployment_preference from text using heuristics alone.
+        Returns the value string (e.g. "on_premise") or None if no match.
+        Used by regression tests to verify specific heuristic patterns.
+        """
+        compiled = self._get_compiled_heuristics()
+        rules = compiled.get("deployment_preference", [])
+        for pattern, value, _conf in rules:
+            m = None
+            for candidate in pattern.finditer(text):
+                if not self._is_negated(text, candidate.start()):
+                    m = candidate
+                    break
+            if m:
+                return value
+        return None
 
     def get_missing_signals(self, signals: dict) -> list[str]:
         return [

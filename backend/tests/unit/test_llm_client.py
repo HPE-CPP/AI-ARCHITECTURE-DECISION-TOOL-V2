@@ -6,7 +6,7 @@ malformed output recovery, and timeout behavior.
 import json
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from services.llm_client import sanitize_json_string, get_llm_client
+from services.llm_client import LLMClient, sanitize_json_string, get_llm_client
 
 
 @pytest.mark.unit
@@ -62,6 +62,7 @@ class TestGetLLMClient:
     def test_get_openai_client(self):
         with patch("services.llm_client.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = "sk-test-key"
+            mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
             client = get_llm_client("openai")
             assert client.provider == "openai"
 
@@ -73,6 +74,7 @@ class TestGetLLMClient:
         with patch("services.llm_client.settings") as mock_settings:
             mock_settings.DEFAULT_LLM_PROVIDER = "openai"
             mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
             client = get_llm_client(None)
             assert client is not None
 
@@ -88,6 +90,7 @@ class TestLLMClientGenerateJson:
     async def test_parses_valid_json_response(self):
         with patch("services.llm_client.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
             mock_settings.DEFAULT_LLM_PROVIDER = "openai"
             client = get_llm_client("openai")
             client.generate = AsyncMock(return_value='{"key": "value"}')
@@ -98,6 +101,7 @@ class TestLLMClientGenerateJson:
     async def test_returns_error_dict_on_invalid_json(self):
         with patch("services.llm_client.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
             mock_settings.DEFAULT_LLM_PROVIDER = "openai"
             client = get_llm_client("openai")
             client.generate = AsyncMock(return_value="not valid json at all")
@@ -109,6 +113,7 @@ class TestLLMClientGenerateJson:
     async def test_handles_markdown_wrapped_json(self):
         with patch("services.llm_client.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
             mock_settings.DEFAULT_LLM_PROVIDER = "openai"
             client = get_llm_client("openai")
             client.generate = AsyncMock(return_value='```json\n{"dataset_size": "large"}\n```')
@@ -119,6 +124,7 @@ class TestLLMClientGenerateJson:
     async def test_handles_generate_exception(self):
         with patch("services.llm_client.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
             mock_settings.DEFAULT_LLM_PROVIDER = "openai"
             client = get_llm_client("openai")
             client.generate = AsyncMock(side_effect=Exception("Network failure"))
@@ -130,6 +136,7 @@ class TestLLMClientGenerateJson:
         """Returns dict even if values don't match schema types."""
         with patch("services.llm_client.settings") as mock_settings:
             mock_settings.OPENAI_API_KEY = "sk-test"
+            mock_settings.OPENAI_BASE_URL = "https://api.openai.com/v1"
             mock_settings.DEFAULT_LLM_PROVIDER = "openai"
             client = get_llm_client("openai")
             client.generate = AsyncMock(return_value='{"value": 42}')
