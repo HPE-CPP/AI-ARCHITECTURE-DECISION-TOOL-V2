@@ -280,8 +280,8 @@ export async function streamChatMessage(
         if (data.error) throw new Error(data.error);
         if (data.done) return;
         if (data.t) onToken(data.t);
-      } catch (e: any) {
-        if (e.message && !e.message.includes("JSON")) throw e;
+      } catch (err: unknown) {
+        if (err instanceof Error && !err.message.includes("JSON")) throw err;
       }
     }
   }

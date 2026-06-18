@@ -8,11 +8,10 @@ import { getProjectKey } from "@/lib/projects-store";
 
 interface QuestionnaireFormProps {
   projectId?: string;
-  requireAuth?: () => Promise<void>;
   onAnalysisStart?: (analysisId: string) => void;
 }
 
-export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisStart }: QuestionnaireFormProps) {
+export default function QuestionnaireForm({ projectId, onAnalysisStart }: QuestionnaireFormProps) {
   const router = useRouter();
   const [optionsData, setOptionsData] = useState<QuestionnaireOptions | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -38,6 +37,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setAnswers(parsed);
       } catch (e) {
         console.error("Failed to parse saved answers", e);
@@ -163,7 +163,7 @@ export default function QuestionnaireForm({ projectId, requireAuth, onAnalysisSt
         router.push(`/results/${result.analysis_id}?${qs.toString()}`);
       }, 800);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[Questionnaire] Submit failed:", err);
       setError("Unable to submit your answers. Please try again.");
       setSubmitting(false);

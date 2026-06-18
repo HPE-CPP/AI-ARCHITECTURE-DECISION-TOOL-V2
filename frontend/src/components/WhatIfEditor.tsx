@@ -383,13 +383,13 @@ const mergedResult = {
 };
 setPreviewResult(null);
 onResultUpdate?.(mergedResult);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[WhatIfEditor] Save failed:", e);
     setSaveError("Save failed. Please try again later.");
   } finally {
     setSaving(false);
   }
-}, [sliderValues, result.analysis_id, onResultUpdate]);
+}, [sliderValues, result.analysis_id, result.followup_questions, onResultUpdate]);
 
   // What to display
   const displayResult = previewResult ?? null;
@@ -776,7 +776,7 @@ onResultUpdate?.(mergedResult);
           </div>
           {!isOpen && (
             <p className="mt-4 text-xs text-[var(--text-secondary)] text-center opacity-60">
-              Click "Show sliders" above to explore different signal values
+              Click &quot;Show sliders&quot; above to explore different signal values
             </p>
           )}
         </div>

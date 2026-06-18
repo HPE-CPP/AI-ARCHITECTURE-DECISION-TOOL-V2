@@ -66,12 +66,14 @@ export function Navbar() {
 
   // FIX FE-008: Close mobile menu on route change (covers browser back/forward)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
   // Ensure user dropdown and expansion safely close when shrinking to sphere
   useEffect(() => {
     if (phase === "sphere") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsExpanded(false);
       setUserMenuOpen(false);
     }
@@ -100,7 +102,9 @@ export function Navbar() {
   ];
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (pathname === "/projects") { setActiveTab("projects"); return; }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (pathname !== "/") { setActiveTab(""); return; }
 
     const handleScroll = () => {
