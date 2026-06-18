@@ -68,10 +68,7 @@ artifacts/
 
 # Test configuration & dependencies
 **/pytest.ini
-**/vitest.config.ts
-**/playwright.config.ts
 **/requirements-test.txt
-frontend/tests/setup.ts
 
 # Type checking
 .mypy_cache/
@@ -135,7 +132,7 @@ PROJECT_CONTEXT_DETAILED.md
 generate_project_report.py
 
 # CI/CD & Hooks
-.github/
+# NOTE: .github/ must NOT be ignored — GitHub Actions reads workflow files from there
 .pre-commit-config.yaml
 
 # Generated PDF test files
