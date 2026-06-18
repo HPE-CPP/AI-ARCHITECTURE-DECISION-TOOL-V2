@@ -25,10 +25,12 @@ export function GlobalBackground() {
       if (window.innerWidth < 768) return;
       if (cancelled || !vantaRef.current) return;
 
-      const [THREE, { default: GLOBE }] = await Promise.all([
+      const [THREE, vantaGlobe] = await Promise.all([
         import("three"),
         import("vanta/dist/vanta.globe.min"),
       ]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const GLOBE = (vantaGlobe as any).default;
 
       if (cancelled || !vantaRef.current) return;
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { UploadCloud, FileText, AlertCircle, Loader2, CheckCircle2, X, AlertTriangle, FileX, RefreshCw } from "lucide-react";
 import { getProjectKey } from "@/lib/projects-store";
-import { uploadDocumentWithProgress } from "@/lib/api";
+import { uploadDocument } from "@/lib/api";
 
 const MAX_SIZE_BYTES = 50 * 1024 * 1024;
 const WARN_SIZE_BYTES = 20 * 1024 * 1024;
@@ -167,10 +167,12 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
       const providerRaw = localStorage.getItem("llm_provider") || "ollama";
       const provider = providerRaw === "groq" ? "openai" : providerRaw;
 
-      const res = await uploadDocumentWithProgress(file, provider, projectId, (pct, msg) => {
-        setProgress(pct);
-        setStatusMessage(msg);
-      });
+      const fakeProgress = setInterval(() => {
+        setProgress(p => Math.min(p + 5, 95));
+      }, 400);
+
+      const res = await uploadDocument(file, provider, projectId);
+      clearInterval(fakeProgress);
 
       setUploadPhase("processing");
       setProgress(100);

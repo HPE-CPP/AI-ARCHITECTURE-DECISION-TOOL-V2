@@ -74,7 +74,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
 
       await updateProject(anonProject.id, { userId: signedInUser.uid });
     }
-    onAuthSuccess(signedInUser);
+    if (signedInUser) onAuthSuccess(signedInUser);
   };
 
   const handleReplaceAndTransfer = async () => {
@@ -83,7 +83,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
       await deleteProject(collidingProjectId);
       await updateProject(anonProject.id, { userId: signedInUser.uid });
     }
-    onAuthSuccess(signedInUser);
+    if (signedInUser) onAuthSuccess(signedInUser);
   };
 
   const handleSignOutAndRename = async () => {
@@ -98,7 +98,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
     if (anonProject) {
       await deleteProject(anonProject.id);
     }
-    onAuthSuccess(signedInUser);
+    if (signedInUser) onAuthSuccess(signedInUser);
   };
 
   const backdropVariants: Variants = {
