@@ -369,7 +369,7 @@ export function ArchGuideChat({ analysisId, result }: Props) {
       setMessages(prev => [...prev, { role: "assistant", content: cleaned }]);
       setStreaming("");
       setFollowUps(buildFollowUps(trimmed, result));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStreaming("");
       console.error("[Chat] Stream failed:", err);
       setError("Unable to process your message right now.");

@@ -28,6 +28,7 @@ export default function LandingPage() {
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsDesktop(window.matchMedia('(min-width: 768px)').matches);
   }, []);
 

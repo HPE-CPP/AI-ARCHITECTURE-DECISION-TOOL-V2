@@ -5,7 +5,7 @@ import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionPipeline } from "@/components/DecisionPipeline";
 import { DecisionTrace } from "@/components/DecisionTrace";
-import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { Loader2, ArrowRight, ArrowLeft, Search, Activity, HelpCircle, AlertCircle, FileText, ShieldCheck, ShieldAlert, BookOpen, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { updateProject, updateAnalysisHistoryEntry, getAnalysisHistory, AnalysisHistoryEntry } from "@/lib/projects-store";
@@ -183,7 +183,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
           }
           return; // stop polling
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("[ResultsPage] Polling failed:", err);
         setError("Unable to retrieve the analysis results right now.");
         setLoading(false);
@@ -206,6 +206,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
     fetchResult();
     return () => clearTimeout(timeoutRef);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedParams.analysisId, authLoading]);
 
   // 2. When result is ready, fast-forward through any unseen stages (700ms each) then reveal
@@ -261,7 +262,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       const data = await submitFollowUp(resolvedParams.analysisId, followUpAnswers);
       setResult(data);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[ResultsPage] Follow-up submit failed:", err);
       // FIX: use component error state instead of native alert() which blocks the thread
       setError("Unable to submit your answers at this time.");
@@ -307,7 +308,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
       setResult(data);
       setIsEditingInputs(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[ResultsPage] Edit submit failed:", err);
       setError("Unable to update your inputs right now.");
     } finally {
@@ -836,14 +837,14 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
               </p>
 
               <div className="space-y-8 relative z-10">
-                {result.followup_questions.map((q, i) => (
+                {result.followup_questions.map((q) => (
                   <div key={q.signal} className="p-8 rounded-3xl bg-[color:var(--surface)] border border-[color:var(--border)] shadow-sm">
                     <div className="mb-6">
                       <h4 className="font-bold text-xl tracking-tight text-[color:var(--text-primary)] mb-2">{q.question}</h4>
                       {q.context && (
                         <div className="flex items-start gap-2 p-3 rounded-xl bg-[color:var(--background)] border border-[color:var(--border)] mt-3">
                           <FileText size={16} className="text-[color:var(--text-secondary)] shrink-0 mt-0.5" />
-                          <p className="text-sm text-[color:var(--text-secondary)] italic font-medium">"{q.context}"</p>
+                          <p className="text-sm text-[color:var(--text-secondary)] italic font-medium">&quot;{q.context}&quot;</p>
                         </div>
                       )}
                     </div>

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Hexagon, Moon, Sun, Menu, X, FolderOpen, LogOut, User } from "lucide-react";
 import { m, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
@@ -12,7 +12,6 @@ import { WelcomeBanner } from "@/components/WelcomeBanner";
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { scrollY } = useScroll();
   const scrollVelocity = useVelocity(scrollY);
   const [mounted, setMounted] = useState(false);
@@ -54,6 +53,7 @@ export function Navbar() {
   }, [user, pathname]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     setIsMobile(window.innerWidth < 768);
     const timer = setTimeout(() => {
@@ -104,7 +104,6 @@ export function Navbar() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (pathname === "/projects") { setActiveTab("projects"); return; }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (pathname !== "/") { setActiveTab(""); return; }
 
     const handleScroll = () => {

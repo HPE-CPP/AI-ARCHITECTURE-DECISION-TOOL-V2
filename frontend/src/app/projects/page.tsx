@@ -20,7 +20,7 @@ import { AnimatedSection } from "@/components/AnimatedScroll";
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { user, signIn, signOut } = useAuth();
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -39,6 +39,7 @@ export default function ProjectsPage() {
 
   // Load projects on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     const userId = user?.uid ?? null;
 
@@ -163,6 +164,7 @@ export default function ProjectsPage() {
   // Countdown tick
   useEffect(() => {
     if (!undoInfo) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (undoInfo.secondsLeft <= 0) { setUndoInfo(null); return; }
     const t = setTimeout(
       () => setUndoInfo(prev => prev ? { ...prev, secondsLeft: prev.secondsLeft - 1 } : null),

@@ -27,6 +27,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
 
   const router = useRouter();
   const searchParams = useSearchParams();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [project, setProject] = useState<any>(null);
 
   const [provider, setProvider] = useState<"openai" | "groq">("openai");
@@ -52,6 +53,7 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
       const saved = localStorage.getItem(answersKey);
       if (saved) {
         const parsed = JSON.parse(saved);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setHasQAnswers(Object.keys(parsed).length > 0);
       } else {
         setHasQAnswers(false);
@@ -70,8 +72,12 @@ function AnalyzePageInner({ projectId }: { projectId: string }) {
   useEffect(() => {
     window.scrollTo(0, 0);
     const savedProvider = localStorage.getItem("llm_provider");
-    if (savedProvider === "openai" || savedProvider === "groq") setProvider(savedProvider);
-    else setProvider("openai");
+    if (savedProvider === "openai" || savedProvider === "groq") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setProvider(savedProvider);
+    } else {
+      setProvider("openai");
+    }
 
     // Force user to pick a mode unless they explicitly navigate via Edit Inputs (with a ?mode= param)
     const modeParam = searchParams.get("mode") as "upload" | "questionnaire" | null;
@@ -329,7 +335,7 @@ export default function AnalyzePage({ params }: { params: Promise<{ projectId: s
   const { projectId } = React.use(params);
 
   if (!projectId) {
-    if (typeof window !== "undefined") window.location.href = "/projects";
+    if (typeof window !== "undefined") window.location.assign("/projects");
     return null;
   }
 

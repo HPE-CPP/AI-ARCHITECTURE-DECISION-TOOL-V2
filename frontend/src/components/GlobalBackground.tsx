@@ -4,6 +4,7 @@ import { useTheme } from "./ThemeProvider";
 
 export function GlobalBackground() {
   const vantaRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vantaEffect = useRef<any>(null);
   const [mounted, setMounted] = useState(false);
   const { theme, resolvedTheme } = useTheme();
@@ -68,6 +69,7 @@ export function GlobalBackground() {
       }
 
       if (effect.scene) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         effect.scene.traverse((obj: any) => {
           if (obj.material) {
             if (obj.material.blending === null || obj.material.blending === undefined) {
@@ -87,6 +89,7 @@ export function GlobalBackground() {
     // Defer init until the browser is idle so it never blocks LCP
     let idleId: number | ReturnType<typeof setTimeout>;
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       idleId = (window as any).requestIdleCallback(initVanta, { timeout: 2000 });
     } else {
       idleId = setTimeout(initVanta, 200);
@@ -95,6 +98,7 @@ export function GlobalBackground() {
     return () => {
       cancelled = true;
       if (typeof window !== "undefined" && "cancelIdleCallback" in window) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).cancelIdleCallback(idleId as number);
       } else {
         clearTimeout(idleId as ReturnType<typeof setTimeout>);
