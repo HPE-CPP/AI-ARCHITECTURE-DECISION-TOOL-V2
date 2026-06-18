@@ -54,6 +54,11 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--text-primary)] bg-[var(--background)] text-[var(--text-primary)] mb-8 font-semibold text-sm shadow-sm backdrop-blur-sm">
             <CheckCircle size={16} /> Analysis Complete
           </div>
+          {result.project_name && (
+            <p className="text-sm sm:text-base text-[color:var(--text-secondary)] font-medium mb-1 tracking-wide">
+              Project: <span className="text-[color:var(--text-primary)] font-bold">{result.project_name}</span>
+            </p>
+          )}
           <h2 className="text-[var(--text-secondary)] font-bold tracking-widest uppercase mb-4 opacity-80">Recommended Architecture</h2>
           <h1 className="text-4xl sm:text-6xl md:text-8xl font-black tracking-tighter text-[var(--text-primary)] mb-4 sm:mb-6 drop-shadow-xl">
             {topArch?.full_name || recommended}
