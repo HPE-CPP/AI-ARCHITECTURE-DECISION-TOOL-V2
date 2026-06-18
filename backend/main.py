@@ -3,6 +3,9 @@ AI Architecture Decision Platform - Main FastAPI Application
 """
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -10,7 +13,7 @@ from dotenv import load_dotenv
 
 from config import settings
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import engine, SessionLocal
 import app.db.models  # noqa: F401
 
 from app.routers import upload, analysis, questionnaire, projects, users, chat, score_preview, share_router
@@ -19,6 +22,9 @@ from app.limiter import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from alembic.config import Config as AlembicConfig
+from alembic import command as alembic_command
+from sqlalchemy import inspect
 
 # Load environment variables
 load_dotenv()
@@ -78,12 +84,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
 
-    logger.info("Creating database tables (if not exist)...")
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables ready.")
-    except Exception as e:
-        logger.error(f"Could not create database tables: {e}")
+    logger.info("Running Alembic migrations...")
+    alembic_ini = Path(__file__).resolve().parent / "alembic.ini"
+    alembic_cfg = AlembicConfig(str(alembic_ini))
+    inspector = inspect(engine)
+    if not inspector.has_table("alembic_version"):
+        alembic_command.stamp(alembic_cfg, "head")
+        logger.info("Stamped existing database with Alembic head.")
+    else:
+        alembic_command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations applied.")
 
     logger.info("Verifying Qdrant connection...")
     try:
