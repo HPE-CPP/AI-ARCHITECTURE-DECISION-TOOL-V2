@@ -40,7 +40,7 @@ def _update_step(session_id: str, step: str, status: str, details: str | None = 
             "timestamp": datetime.now(timezone.utc).isoformat(),
             **({"details": details} if details else {}),
         })
-        cache_service.set("decision_trace", session_id, trace, ex=3600)
+        cache_service.set("decision_trace", session_id, trace, ttl=3600)
     except Exception:
         pass
 
