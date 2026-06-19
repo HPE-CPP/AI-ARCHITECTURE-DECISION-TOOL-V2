@@ -603,7 +603,7 @@ onResultUpdate?.(mergedResult);
         </div>
 
         {/* Custom checkpoint track */}
-                    <div className="relative h-8 flex items-center">
+                    <div className="relative h-8 flex items-center px-3">
                       {/* Hidden native range -- handles drag/keyboard, sits above everything */}
                       <input
                         type="range"
@@ -616,12 +616,13 @@ onResultUpdate?.(mergedResult);
                         style={{ zIndex: 10 }}
                       />
                       {/* Background track */}
-                      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
+                      <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 h-[3px] rounded-full bg-[var(--border)]" />
                       {/* Filled track */}
                       <div
                         className="absolute top-1/2 -translate-y-1/2 h-[3px] rounded-full transition-all duration-200"
                         style={{
-                          width: `${pct}%`,
+                          left: "12px",
+                          width: `calc((100% - 24px) * ${pct} / 100)`,
                           background: "var(--primary)",
                         }}
                       />
@@ -638,7 +639,7 @@ onResultUpdate?.(mergedResult);
                 title={cfg.optionLabels[dotIdx]}
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 transition-all duration-200 focus:outline-none"
                 style={{
-                  left: `calc(8px + (100% - 16px) * ${dotPct} / 100)`,
+                  left: `calc(12px + (100% - 24px) * ${dotPct} / 100)`,
                   width:  isCurrent ? 22 : 16,
                   height: isCurrent ? 22 : 16,
                   borderColor: isActive ? "var(--primary)" : "var(--border)",
@@ -652,7 +653,7 @@ onResultUpdate?.(mergedResult);
         </div>
 
         {/* Checkpoint labels */}
-        <div className="relative mt-1.5" style={{ height: 14 }}>
+        <div className="relative mt-1.5 px-3" style={{ height: 14 }}>
           {cfg.optionLabels.map((label, dotIdx) => {
             const dotPct = total > 1 ? (dotIdx / (total - 1)) * 100 : 0;
             const isCurrent = dotIdx === idx;
@@ -662,7 +663,7 @@ onResultUpdate?.(mergedResult);
                 key={dotIdx}
                 className="absolute text-[9px] transition-all duration-200 whitespace-nowrap"
                 style={{
-                  left: `calc(8px + (100% - 16px) * ${dotPct} / 100)`,
+                  left: `calc(12px + (100% - 24px) * ${dotPct} / 100)`,
                   transform: align === "center" ? "translateX(-50%)" : align === "right" ? "translateX(-100%)" : "none",
                   color: isCurrent ? "var(--primary)" : "var(--text-secondary)",
                   fontWeight: isCurrent ? 700 : 400,
