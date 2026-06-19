@@ -26,6 +26,7 @@ class AnalysisResponse(BaseModel):
     followup_questions: Optional[list] = None
     sensitivity: Optional[dict[str, Any]] = None
     decision_trace: Optional[list] = None
+    error_message: Optional[str] = None
     created_at: Optional[str] = None
     document_info: Optional[dict[str, Any]] = None
     cost_analysis: Optional[dict[str, Any]] = None

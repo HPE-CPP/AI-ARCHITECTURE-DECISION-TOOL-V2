@@ -459,6 +459,11 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
 
   // --- ERROR STATE ---
   if (error || result?.status === "error") {
+    // Extract error details — from error_message (always available) or decision_trace
+    const errorSteps = result?.decision_trace?.filter(t => t.status === "error" || t.status === "rejected") || [];
+    const lastError = errorSteps[errorSteps.length - 1];
+    const errorMsg = result?.error_message || lastError?.details || error || "Something went wrong while processing your request. Please try again.";
+
     return (
       <div className="w-full min-h-screen pt-24 px-4 flex items-center justify-center">
         <div className="glass-panel p-10 rounded-3xl border-red-500/20 text-center max-w-lg shadow-2xl w-full">
@@ -466,9 +471,14 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
             <AlertCircle className="text-red-500" size={40} />
           </div>
           <h2 className="text-3xl font-bold text-red-500 mb-4 tracking-tight">Analysis Unavailable</h2>
-          <p className="text-[color:var(--text-secondary)] font-medium leading-relaxed mb-8">
-            Something went wrong while processing your request. Please try again.
+          <p className="text-[color:var(--text-secondary)] font-medium leading-relaxed mb-6">
+            {errorMsg}
           </p>
+          {result?.decision_trace && result.decision_trace.length > 0 && (
+            <div className="mb-6 text-left">
+              <DecisionTrace trace={result.decision_trace} />
+            </div>
+          )}
           <div className="flex items-center justify-center gap-4">
             <button
               onClick={() => window.location.reload()}
