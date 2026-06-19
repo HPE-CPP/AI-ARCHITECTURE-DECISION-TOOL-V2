@@ -151,7 +151,14 @@ def get_analysis(
 
     # Session still processing or errored
     if session_row.status in ("draft", "processing"):
-        return {"analysis_id": session_id, "status": session_row.status}
+        trace = cache_service.get("decision_trace", session_id)
+        resp = {
+            "analysis_id": session_id,
+            "status": session_row.status,
+            "decision_trace": trace or [],
+        }
+        _inject_project_info(resp, session_row, db)
+        return resp
 
     if session_row.status == "error":
         return {"analysis_id": session_id, "status": "error"}
