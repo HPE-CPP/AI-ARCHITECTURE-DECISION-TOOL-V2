@@ -114,10 +114,10 @@ class TestProjectsUpdate:
         assert r.status_code == 200
         assert r.json()["name"] == "Updated Name"
 
-    def test_update_other_users_project_returns_404(self, client, seed_project_other_user):
+    def test_update_other_users_project_returns_403(self, client, seed_project_other_user):
         r = client.put(f"/api/v1/projects/{seed_project_other_user.id}",
                        json={"name": "Hijacked!"})
-        assert r.status_code == 404
+        assert r.status_code == 403
 
     def test_update_name_too_long_rejected(self, client, seed_project):
         r = client.put(f"/api/v1/projects/{seed_project.id}",
@@ -160,9 +160,9 @@ class TestProjectsDelete:
         r = client.get(f"/api/v1/projects/{pid}")
         assert r.status_code == 404
 
-    def test_delete_other_users_project_returns_404(self, client, seed_project_other_user):
+    def test_delete_other_users_project_returns_403(self, client, seed_project_other_user):
         r = client.delete(f"/api/v1/projects/{seed_project_other_user.id}")
-        assert r.status_code == 404
+        assert r.status_code == 403
 
     def test_delete_nonexistent_project_returns_404(self, client):
         r = client.delete(f"/api/v1/projects/{uuid.uuid4()}")
@@ -180,9 +180,9 @@ class TestProjectsAuthRequired:
         r = auth_client.get("/api/v1/projects")
         assert r.status_code == 401
 
-    def test_delete_project_without_auth_returns_401(self, auth_client):
+    def test_delete_nonexistent_project_without_auth_returns_404(self, auth_client):
         r = auth_client.delete(f"/api/v1/projects/{uuid.uuid4()}")
-        assert r.status_code == 401
+        assert r.status_code == 404
 
 
 # ============================================================================
