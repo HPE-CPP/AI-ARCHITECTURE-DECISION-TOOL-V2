@@ -270,25 +270,24 @@ def delete_project(
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token)
 ):
-    """Delete a project."""
-    if not uid:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
+    """Delete a project. Allows guests to delete their own projects."""
     try:
         pid = uuid.UUID(project_id)
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    project = db.query(Project).filter(
-        Project.id == pid,
-        Project.user_id == uid,
-    ).first()
+    project = db.query(Project).filter(Project.id == pid).first()
     if not project:
         raise HTTPException(404, "Project not found")
+
+    if uid:
+        # Authenticated — must own the project
+        if project.user_id != uid:
+            raise HTTPException(403, "You do not have permission to delete this project")
+    else:
+        # Unauthenticated — must be a guest project
+        if not project.user_id.startswith("guest_"):
+            raise HTTPException(401, "Authentication required for non-guest projects")
 
     db.delete(project)
     db.commit()
