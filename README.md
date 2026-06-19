@@ -136,6 +136,27 @@ Application startup complete.
 Uvicorn running on http://0.0.0.0:8000
 ```
 
+#### 2.10 Run backend via Docker (Alternative)
+
+The backend comes with a production-ready `Dockerfile`. You can build and run it using Docker instead of running it locally.
+
+**Build the Image**
+
+```bash
+cd backend
+docker build -t archguide-backend .
+```
+
+**Run the Container**
+
+Make sure to pass the necessary environment variables (e.g., `DATABASE_URL`, `OPENAI_API_KEY`). The easiest way is to use your existing `.env` file:
+
+```bash
+docker run -p 8000:8000 --env-file .env archguide-backend
+```
+
+The API will be available at [http://localhost:8000](http://localhost:8000).
+
 ---
 
 ### 3. Frontend Setup
