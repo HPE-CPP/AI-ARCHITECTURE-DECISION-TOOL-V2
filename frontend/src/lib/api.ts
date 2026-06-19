@@ -18,7 +18,6 @@ export interface AnalysisResult {
   status: string;
   project_name?: string;
   project_id?: string;
-  error_message?: string;
   signals?: Signals;
   scores?: Record<string, number>;
   recommended?: string;
