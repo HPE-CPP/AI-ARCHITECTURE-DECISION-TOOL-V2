@@ -107,17 +107,26 @@ def list_projects(
     db: DBSession = Depends(get_db),
     uid: Optional[str] = Depends(verify_firebase_token)
 ):
-    """List all projects for the authenticated user.
+    """List projects — filter by user_id.
 
-    P7-006 FIX: Added limit/offset pagination (default 50, max 200).
-    Without this, a user with thousands of projects would exhaust server
-    memory serialising every ORM object on every list call.
+    When the caller is authenticated (uid is set), they can query:
+    - Their own projects (user_id == uid)
+    - Guest projects (user_id starts with "guest_") — needed to discover
+      anonymous projects for the transfer flow after signing in.
     """
-    actual_user_id = uid if uid else user_id
-    if not actual_user_id:
-        raise HTTPException(401, "Authentication required")
-    if not uid and not actual_user_id.startswith("guest_"):
-        raise HTTPException(401, "Authentication required for non-guest users")
+    if uid:
+        # Authenticated — allow querying own projects or guest projects
+        if user_id and user_id.startswith("guest_"):
+            actual_user_id = user_id
+        else:
+            actual_user_id = uid
+    else:
+        # Unauthenticated — must provide a guest user_id
+        actual_user_id = user_id
+        if not actual_user_id:
+            raise HTTPException(401, "Authentication required")
+        if not actual_user_id.startswith("guest_"):
+            raise HTTPException(401, "Authentication required for non-guest users")
 
     q = db.query(Project).filter(Project.user_id == actual_user_id)
     total = q.count()
@@ -200,21 +209,36 @@ def update_project(
     except ValueError:
         raise HTTPException(404, "Project not found")
 
-    q = db.query(Project).filter(Project.id == pid)
-    if uid:
-        q = q.filter(Project.user_id == uid)
-
-    project = q.first()
+    # Find the project — when authenticated, try uid-scoped first, then fall back
+    # to guest projects so the transfer flow works.
+    project = db.query(Project).filter(Project.id == pid).first()
     if not project:
         raise HTTPException(404, "Project not found")
 
-    if not uid and not project.user_id.startswith("guest_"):
-        raise HTTPException(401, "Authentication required for non-guest users")
+    if uid:
+        # Authenticated caller — must own the project OR it must be a guest project
+        if project.user_id != uid and not project.user_id.startswith("guest_"):
+            raise HTTPException(403, "You do not have permission to update this project")
+    else:
+        # Unauthenticated caller — must match guest ID
+        if not project.user_id.startswith("guest_"):
+            raise HTTPException(401, "Authentication required for non-guest users")
+
+    if data.user_id is not None:
+        # Only allow user_id reassignment for guest-to-authenticated transfer
+        if not uid:
+            raise HTTPException(401, "Authentication required to transfer project ownership")
+        if not project.user_id.startswith("guest_"):
+            raise HTTPException(400, "Can only transfer projects owned by a guest user")
+        if data.user_id != uid:
+            raise HTTPException(403, "Project can only be transferred to your own account")
+        project.user_id = data.user_id
 
     if data.name is not None:
-        # Check name uniqueness (skip if same project)
+        # Check name uniqueness under the (possibly new) user_id
+        effective_user_id = data.user_id if data.user_id is not None else project.user_id
         conflict = db.query(Project).filter(
-            Project.user_id == project.user_id,
+            Project.user_id == effective_user_id,
             Project.name == data.name.strip(),
             Project.id != pid,
         ).first()
@@ -226,7 +250,6 @@ def update_project(
         project.description = data.description.strip()
     if data.status is not None:
         project.status = data.status
-    # SEC-002 FIX: data.user_id removed from schema — ownership is immutable
     if data.analysis_id is not None:
         project.analysis_id = data.analysis_id
     if data.mode is not None:

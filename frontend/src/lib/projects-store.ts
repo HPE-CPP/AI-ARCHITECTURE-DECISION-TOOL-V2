@@ -101,7 +101,7 @@ export async function updateProject(id: string, patch: Partial<Project> & { user
   if (patch.name !== undefined) payload.name = patch.name;
   if (patch.description !== undefined) payload.description = patch.description;
   if (patch.status !== undefined) payload.status = patch.status;
-  // H-001/L-001 FIX: user_id is immutable after creation; do not send in PUT.
+  // Guest-to-authenticated transfer: sends user_id to reassign project ownership
   if (patch.analysisId !== undefined) payload.analysis_id = patch.analysisId;
   if (patch.userId !== undefined) payload.user_id = patch.userId;
   if (patch.mode !== undefined) payload.mode = patch.mode;
