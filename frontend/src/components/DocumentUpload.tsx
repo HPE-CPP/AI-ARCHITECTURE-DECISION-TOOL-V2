@@ -169,7 +169,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
 
       const res = await uploadDocument(file, provider, projectId);
 
-      setStatusMessage("Processing started — redirecting to results page");
+      setStatusMessage("Redirecting to results page...");
 
       onAnalysisStart?.(res.analysis_id);
 
