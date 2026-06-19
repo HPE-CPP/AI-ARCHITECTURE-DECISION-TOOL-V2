@@ -16,6 +16,7 @@ export interface Signals {
 export interface AnalysisResult {
   analysis_id: string;
   status: string;
+  error_message?: string;
   project_name?: string;
   project_id?: string;
   signals?: Signals;
