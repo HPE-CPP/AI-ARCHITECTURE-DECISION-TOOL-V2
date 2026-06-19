@@ -118,7 +118,7 @@ describe('DocumentUpload', () => {
     const btn = screen.getByRole('button', { name: /begin analysis/i })
     await userEvent.click(btn)
     await waitFor(() => {
-      expect(screen.getByText(/analyzing/i)).toBeDefined()
+      expect(screen.getByText(/contacting server/i)).toBeDefined()
     })
     resolveUpload({ analysis_id: 'done', status: 'complete' })
   })
