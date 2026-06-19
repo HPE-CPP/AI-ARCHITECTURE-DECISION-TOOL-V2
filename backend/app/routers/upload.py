@@ -217,9 +217,18 @@ async def upload_document(
     content = await file.read()
     file_size = len(content)
 
+    if file_size == 0:
+        raise HTTPException(400, "File is empty — nothing to process")
+
     valid, msg = doc_parser.validate_file(safe_filename, file_size)
     if not valid:
         raise HTTPException(400, msg)
+
+    # Minimum content check (synchronous — before background task)
+    text_preview = content.decode("utf-8", errors="replace").strip()
+    word_count = len(text_preview.split())
+    if word_count < 5:
+        raise HTTPException(422, "Document is too short. Please upload a document with more content.")
 
     p_uuid = None
     if project_id:
