@@ -159,24 +159,17 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
       if (requireAuth) await requireAuth();
 
       setUploading(true);
-      setUploadPhase("uploading");
+      setUploadPhase("processing");
       setError(null);
       setProgress(0);
-      setStatusMessage("Analyzing...");
+      setStatusMessage("Contacting server...");
 
       const providerRaw = localStorage.getItem("llm_provider") || "ollama";
       const provider = providerRaw === "groq" ? "openai" : providerRaw;
 
-      const fakeProgress = setInterval(() => {
-        setProgress(p => Math.min(p + 5, 95));
-      }, 400);
-
       const res = await uploadDocument(file, provider, projectId);
-      clearInterval(fakeProgress);
 
-      setUploadPhase("processing");
-      setProgress(100);
-      setStatusMessage("Analysis complete");
+      setStatusMessage("Processing started — redirecting to results page");
 
       onAnalysisStart?.(res.analysis_id);
 
@@ -185,9 +178,7 @@ export default function DocumentUpload({ projectId, requireAuth, onAnalysisStart
         localStorage.setItem(getProjectKey(projectId, "mode"), "upload");
       }
 
-      setTimeout(() => {
-        router.push(`/results/${res.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
-      }, 400);
+      router.push(`/results/${res.analysis_id}${projectId ? `?projectId=${projectId}` : ""}`);
 
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to upload document");
