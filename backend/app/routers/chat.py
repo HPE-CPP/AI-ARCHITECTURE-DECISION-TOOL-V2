@@ -187,8 +187,39 @@ def _is_relevant(message: str) -> bool:
     return True       # ambiguous — let LLM handle it
 
 
-def _build_system_prompt(session, result, signals) -> str:
+def _build_result_dict(result, signals) -> dict:
+    """Convert ORM result + signals into the dict format expected by generate_cost_analysis."""
+    sig_dict = {}
+    for s in signals:
+        if s.value:
+            sig_dict[s.signal_name] = {"value": s.value}
+    return {
+        "recommended": result.recommended_architecture,
+        "scores": result.scores or {},
+        "signals": sig_dict,
+    }
+
+
+def _format_cost_for_prompt(cost_data: dict) -> str:
+    """Build a compact cost summary line from cost analysis data."""
+    if not cost_data:
+        return ""
+    arches = cost_data.get("architectures", {})
+    parts = []
+    for name in ["RAG", "FineTuning", "CAG", "Hybrid"]:
+        a = arches.get(name)
+        if not a:
+            continue
+        monthly = a.get("monthly_total", [0, 0])
+        setup   = a.get("setup_cost", [0, 0])
+        parts.append(f"{name}: Rs.{monthly[0]:,}-{monthly[1]:,}/month + Rs.{setup[0]:,}-{setup[1]:,} setup")
+    return "; ".join(parts)
+
+
+def _build_system_prompt(session, result, signals, cost_data: dict | None = None) -> str:
     """Build a compact system prompt — shorter prompt = faster first token."""
+    from app.services.cost_analysis import generate_cost_analysis
+
     rec   = result.recommended_architecture
     conf  = round(result.confidence_score * 100)
     scores = result.scores or {}
@@ -202,6 +233,12 @@ def _build_system_prompt(session, result, signals) -> str:
     why_not_lines = "; ".join(
         f"{k}: {v[:80]}" for k, v in (result.why_not or {}).items() if k != rec
     )
+
+    # Generate cost analysis if not provided
+    if cost_data is None:
+        result_dict = _build_result_dict(result, signals)
+        cost_data = generate_cost_analysis(result_dict)
+    cost_line = _format_cost_for_prompt(cost_data)
 
     return (
         "You are ArchGuide, an AI assistant answering questions about the architecture "
@@ -218,10 +255,13 @@ def _build_system_prompt(session, result, signals) -> str:
         "- If asked something completely unrelated to architecture analysis (e.g. weather, sports, "
         "politics, coding help, jokes), politely say you can only answer questions about "
         "the architecture analysis.\n"
+        "- Always express costs and pricing in Indian Rupees (₹), never in dollars ($).\n"
+        "- Use ONLY the cost data provided below — do not invent prices.\n"
         f"Recommended: {rec} ({conf}% confidence). Scores: {score_line}.\n"
         f"Signals: {sig_line}.\n"
         f"Why {rec}: {suitability[:120]}\n"
-        f"Why not others: {why_not_lines[:200]}"
+        f"Why not others: {why_not_lines[:200]}\n"
+        f"Costs (INR): {cost_line}"
     )
 
 
