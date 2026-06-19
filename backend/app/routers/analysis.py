@@ -161,7 +161,17 @@ def get_analysis(
         return resp
 
     if session_row.status == "error":
-        return {"analysis_id": session_id, "status": "error"}
+        trace = cache_service.get("decision_trace", session_id)
+        error_msg = None
+        if trace:
+            error_steps = [s for s in trace if s.get("status") in ("error", "rejected")]
+            if error_steps:
+                error_msg = error_steps[-1].get("details")
+        return {
+            "analysis_id": session_id,
+            "status": "error",
+            "error_message": error_msg or "Processing failed. Please try uploading your document again.",
+        }
 
     # Load signals + result from DB
     signals = signal_service.get_signals(db, session_id)

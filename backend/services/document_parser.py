@@ -60,8 +60,8 @@ def validate_document_relevance(full_text: str, pages: list[dict]) -> tuple[bool
             False,
             "archguide_report",
             "You've uploaded an ArchGuide results report, not a requirements document. "
-            "Please upload your original project specification, requirements doc, or use-case description instead — "
-            "not the PDF that ArchGuide generated."
+            "Please upload your original project specification, requirements doc, or use-case description instead. "
+            "Not the PDF that ArchGuide generated."
         )
 
     # 1. Minimum length

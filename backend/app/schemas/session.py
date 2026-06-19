@@ -29,6 +29,7 @@ class AnalysisResponse(BaseModel):
     created_at: Optional[str] = None
     document_info: Optional[dict[str, Any]] = None
     cost_analysis: Optional[dict[str, Any]] = None
+    error_message: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
