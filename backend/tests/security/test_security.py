@@ -277,5 +277,5 @@ class TestContentValidation:
                 "/api/v1/upload",
                 files={"file": ("data.txt", io.BytesIO(json_content), "text/plain")},
             )
-        # 422 likely (too few words) but not 500
-        assert response.status_code in (200, 400, 422)
+        # 202 (async) or 422 (too few words)
+        assert response.status_code in (202, 400, 422)

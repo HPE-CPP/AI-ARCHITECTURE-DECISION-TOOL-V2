@@ -227,7 +227,7 @@ async def upload_document(
     # Minimum content check (synchronous — before background task)
     text_preview = content.decode("utf-8", errors="replace").strip()
     word_count = len(text_preview.split())
-    if word_count < 5:
+    if word_count < 10:
         raise HTTPException(422, "Document is too short. Please upload a document with more content.")
 
     p_uuid = None
