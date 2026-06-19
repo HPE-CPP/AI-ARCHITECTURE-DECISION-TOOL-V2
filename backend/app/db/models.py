@@ -124,7 +124,6 @@ class Session(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False
     )
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     project: Mapped["Project | None"] = relationship("Project", back_populates="sessions")
     signals: Mapped[list["Signal"]] = relationship(

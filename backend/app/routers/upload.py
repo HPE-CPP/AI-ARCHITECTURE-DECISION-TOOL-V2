@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, Query, Depends, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session as DBSession
 
@@ -45,7 +45,7 @@ def _update_step(session_id: str, step: str, status: str, details: str | None = 
         pass
 
 
-async def _process_document_background(session_id: str, file_path: str, safe_filename: str, provider: str) -> None:
+def _process_document_background(session_id: str, file_path: str, safe_filename: str, provider: str) -> None:
     """Run the full processing pipeline as a background task.
 
     Writes progress to Redis at each stage so the results page polling
@@ -59,15 +59,14 @@ async def _process_document_background(session_id: str, file_path: str, safe_fil
 
         # Stage 1: Parse
         _update_step(session_id, "parse", "in_progress")
-        doc_data = await doc_parser.parse(file_path, safe_filename)
+        doc_data = asyncio.run(doc_parser.parse(file_path, safe_filename))
         _update_step(session_id, "parse", "complete",
                      details=f"Extracted {doc_data['word_count']} words from {doc_data['total_pages']} pages")
 
         if doc_data["word_count"] < 10:
             session_row.status = "error"
-            session_row.error_message = "The document appears to be empty or contains too little text. Please upload a requirements document, product specification, or use-case description with sufficient detail."
             db.commit()
-            _update_step(session_id, "parse", "error", details="The document appears to be empty or contains too little text. Please upload a requirements document, product specification, or use-case description with sufficient detail.")
+            _update_step(session_id, "parse", "error", details="Document is empty or contains too little text.")
             return
 
         # Stage 2: Document relevance gate
@@ -78,7 +77,6 @@ async def _process_document_background(session_id: str, file_path: str, safe_fil
         if not is_relevant:
             _update_step(session_id, "relevance_check", "rejected", details=relevance_msg)
             session_row.status = "error"
-            session_row.error_message = relevance_msg
             db.commit()
             return
         _update_step(session_id, "relevance_check", "complete",
@@ -94,11 +92,11 @@ async def _process_document_background(session_id: str, file_path: str, safe_fil
         # Stage 4: Vector indexing
         _update_step(session_id, "vector_indexing", "in_progress")
         try:
-            num_chunks = await vector_service.index_document(
+            num_chunks = asyncio.run(vector_service.index_document(
                 session_id=session_id,
                 full_text=doc_data["full_text"],
                 pages=doc_data.get("pages", []),
-            )
+            ))
             _update_step(session_id, "vector_indexing", "complete",
                          details=f"Indexed {num_chunks} text chunks")
         except Exception as exc:
@@ -108,17 +106,17 @@ async def _process_document_background(session_id: str, file_path: str, safe_fil
 
         # Stage 5: Signal extraction
         _update_step(session_id, "signal_extraction", "in_progress")
-        signals = await signal_service.extract_and_persist(
+        # Use run() for the async extraction
+        signals = asyncio.run(signal_service.extract_and_persist(
             db=db, session_id=session_id, document_data=doc_data, provider=provider,
-        )
+        ))
         extracted_count = sum(1 for s in signals.values() if s.get("value"))
         missing_count = sum(1 for s in signals.values() if not s.get("value"))
 
         if extracted_count == 0:
             _update_step(session_id, "signal_extraction", "error",
-                         details="No architecture signals could be extracted. Please upload a document describing system requirements, data sources, use cases, or technical constraints.")
+                         details="No architecture signals could be extracted from this document.")
             session_row.status = "error"
-            session_row.error_message = "No architecture signals could be extracted. Please upload a document describing system requirements, data sources, use cases, or technical constraints."
             db.commit()
             return
 
@@ -132,7 +130,6 @@ async def _process_document_background(session_id: str, file_path: str, safe_fil
         ]
         if len(confident_signals) < 3:
             session_row.status = "error"
-            session_row.error_message = f"Only {len(confident_signals)} signals could be extracted with sufficient confidence (minimum 3 required). Try uploading a more detailed requirements document with clearer technical specifications."
             db.commit()
             _update_step(session_id, "confidence_gate", "error",
                          details=f"Only {len(confident_signals)} signals with sufficient confidence (minimum 3 required).")
@@ -184,7 +181,6 @@ async def _process_document_background(session_id: str, file_path: str, safe_fil
             session_row = db.query(SessionModel).get(uuid.UUID(session_id))
             if session_row:
                 session_row.status = "error"
-                session_row.error_message = str(exc)
                 db.commit()
         except Exception:
             pass
@@ -199,6 +195,7 @@ async def _process_document_background(session_id: str, file_path: str, safe_fil
 @limiter.limit("4/minute")
 async def upload_document(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     provider: str = Query(default=getattr(settings, "DEFAULT_LLM_PROVIDER", "ollama"), pattern="^(openai|ollama)$"),
     project_id: str | None = Query(default=None),
@@ -268,9 +265,10 @@ async def upload_document(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    asyncio.create_task(_process_document_background(
+    background_tasks.add_task(
+        _process_document_background,
         session_id, file_path, safe_filename, provider,
-    ))
+    )
 
     return JSONResponse(
         status_code=202,

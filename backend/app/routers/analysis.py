@@ -161,13 +161,7 @@ def get_analysis(
         return resp
 
     if session_row.status == "error":
-        trace = cache_service.get("decision_trace", session_id)
-        return {
-            "analysis_id": session_id,
-            "status": "error",
-            "decision_trace": trace or [],
-            "error_message": getattr(session_row, "error_message", None),
-        }
+        return {"analysis_id": session_id, "status": "error"}
 
     # Load signals + result from DB
     signals = signal_service.get_signals(db, session_id)
