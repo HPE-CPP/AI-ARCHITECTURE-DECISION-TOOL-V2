@@ -19,8 +19,7 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=60)
     description: Optional[str] = Field(default=None, max_length=200)
     status: Optional[str] = None
-    # SEC-002 FIX: user_id intentionally removed — project ownership is immutable
-    # after creation and must never be reassignable via API.
+    user_id: Optional[str] = Field(default=None, max_length=255)
     analysis_id: Optional[str] = None
     mode: Optional[str] = None
 
