@@ -36,26 +36,45 @@ export default function ProjectsPage() {
     secondsLeft: number;
   } | null>(null);
   const pendingDeleteRef = React.useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const loadedRef = React.useRef(false);  // true after first successful fetch
 
   // Load projects on mount
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    const userId = user?.uid ?? null;
 
-    const loadProjects = async () => {
+    let cancelled = false;
+    const initialLoad = async () => {
       setLoadingProjects(true);
-      const data = await getProjects(userId);
-      // Filter out any project currently in the undo countdown (still in backend but hidden)
-      const pendingId = pendingDeleteRef.current?.id;
-      setProjects(pendingId ? data.filter(p => p.id !== pendingId) : data);
+      const data = await getProjects(user?.uid ?? null);
+      if (cancelled) return;
+      setProjects(data);
+      loadedRef.current = true;
       setLoadingProjects(false);
     };
-    loadProjects();
 
-    window.addEventListener("projects-updated", loadProjects);
-    return () => window.removeEventListener("projects-updated", loadProjects);
-  }, [user]);
+    // Only show loading spinner on very first mount
+    if (!loadedRef.current) {
+      initialLoad();
+    } else {
+      // Auth change while already loaded — silent refresh
+      getProjects(user?.uid ?? null).then(data => {
+        if (!cancelled) setProjects(data);
+      });
+    }
+
+    // Silent refresh — no loading spinner on subsequent calls
+    const silentRefresh = async () => {
+      const data = await getProjects(user?.uid ?? null);
+      if (!cancelled) setProjects(data);
+    };
+
+    window.addEventListener("projects-updated", silentRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("projects-updated", silentRefresh);
+    };
+  }, [user]);  // re-run only when auth state changes
 
   // Debounce search
   useEffect(() => {
