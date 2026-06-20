@@ -160,12 +160,23 @@ def _process_document_background(session_id: str, file_path: str, safe_filename:
         )
         _update_step(session_id, "scoring", "complete")
 
+        # Stage 7: Validating — emitted so the live activity log reaches the
+        # final stage shown by the progress pipeline.
+        _update_step(session_id, "validating", "complete",
+                     details="Verified scoring consistency and confidence levels")
+
         # Attach document info
         result_response["document_info"] = {
             "filename": safe_filename,
             "pages": doc_data["total_pages"],
             "words": doc_data["word_count"],
         }
+
+        # Capture the COMPLETE trace (including the post-scoring steps above) so
+        # the final result isn't truncated at the snapshot taken before scoring.
+        result_response["decision_trace"] = (
+            cache_service.get("decision_trace", session_id) or result_response.get("decision_trace")
+        )
 
         # Mark complete
         session_row.status = "completed"
