@@ -9,11 +9,11 @@ interface AuthModalProps {
   onAuthSuccess: (user: { displayName: string | null; uid: string; email: string | null }) => void;
   onSkip: () => void;
   signIn: () => Promise<{ displayName: string | null; uid: string; email: string | null }>;
-  signOut: () => Promise<void>;
+  signOut?: () => Promise<void>; // kept for API compat — no longer used inside the modal
   mode?: "default" | "project-limit" | "questionnaire-required";
 }
 
-export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, signOut, mode = "default" }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode = "default" }: AuthModalProps) {
   const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "discard-confirm">("main");
   const [loading, setLoading] = useState(false);
   const [transferring, setTransferring] = useState(false);
@@ -41,9 +41,18 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      if (err?.code === "auth/popup-closed-by-user" || err?.code === "auth/cancelled-popup-request") {
+      const code = err?.code ?? "";
+      if (
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request" ||
+        code === "auth/popup-already-open"
+      ) {
+        // User dismissed the popup or clicked twice — not an error, just reset
         setError(null);
-      } else if (err?.code === "auth/configuration-not-found" || err?.code === "auth/invalid-api-key") {
+      } else if (code === "auth/missing-or-invalid-nonce") {
+        // Stale credential from a previous popup attempt — safe to retry
+        setError("Something went wrong with Google's login flow. Please click 'Continue with Google' again.");
+      } else if (code === "auth/configuration-not-found" || code === "auth/invalid-api-key") {
         setError("Firebase is not configured. Please add your Firebase credentials to .env.local or skip to continue.");
       } else {
         console.error("[Auth] Sign-in failed:", err);
@@ -73,6 +82,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
   const handleTransferSelected = async () => {
     if (!signedInUser) return;
     setTransferring(true);
+    setError(null);
     try {
       const { updateProject, deleteProject, getProjects } = await import("@/lib/projects-store");
       const userProjects = await getProjects(signedInUser.uid);
@@ -80,32 +90,37 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
 
       for (const project of anonProjects) {
         if (selectedIds.has(project.id)) {
+          // Skip collision silently — user keeps their existing project with that name
           if (!existingNames.has(project.name.trim().toLowerCase())) {
             await updateProject(project.id, { userId: signedInUser.uid });
           }
-          // collision: leave as-is (guest project stays, user keeps their existing one)
         } else {
           await deleteProject(project.id);
         }
       }
+      onAuthSuccess(signedInUser);
+    } catch {
+      setError("Transfer failed. Please try again.");
     } finally {
       setTransferring(false);
     }
-    onAuthSuccess(signedInUser);
   };
 
   const handleDiscardAll = async () => {
     if (!signedInUser) return;
     setTransferring(true);
+    setError(null);
     try {
       const { deleteProject } = await import("@/lib/projects-store");
       for (const project of anonProjects) {
         await deleteProject(project.id);
       }
+      onAuthSuccess(signedInUser);
+    } catch {
+      setError("Failed to discard projects. Please try again.");
     } finally {
       setTransferring(false);
     }
-    onAuthSuccess(signedInUser);
   };
 
   const handleSkipRequest = () => setStep("skip-confirm");
@@ -301,6 +316,21 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       )}
                       {selectedIds.size === anonProjects.length ? "Deselect all" : "Select all"}
                     </button>
+
+                    {/* Transfer error */}
+                    <AnimatePresence>
+                      {error && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-start gap-2"
+                        >
+                          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                          {error}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     {/* Project checklist */}
                     <div className="flex flex-col gap-2 max-h-52 overflow-y-auto mb-6 pr-1">
