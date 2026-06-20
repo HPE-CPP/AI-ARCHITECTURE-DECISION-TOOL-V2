@@ -111,28 +111,32 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
   ) => {
     const { updateProject, deleteProject } = await import("@/lib/projects-store");
     const conflictById = new Map(conflictList.map(c => [c.id, c]));
+    let failures = 0;
     for (const project of anonProjects) {
       if (selectedIds.has(project.id)) {
         const conflict = conflictById.get(project.id);
         if (conflict) {
           const res = resolutionMap[project.id];
           if (!res || res.action === "skip") {
-            await deleteProject(project.id);
+            await deleteProject(project.id).catch(() => {});
           } else if (res.action === "replace") {
-            await deleteProject(conflict.existingId);
+            await deleteProject(conflict.existingId).catch(() => {});
             const ok = await updateProject(project.id, { userId: signedInUser!.uid });
-            if (!ok) throw new Error("replace failed");
+            if (!ok) failures++;
           } else {
             const ok = await updateProject(project.id, { userId: signedInUser!.uid, name: res.newName.trim() });
-            if (!ok) throw new Error("rename failed");
+            if (!ok) failures++;
           }
         } else {
           const ok = await updateProject(project.id, { userId: signedInUser!.uid });
-          if (!ok) throw new Error("transfer failed");
+          if (!ok) failures++;
         }
       } else {
-        await deleteProject(project.id);
+        await deleteProject(project.id).catch(() => {});
       }
+    }
+    if (failures > 0 && failures === anonProjects.filter(p => selectedIds.has(p.id)).length) {
+      throw new Error("All transfers failed");
     }
   };
 
