@@ -52,6 +52,9 @@ RUN groupadd --gid 1001 appgroup && \
 # Copy only the application source — .dockerignore excludes secrets and junk
 COPY --chown=appuser:appgroup . .
 
+# Pre-create runtime directories that the app writes to at startup
+RUN mkdir -p faiss_index && chown appuser:appgroup faiss_index
+
 # Switch to non-root user
 USER appuser
 
