@@ -117,7 +117,7 @@ describe('getAnalysis', () => {
 
 // ─── submitQuestionnaire ───────────────────────────────────────────────────
 describe('submitQuestionnaire', () => {
-  it('sends answers wrapped in { answers: {} } JSON body (FIX FE-005)', async () => {
+  it('sends answers as flat top-level signal fields (not wrapped)', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify(MOCK_ANALYSIS_RESULT), { status: 200 })
     )
@@ -127,10 +127,12 @@ describe('submitQuestionnaire', () => {
     expect(options?.method).toBe('POST')
     // Provider goes as query param, not in body
     expect(String(url)).toContain('provider=ollama')
-    // Body must be wrapped: { answers: {...} }
+    // Body must be flat: { dataset_size: ..., data_volatility: ... }. Wrapping it
+    // under an "answers" key made every signal arrive as null and scored 0.
     const body = JSON.parse(options?.body as string)
-    expect(body).toHaveProperty('answers')
-    expect(body.answers.dataset_size).toBe('large')
+    expect(body).not.toHaveProperty('answers')
+    expect(body.dataset_size).toBe('large')
+    expect(body.data_volatility).toBe('high')
     // Provider must NOT be in the body
     expect(body).not.toHaveProperty('provider')
   })
