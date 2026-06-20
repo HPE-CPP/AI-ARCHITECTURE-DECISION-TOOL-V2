@@ -89,13 +89,43 @@ function getStageIndex(status: string, stages: StageList): number {
 // Time thresholds for document flow (seconds per stage: Parsing/Extracting/Scoring/Validating)
 const STAGE_TIME_THRESHOLDS = [0, 14, 38, 54];
 
-function getDisplayStageIndex(backendStatus: string, elapsedSeconds: number, stages: StageList): number {
-  const backendIndex = getStageIndex(backendStatus, stages);
+// Map a backend decision_trace step name to the canonical status its stage uses.
+// The trace uses granular step names (parse, vector_indexing, signal_extraction,
+// scoring, validating); the stage groups key off the frontend status names.
+function traceStepToStatus(step: string): string {
+  const s = step.toLowerCase();
+  if (s.includes("scor")) return "scoring";
+  if (s.includes("validat") || s.includes("recommend") || s.includes("complete")) return "validating";
+  if (s.includes("signal") || s.includes("extract") || s.includes("confidence") || s.includes("missing")) return "extracting_signals";
+  return "parsing"; // parse / relevance / section / vector indexing
+}
+
+// Real progress derived from the actual trace (not a timer).
+function getTraceStageIndex(trace: { step: string }[] | undefined, stages: StageList): number {
+  if (!trace || trace.length === 0) return 0;
+  let max = 0;
+  for (const t of trace) {
+    max = Math.max(max, getStageIndex(traceStepToStatus(t.step), stages));
+  }
+  return max;
+}
+
+function getDisplayStageIndex(
+  backendStatus: string,
+  elapsedSeconds: number,
+  trace: { step: string }[] | undefined,
+  stages: StageList,
+): number {
+  const real = Math.max(getStageIndex(backendStatus, stages), getTraceStageIndex(trace, stages));
   let timeIndex = 0;
   for (let i = STAGE_TIME_THRESHOLDS.length - 1; i >= 0; i--) {
     if (elapsedSeconds >= STAGE_TIME_THRESHOLDS[i]) { timeIndex = i; break; }
   }
-  return Math.max(backendIndex, Math.min(timeIndex, stages.length - 1));
+  // The timer may nudge the stepper at most ONE stage ahead of real progress,
+  // so it feels alive without claiming "Validating" while signals are still
+  // being extracted.
+  const capped = Math.min(timeIndex, real + 1, stages.length - 1);
+  return Math.max(real, capped);
 }
 
 function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> }) {
@@ -212,7 +242,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   // 2. When result is ready, fast-forward through any unseen stages (700ms each) then reveal
   useEffect(() => {
     if (!resultReady) return;
-    const currentStage = forcedStageIndex ?? getDisplayStageIndex(result?.status || "queued", elapsedSeconds, activeStages);
+    const currentStage = forcedStageIndex ?? getDisplayStageIndex(result?.status || "queued", elapsedSeconds, result?.decision_trace, activeStages);
     const lastStage = activeStages.length - 1;
     if (currentStage >= lastStage) {
       const t = setTimeout(() => setLoading(false), 600);
@@ -220,7 +250,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     }
     const t = setTimeout(() => setForcedStageIndex(currentStage + 1), 700);
     return () => clearTimeout(t);
-  }, [resultReady, forcedStageIndex, result?.status, elapsedSeconds, activeStages]);
+  }, [resultReady, forcedStageIndex, result?.status, result?.decision_trace, elapsedSeconds, activeStages]);
 
   // 3. Scroll to top + mark project completed + update history when results arrive
   useEffect(() => {
@@ -335,7 +365,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
   // --- LOADING STATE ---
   if (loading || ["queued", "processing", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "")) {
     const currentStatus = result?.status || "queued";
-    const activeIndex = forcedStageIndex ?? getDisplayStageIndex(currentStatus, elapsedSeconds, activeStages);
+    const activeIndex = forcedStageIndex ?? getDisplayStageIndex(currentStatus, elapsedSeconds, result?.decision_trace, activeStages);
     const activeStage = activeStages[activeIndex];
     const ActiveIcon = activeStage.Icon;
 

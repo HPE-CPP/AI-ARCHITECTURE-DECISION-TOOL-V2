@@ -5,7 +5,16 @@ import { CheckCircle2, Clock, PlayCircle, XCircle, AlertTriangle } from "lucide-
 import { motion, Variants } from "framer-motion";
 
 export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
-  if (!trace || trace.length === 0) return null;
+  // The backend logs each stage twice (an "in_progress" entry, then a
+  // "complete" one). Collapse to a single card per step, keeping the latest
+  // status, so activities aren't shown duplicated.
+  const steps = React.useMemo(() => {
+    const byStep = new Map<string, TraceStep>();
+    for (const step of trace || []) byStep.set(step.step, step);
+    return Array.from(byStep.values());
+  }, [trace]);
+
+  if (steps.length === 0) return null;
 
   const stepVariants: Variants = {
     hidden: {
@@ -45,13 +54,13 @@ export function DecisionTrace({ trace }: { trace: TraceStep[] }) {
         {/* Connecting Line */}
         <div className="absolute top-2 bottom-2 left-[10px] sm:left-[11px] w-0.5 bg-[color:var(--border)]" />
 
-        {trace.map((step, index) => {
+        {steps.map((step, index) => {
           let displayStatus = step.status;
-          
+
           // Fix: Backend sometimes leaves 'scoring' as 'in_progress' even after it finishes.
           // If the 'recommend' step exists, scoring is definitely complete.
           if (step.step === "scoring" && step.status === "in_progress") {
-            const hasRecommend = trace.some(t => t.step.toLowerCase().includes("recommend"));
+            const hasRecommend = steps.some(t => t.step.toLowerCase().includes("recommend"));
             if (hasRecommend) {
               displayStatus = "complete";
             }
