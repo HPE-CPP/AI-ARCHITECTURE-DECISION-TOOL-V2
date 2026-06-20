@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState, use, Suspense } from "react";
 import { AnalysisResult } from "@/lib/api";
+import { fetchWithApiFallback } from "@/lib/api-base";
 import { ResultsDashboard } from "@/components/ResultsDashboard";
 import { CostAnalysis } from "@/components/CostAnalysis";
 import { DecisionPipeline } from "@/components/DecisionPipeline";
@@ -8,10 +9,13 @@ import { DecisionTrace } from "@/components/DecisionTrace";
 import { AlertCircle, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
-// Fetch shared analysis — no auth token needed
+// Fetch shared analysis — no auth token needed.
+// Uses the shared API base helper (same as the rest of the app) so the backend
+// URL is normalized (scheme added, trailing slash stripped). Reading
+// NEXT_PUBLIC_API_URL raw here previously broke shared links whenever the env
+// var lacked an https:// scheme, since fetch then treated it as a relative URL.
 async function getSharedAnalysis(id: string): Promise<AnalysisResult> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const res = await fetch(`${apiUrl}/api/v1/share/${id}`);
+  const res = await fetchWithApiFallback(`/api/v1/share/${id}`);
   if (!res.ok) throw new Error("Analysis not found or not available for sharing");
   return res.json();
 }
