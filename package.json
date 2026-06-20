@@ -1,0 +1,7 @@
+{
+  "name": "archguide",
+  "private": true,
+  "devDependencies": {
+    "next": "16.2.0"
+  }
+}
