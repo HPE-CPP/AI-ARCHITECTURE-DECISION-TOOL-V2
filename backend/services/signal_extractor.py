@@ -26,9 +26,10 @@ from services.document_parser import (
 logger = logging.getLogger(__name__)
 
 # ── Tunables ─────────────────────────────────────────────────────────────────
-MAX_CONTEXT_CHARS = 8_000   # single-call limit; fits comfortably in 4k-token models
-CHUNK_SIZE        = 5_000   # chars per chunk when splitting large docs
-CHUNK_OVERLAP     = 500     # overlap so signals spanning chunk boundaries are caught
+MAX_CONTEXT_CHARS       = 12_000  # single-call limit — increased to reduce chunking
+MAX_TOTAL_CONTEXT_CHARS = 20_000  # hard cap before chunking: 20k → ≤4 chunks → ~14k tokens
+CHUNK_SIZE              = 5_000   # chars per chunk when splitting large docs
+CHUNK_OVERLAP           = 500     # overlap so signals spanning chunk boundaries are caught
 # ─────────────────────────────────────────────────────────────────────────────
 
 SIGNAL_SCHEMA = {
@@ -263,6 +264,11 @@ class SignalExtractor:
 
         # ── 4. Build context from relevant pages (document order preserved) ────
         context = self._build_context(relevant_pages)
+
+        # Hard cap: prevents too many LLM chunks on large documents.
+        # 20k chars → max 4 chunks → ~14k tokens → stays within Groq free-tier TPM limit.
+        if len(context) > MAX_TOTAL_CONTEXT_CHARS:
+            context = context[:MAX_TOTAL_CONTEXT_CHARS]
 
         # ── 5. LLM extraction — single call or parallel chunks ─────────────────
         if len(context) <= MAX_CONTEXT_CHARS:

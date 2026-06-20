@@ -224,11 +224,14 @@ async def upload_document(
     if not valid:
         raise HTTPException(400, msg)
 
-    # Minimum content check (synchronous — before background task)
-    text_preview = content.decode("utf-8", errors="replace").strip()
-    word_count = len(text_preview.split())
-    if word_count < 10:
-        raise HTTPException(422, "Document is too short. Please upload a document with more content.")
+    # Minimum content check for plain text only.
+    # PDF/DOCX are binary — decoding 50 MB of binary as UTF-8 is wasteful and
+    # produces garbage "words". Real content checks happen during background parsing.
+    ext = os.path.splitext(safe_filename)[1].lower()
+    if ext == ".txt":
+        text_preview = content.decode("utf-8", errors="replace").strip()
+        if len(text_preview.split()) < 10:
+            raise HTTPException(422, "Document is too short. Please upload a document with more content.")
 
     p_uuid = None
     if project_id:
