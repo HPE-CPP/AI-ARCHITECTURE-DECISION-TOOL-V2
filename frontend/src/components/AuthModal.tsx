@@ -13,6 +13,23 @@ interface AuthModalProps {
   mode?: "default" | "project-limit" | "questionnaire-required";
 }
 
+/**
+ * Build a rename suggestion that does not collide with any name already taken.
+ * Tries "X (Guest)", then "X (Guest 2)", "X (Guest 3)", ... until one is free.
+ * `taken` holds lowercased names already in use.
+ */
+function uniqueGuestName(base: string, taken: Set<string>): string {
+  let candidate = `${base} (Guest)`;
+  if (!taken.has(candidate.toLowerCase())) return candidate;
+  let n = 2;
+  candidate = `${base} (Guest ${n})`;
+  while (taken.has(candidate.toLowerCase())) {
+    n++;
+    candidate = `${base} (Guest ${n})`;
+  }
+  return candidate;
+}
+
 export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode = "default" }: AuthModalProps) {
   const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "name-conflicts" | "discard-confirm">("main");
   const [loading, setLoading] = useState(false);
@@ -23,6 +40,9 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [conflicts, setConflicts] = useState<{ id: string; name: string; existingId: string }[]>([]);
   const [resolutions, setResolutions] = useState<Record<string, { action: "replace" | "skip" | "rename"; newName: string }>>({});
+  // Lowercased names of every project already in the signed-in account — used to
+  // validate rename targets so the user cannot pick a name that would 409.
+  const [existingNames, setExistingNames] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isOpen) {
@@ -35,6 +55,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
       setSelectedIds(new Set());
       setConflicts([]);
       setResolutions({});
+      setExistingNames(new Set());
     }
   }, [isOpen]);
 
@@ -105,39 +126,136 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
     }
   };
 
+  /**
+   * Move the selected guest projects into the signed-in account.
+   *
+   * This is intentionally resilient: it never throws and never leaves the user
+   * stranded. It re-reads the account's current project names up front so that
+   * any rename which would collide (e.g. a prior transfer already created
+   * "02 (Guest)") is auto-bumped to a free name before the request is sent.
+   * Returns the names of projects that genuinely could not be moved.
+   */
   const doTransfer = async (
     conflictList: { id: string; name: string; existingId: string }[],
     resolutionMap: Record<string, { action: "replace" | "skip" | "rename"; newName: string }>
-  ) => {
-    const { updateProject, deleteProject } = await import("@/lib/projects-store");
+  ): Promise<string[]> => {
+    const { updateProject, deleteProject, getProjects } = await import("@/lib/projects-store");
     const conflictById = new Map(conflictList.map(c => [c.id, c]));
-    let failures = 0;
+
+    // Fresh snapshot of names already taken in the target account. Renames are
+    // checked against this so the backend's 409 (name already exists) cannot
+    // happen for the common case, even with stale UI state.
+    const taken = new Set<string>();
+    const authProjects = await getProjects(signedInUser!.uid);
+    for (const p of authProjects) taken.add(p.name.trim().toLowerCase());
+
+    const failedNames: string[] = [];
+
     for (const project of anonProjects) {
-      if (selectedIds.has(project.id)) {
-        const conflict = conflictById.get(project.id);
-        if (conflict) {
-          const res = resolutionMap[project.id];
-          if (!res || res.action === "skip") {
-            await deleteProject(project.id).catch(() => {});
-          } else if (res.action === "replace") {
-            await deleteProject(conflict.existingId).catch(() => {});
-            const ok = await updateProject(project.id, { userId: signedInUser!.uid });
-            if (!ok) failures++;
-          } else {
-            const ok = await updateProject(project.id, { userId: signedInUser!.uid, name: res.newName.trim() });
-            if (!ok) failures++;
-          }
-        } else {
-          const ok = await updateProject(project.id, { userId: signedInUser!.uid });
-          if (!ok) failures++;
-        }
-      } else {
+      // Unselected guest projects are left exactly as they are — they stay
+      // guest projects and remain visible after the user signs out again.
+      if (!selectedIds.has(project.id)) {
+        continue;
+      }
+
+      const conflict = conflictById.get(project.id);
+
+      // No name clash — straight ownership transfer. No name change is sent, so
+      // the backend cannot 409, and re-running it on an already-owned project is
+      // an idempotent no-op (safe to retry).
+      if (!conflict) {
+        const ok = await updateProject(project.id, { userId: signedInUser!.uid });
+        if (ok) taken.add(project.name.trim().toLowerCase());
+        else failedNames.push(project.name);
+        continue;
+      }
+
+      const res = resolutionMap[project.id];
+
+      if (!res || res.action === "skip") {
+        // Keep the existing account project, drop the guest one.
         await deleteProject(project.id).catch(() => {});
+      } else if (res.action === "replace") {
+        // Overwrite: remove the existing project, then transfer ownership while
+        // keeping the original name (no name change -> cannot 409).
+        await deleteProject(conflict.existingId).catch(() => {});
+        taken.delete(project.name.trim().toLowerCase());
+        const ok = await updateProject(project.id, { userId: signedInUser!.uid });
+        if (ok) taken.add(project.name.trim().toLowerCase());
+        else failedNames.push(project.name);
+      } else {
+        // Rename: pick the user's chosen name, but if it is already taken in the
+        // account auto-bump it to a free "(Guest N)" variant so the move always
+        // lands instead of failing with a duplicate-name error.
+        let name = res.newName.trim() || `${project.name} (Guest)`;
+        if (taken.has(name.toLowerCase())) {
+          name = uniqueGuestName(project.name, taken);
+        }
+        const ok = await updateProject(project.id, { userId: signedInUser!.uid, name });
+        if (ok) taken.add(name.toLowerCase());
+        else failedNames.push(project.name);
       }
     }
-    if (failures > 0 && failures === anonProjects.filter(p => selectedIds.has(p.id)).length) {
-      throw new Error("All transfers failed");
+
+    return failedNames;
+  };
+
+  /**
+   * Finalize after a transfer attempt. Only on a fully clean run do we clear the
+   * guest session and hand control back to the app — otherwise we stay in the
+   * modal so the user can retry (safe, because every step above is idempotent).
+   */
+  const finishTransfer = async (failedNames: string[]) => {
+    if (failedNames.length > 0) {
+      setError(
+        `Could not move ${failedNames.length} project${failedNames.length > 1 ? "s" : ""} (${failedNames.join(", ")}). Please try again.`
+      );
+      setTransferring(false);
+      return;
     }
+    // Only forget the guest session when nothing was left behind. If the user
+    // kept some projects as guest, preserve the guest IDs so those projects
+    // stay reachable the next time they sign out.
+    const keptCount = anonProjects.filter(p => !selectedIds.has(p.id)).length;
+    if (keptCount === 0) {
+      const { clearGuestIds } = await import("@/lib/projects-store");
+      clearGuestIds();
+    }
+    setTransferring(false);
+    onAuthSuccess(signedInUser!);
+  };
+
+  /**
+   * Validate a single rename target against everything else being transferred.
+   * Returns a human-readable problem, or null when the name is acceptable.
+   */
+  const renameIssue = (conflictId: string): string | null => {
+    const res = resolutions[conflictId];
+    if (!res || res.action !== "rename") return null;
+    const name = res.newName.trim();
+    if (!name) return "Enter a name";
+    const lower = name.toLowerCase();
+    // Already exists in the account (the conflicting project stays, so any match is bad).
+    if (existingNames.has(lower)) return "You already have a project with this name";
+    const conflictIds = new Set(conflicts.map(c => c.id));
+    // Clashes with another conflict's chosen rename, or with a replace keeping its name.
+    for (const c of conflicts) {
+      if (c.id === conflictId) continue;
+      const other = resolutions[c.id];
+      if (other?.action === "rename" && other.newName.trim().toLowerCase() === lower) {
+        return "Same name chosen for another project";
+      }
+      if (other?.action === "replace" && c.name.trim().toLowerCase() === lower) {
+        return "Matches another project being transferred";
+      }
+    }
+    // Clashes with a non-conflicting guest project moving over with its own name.
+    for (const p of anonProjects) {
+      if (selectedIds.has(p.id) && !conflictIds.has(p.id) && p.name.trim().toLowerCase() === lower) {
+        return "Matches another project being transferred";
+      }
+    }
+    return null;
   };
 
   const handleTransferSelected = async () => {
@@ -150,6 +268,10 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
       const existingByName = new Map(
         userProjects.map((p: { id: string; name: string }) => [p.name.trim().toLowerCase(), p.id as string])
       );
+      const existingSet = new Set<string>(
+        userProjects.map((p: { name: string }) => p.name.trim().toLowerCase())
+      );
+      setExistingNames(existingSet);
 
       const foundConflicts: { id: string; name: string; existingId: string }[] = [];
       for (const project of anonProjects) {
@@ -160,9 +282,22 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
       }
 
       if (foundConflicts.length > 0) {
+        // Seed the "taken" set with account names plus any non-conflicting guest
+        // projects that will move over keeping their own name, so each default
+        // rename we suggest is guaranteed free (this is exactly what prevented
+        // the old "02 (Guest)" already-exists failure).
+        const taken = new Set<string>(existingSet);
+        const conflictIds = new Set(foundConflicts.map(c => c.id));
+        for (const project of anonProjects) {
+          if (selectedIds.has(project.id) && !conflictIds.has(project.id)) {
+            taken.add(project.name.trim().toLowerCase());
+          }
+        }
         const defaultResolutions: Record<string, { action: "replace" | "skip" | "rename"; newName: string }> = {};
         for (const c of foundConflicts) {
-          defaultResolutions[c.id] = { action: "rename", newName: `${c.name} (Guest)` };
+          const newName = uniqueGuestName(c.name, taken);
+          taken.add(newName.toLowerCase());
+          defaultResolutions[c.id] = { action: "rename", newName };
         }
         setConflicts(foundConflicts);
         setResolutions(defaultResolutions);
@@ -171,16 +306,12 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
         return;
       }
 
-      await doTransfer([], {});
+      const failed = await doTransfer([], {});
+      await finishTransfer(failed);
     } catch {
       setError("Transfer failed. Please try again.");
       setTransferring(false);
-      return;
     }
-    const { clearGuestIds } = await import("@/lib/projects-store");
-    clearGuestIds();
-    setTransferring(false);
-    onAuthSuccess(signedInUser);
   };
 
   const handleApplyResolutions = async () => {
@@ -188,16 +319,12 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
     setTransferring(true);
     setError(null);
     try {
-      await doTransfer(conflicts, resolutions);
+      const failed = await doTransfer(conflicts, resolutions);
+      await finishTransfer(failed);
     } catch {
       setError("Transfer failed. Please try again.");
       setTransferring(false);
-      return;
     }
-    const { clearGuestIds } = await import("@/lib/projects-store");
-    clearGuestIds();
-    setTransferring(false);
-    onAuthSuccess(signedInUser);
   };
 
   const handleDiscardAll = async () => {
@@ -396,7 +523,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                       Transfer Projects
                     </h3>
                     <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-5 leading-relaxed text-center">
-                      Select which guest projects to move to your account. Unselected projects will be discarded.
+                      Select which guest projects to move to your account. Unselected ones stay as guest projects.
                     </p>
 
                     {/* Select all toggle */}
@@ -545,18 +672,24 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                                 <span className={`font-semibold ${res.action === "rename" ? "text-[color:var(--text-primary)]" : "text-[color:var(--text-secondary)]"}`}>Rename</span>
                                 {res.action !== "rename" && <span className="text-[color:var(--text-secondary)]">: transfer with a different name</span>}
                               </div>
-                              {res.action === "rename" && (
-                                <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
-                                  <input
-                                    type="text"
-                                    value={res.newName}
-                                    onChange={e => setResolutions(r => ({ ...r, [conflict.id]: { action: "rename", newName: e.target.value } }))}
-                                    className="w-full bg-[color:var(--background)]/50 border border-[color:var(--border)] rounded-lg px-2.5 py-1.5 text-xs text-[color:var(--text-primary)] outline-none focus:border-[color:var(--text-primary)]/50 transition-colors"
-                                    placeholder="New project name"
-                                    autoFocus
-                                  />
-                                </div>
-                              )}
+                              {res.action === "rename" && (() => {
+                                const issue = renameIssue(conflict.id);
+                                return (
+                                  <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="text"
+                                      value={res.newName}
+                                      onChange={e => setResolutions(r => ({ ...r, [conflict.id]: { action: "rename", newName: e.target.value } }))}
+                                      className={`w-full bg-[color:var(--background)]/50 border rounded-lg px-2.5 py-1.5 text-xs text-[color:var(--text-primary)] outline-none transition-colors ${issue ? "border-red-500/50 focus:border-red-500/70" : "border-[color:var(--border)] focus:border-[color:var(--text-primary)]/50"}`}
+                                      placeholder="New project name"
+                                      autoFocus
+                                    />
+                                    {issue && (
+                                      <p className="mt-1.5 text-[11px] font-medium text-red-400">{issue}</p>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                             <button
                               onClick={() => setResolutions(r => ({ ...r, [conflict.id]: { action: "skip", newName: "" } }))}
@@ -572,7 +705,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={handleApplyResolutions}
-                        disabled={transferring || Object.values(resolutions).some(r => r.action === "rename" && !r.newName.trim())}
+                        disabled={transferring || conflicts.some(c => renameIssue(c.id) !== null)}
                         className="w-full py-3.5 px-6 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         {transferring ? (
