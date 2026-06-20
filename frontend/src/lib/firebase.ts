@@ -46,11 +46,25 @@ const app = getApps().length
   : initializeApp({ apiKey: "__unconfigured__", authDomain: "", projectId: "" });
 const auth = getAuth(app);
 
+// Guards against calling signInWithPopup twice concurrently.
+// A second call while a popup is already open produces auth/missing-or-invalid-nonce.
+let _popupInFlight = false;
+
 export async function signInWithGoogle(): Promise<User> {
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: "select_account" });
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  if (_popupInFlight) {
+    const err = new Error("Sign-in already in progress — please wait for the Google popup.");
+    (err as any).code = "auth/popup-already-open";
+    throw err;
+  }
+  _popupInFlight = true;
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } finally {
+    _popupInFlight = false;
+  }
 }
 
 export async function signOutUser(): Promise<void> {
