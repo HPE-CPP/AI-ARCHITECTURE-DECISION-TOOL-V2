@@ -118,9 +118,9 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           initial={{ opacity: 0, x: -30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="glass-panel p-8"
+          className="glass-panel p-5 sm:p-8"
         >
-          <h3 className="text-2xl font-bold mb-8 tracking-tight">Factor Breakdown</h3>
+          <h3 className="text-xl sm:text-2xl font-bold mb-8 tracking-tight">Factor Breakdown</h3>
           <div className="h-[280px] sm:h-[380px] w-full" data-testid="radar-container">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="48%" outerRadius="60%" data={radarData}>
@@ -161,8 +161,8 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
           transition={{ duration: 0.6, delay: 0.3 }}
           className="flex flex-col gap-8"
         >
-          <div className="glass-panel p-8">
-            <h3 className="text-2xl font-bold mb-6 tracking-tight">Architecture Ranking</h3>
+          <div className="glass-panel p-5 sm:p-8">
+            <h3 className="text-xl sm:text-2xl font-bold mb-6 tracking-tight">Architecture Ranking</h3>
             <div className="space-y-3" data-testid="bar-container">
               {scoresData.map((entry, index) => {
                 const suit = suitability?.[entry.name] ?? "";
@@ -206,7 +206,7 @@ export const ResultsDashboard = memo(function ResultsDashboard({ result }: { res
 
           {/* FIX FE-010: Only render why_not section if there are entries to show */}
           {why_not && Object.keys(why_not).length > 0 && (
-            <div className="glass-panel p-8 flex-1 bg-[var(--surface)]">
+            <div className="glass-panel p-5 sm:p-8 flex-1 bg-[var(--surface)]">
               <h4 className="font-bold text-xl mb-6 flex items-center gap-3">
                 <span className="w-8 h-8 rounded-full bg-[var(--background)] border border-red-500/20 text-red-500 flex items-center justify-center">
                   <Slash size={14} className="-rotate-135" />

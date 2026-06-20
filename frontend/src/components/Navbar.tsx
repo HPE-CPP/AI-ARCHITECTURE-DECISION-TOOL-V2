@@ -55,13 +55,18 @@ export function Navbar() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    setIsMobile(window.innerWidth < 768);
+    const updateIsMobile = () => setIsMobile(window.innerWidth < 768);
+    updateIsMobile();
+    window.addEventListener("resize", updateIsMobile);
     const timer = setTimeout(() => {
       const currentScroll = window.scrollY;
       if (currentScroll < 50) setPhase("top");
       else setPhase("pill");
     }, 400);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", updateIsMobile);
+    };
   }, []);
 
   // FIX FE-008: Close mobile menu on route change (covers browser back/forward)
@@ -251,7 +256,48 @@ export function Navbar() {
         signOut={signOut}
       />
 
-      <div className="fixed top-0 left-0 w-full flex justify-center z-50 pointer-events-none px-4">
+      {/* Mobile: simple, robust fixed bar — no morphing, never overflows */}
+      {mounted && isMobile && (
+        <div className="fixed top-0 left-0 w-full z-50 px-3 pt-3 pointer-events-none">
+          <div className="pointer-events-auto mx-auto flex items-center justify-between gap-2 h-14 pl-4 pr-2.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg shadow-black/10">
+            <Link href="/" className="flex items-center gap-2 min-w-0 active:scale-95 transition-transform">
+              <Hexagon className="w-6 h-6 shrink-0 text-[color:var(--text-primary)]" />
+              <span className="font-bold text-lg tracking-tighter truncate text-[color:var(--text-primary)]">
+                ArchGuide.
+              </span>
+            </Link>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                aria-label="Toggle theme"
+                onClick={toggleTheme}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90 transition-transform"
+              >
+                {mounted ? (resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />) : <div className="w-4 h-4" />}
+              </button>
+              {user ? (
+                <button
+                  aria-label="Open menu"
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-black text-[11px] active:scale-90 transition-transform"
+                >
+                  {userInitial}
+                </button>
+              ) : (
+                <button
+                  aria-label="Open menu"
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  className="w-9 h-9 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90 transition-transform"
+                >
+                  <Menu size={22} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop: morphing sphere / pill / bar */}
+      <div className={`fixed top-0 left-0 w-full justify-center z-50 pointer-events-none px-4 ${mounted && isMobile ? "hidden" : "flex"}`}>
         <m.nav
           variants={variants}
           initial="sphere"
