@@ -3,7 +3,7 @@ Pydantic schemas for Analysis Sessions and Results.
 Keeps the response shape identical to the original in-memory API.
 """
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -56,3 +56,16 @@ class QuestionnaireInput(BaseModel):
     user_scale: Optional[str] = None
     citation_requirement: Optional[str] = None
     context_size: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _unwrap_answers(cls, data: Any) -> Any:
+        """Accept both the flat shape {dataset_size: ...} and the legacy wrapped
+        shape {answers: {dataset_size: ...}}. Older clients sent the wrapped form,
+        which silently parsed to all-None signals and scored 0. Lift the nested
+        answers up to the top level so either shape works."""
+        if isinstance(data, dict) and isinstance(data.get("answers"), dict):
+            merged = {k: v for k, v in data.items() if k != "answers"}
+            merged.update(data["answers"])
+            return merged
+        return data

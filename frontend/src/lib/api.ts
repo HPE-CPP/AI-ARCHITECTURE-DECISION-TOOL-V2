@@ -149,8 +149,10 @@ export async function submitQuestionnaire(answers: Record<string, string | null>
   const res = await fetchWithApiFallback(`/api/v1/questionnaire?${qs.toString()}`, {
     method: "POST",
     headers,
-    // FIX FE-005: Backend QuestionnaireInput expects { answers: { ...signals } }
-    body: JSON.stringify({ answers }),
+    // Backend QuestionnaireInput expects the signal fields at the TOP level
+    // (dataset_size, query_volume, ...), not wrapped under an "answers" key.
+    // Wrapping it made every signal arrive as null, which scored 0.
+    body: JSON.stringify(answers),
   });
   if (!res.ok) {
     const err = await res.json();
