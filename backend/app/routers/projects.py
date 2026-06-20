@@ -228,10 +228,11 @@ def update_project(
         # Only allow user_id reassignment for guest-to-authenticated transfer
         if not uid:
             raise HTTPException(401, "Authentication required to transfer project ownership")
-        if not project.user_id.startswith("guest_"):
-            raise HTTPException(400, "Can only transfer projects owned by a guest user")
         if data.user_id != uid:
             raise HTTPException(403, "Project can only be transferred to your own account")
+        # Already owned by this user — treat as no-op (idempotent transfer)
+        if project.user_id != uid and not project.user_id.startswith("guest_"):
+            raise HTTPException(400, "Can only transfer projects owned by a guest user")
         project.user_id = data.user_id
 
     if data.name is not None:
