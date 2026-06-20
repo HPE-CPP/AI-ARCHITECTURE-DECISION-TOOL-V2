@@ -52,9 +52,10 @@ let _popupInFlight = false;
 
 export async function signInWithGoogle(): Promise<User> {
   if (_popupInFlight) {
-    const err = new Error("Sign-in already in progress — please wait for the Google popup.");
-    (err as any).code = "auth/popup-already-open";
-    throw err;
+    throw Object.assign(
+      new Error("Sign-in already in progress — please wait for the Google popup."),
+      { code: "auth/popup-already-open" },
+    );
   }
   _popupInFlight = true;
   try {
