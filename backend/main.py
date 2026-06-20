@@ -186,6 +186,12 @@ app.include_router(chat.router, prefix=prefix, tags=["Chat"])
 app.include_router(score_preview.router, prefix=prefix, tags=["ScorePreview"])
 app.include_router(share_router.router, prefix=prefix, tags=["Share"])
 
+@app.get("/api/v1/ping", tags=["Health"])
+async def ping():
+    """Liveness probe — returns 200 as long as the process is alive."""
+    return {"status": "ok"}
+
+
 @app.get("/api/v1/health", tags=["Health"])
 async def health():
     """Deep health check — tests PostgreSQL, Redis, Qdrant, and LLM provider.
