@@ -1,47 +1,46 @@
 "use client";
 import React, { useState } from "react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
-import { X, Chrome, AlertTriangle } from "lucide-react";
+import { X, Chrome, AlertTriangle, CheckSquare, Square } from "lucide-react";
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAuthSuccess: (user: { displayName: string | null; uid: string; email: string | null }) => void;
   onSkip: () => void;
-  /** Pass the signIn function from useAuth() */
   signIn: () => Promise<{ displayName: string | null; uid: string; email: string | null }>;
-  /** Pass the signOut function from useAuth() */
   signOut: () => Promise<void>;
   mode?: "default" | "project-limit" | "questionnaire-required";
 }
 
 export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, signOut, mode = "default" }: AuthModalProps) {
-  const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "transfer-confirm" | "transfer-collision">("main");
+  const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "discard-confirm">("main");
   const [loading, setLoading] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<{ displayName: string | null; uid: string; email: string | null } | null>(null);
-  const [anonProject, setAnonProject] = useState<{ id: string; name: string } | null>(null);
-  const [collidingProjectId, setCollidingProjectId] = useState<string | null>(null);
+  const [anonProjects, setAnonProjects] = useState<{ id: string; name: string }[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
       setError(null);
       const user = await signIn();
-      
+
       const { getProjects } = await import("@/lib/projects-store");
-      const anonProjects = await getProjects(null);
-      
-      if (anonProjects.length > 0) {
+      const projects = await getProjects(null);
+
+      if (projects.length > 0) {
         setSignedInUser(user);
-        setAnonProject(anonProjects[0]);
+        setAnonProjects(projects);
+        setSelectedIds(new Set(projects.map((p: { id: string; name: string }) => p.id)));
         setStep("transfer");
       } else {
         onAuthSuccess(user);
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      // Handle user closing popup gracefully
       if (err?.code === "auth/popup-closed-by-user" || err?.code === "auth/cancelled-popup-request") {
         setError(null);
       } else if (err?.code === "auth/configuration-not-found" || err?.code === "auth/invalid-api-key") {
@@ -55,51 +54,63 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
     }
   };
 
+  const toggleProject = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === anonProjects.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(anonProjects.map(p => p.id)));
+    }
+  };
+
+  const handleTransferSelected = async () => {
+    if (!signedInUser) return;
+    setTransferring(true);
+    try {
+      const { updateProject, deleteProject, getProjects } = await import("@/lib/projects-store");
+      const userProjects = await getProjects(signedInUser.uid);
+      const existingNames = new Set(userProjects.map((p: { name: string }) => p.name.trim().toLowerCase()));
+
+      for (const project of anonProjects) {
+        if (selectedIds.has(project.id)) {
+          if (!existingNames.has(project.name.trim().toLowerCase())) {
+            await updateProject(project.id, { userId: signedInUser.uid });
+          }
+          // collision: leave as-is (guest project stays, user keeps their existing one)
+        } else {
+          await deleteProject(project.id);
+        }
+      }
+    } finally {
+      setTransferring(false);
+    }
+    onAuthSuccess(signedInUser);
+  };
+
+  const handleDiscardAll = async () => {
+    if (!signedInUser) return;
+    setTransferring(true);
+    try {
+      const { deleteProject } = await import("@/lib/projects-store");
+      for (const project of anonProjects) {
+        await deleteProject(project.id);
+      }
+    } finally {
+      setTransferring(false);
+    }
+    onAuthSuccess(signedInUser);
+  };
+
   const handleSkipRequest = () => setStep("skip-confirm");
   const handleGoBack = () => { setStep("main"); setError(null); };
   const handleContinueAnyway = () => { onSkip(); };
-
-  const handleAcceptTransfer = async () => {
-    const { updateProject, getProjects } = await import("@/lib/projects-store");
-    if (anonProject && signedInUser) {
-      // Check for collision
-      const userProjects = await getProjects(signedInUser.uid);
-      const collision = userProjects.find(p => p.name.trim().toLowerCase() === anonProject.name.trim().toLowerCase());
-      
-      if (collision) {
-        setCollidingProjectId(collision.id);
-        setStep("transfer-collision");
-        return;
-      }
-
-      await updateProject(anonProject.id, { userId: signedInUser.uid });
-    }
-    if (signedInUser) onAuthSuccess(signedInUser);
-  };
-
-  const handleReplaceAndTransfer = async () => {
-    const { updateProject, deleteProject } = await import("@/lib/projects-store");
-    if (anonProject && signedInUser && collidingProjectId) {
-      await deleteProject(collidingProjectId);
-      await updateProject(anonProject.id, { userId: signedInUser.uid });
-    }
-    if (signedInUser) onAuthSuccess(signedInUser);
-  };
-
-  const handleSignOutAndRename = async () => {
-    await signOut();
-    onClose();
-  };
-
-  const handleRejectTransfer = () => setStep("transfer-confirm");
-
-  const handleConfirmRejection = async () => {
-    const { deleteProject } = await import("@/lib/projects-store");
-    if (anonProject) {
-      await deleteProject(anonProject.id);
-    }
-    if (signedInUser) onAuthSuccess(signedInUser);
-  };
 
   const backdropVariants: Variants = {
     hidden: { opacity: 0 },
@@ -139,12 +150,10 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                   className="relative overflow-hidden rounded-[2.5rem] border border-[color:var(--border)] shadow-2xl"
                   style={{ background: "var(--surface)", backdropFilter: "blur(40px)" }}
                 >
-                  {/* Decorative glow */}
                   <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-white/5 blur-3xl pointer-events-none" />
                   <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-white/3 blur-3xl pointer-events-none" />
 
                   <div className="relative z-10 p-5 sm:p-8 lg:p-10">
-                    {/* Close button */}
                     <button
                       id="auth-modal-close-btn"
                       onClick={onClose}
@@ -154,7 +163,6 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       <X size={14} />
                     </button>
 
-                    {/* Icon */}
                     <div className="w-14 h-14 rounded-2xl bg-[color:var(--text-primary)] flex items-center justify-center mb-6 shadow-lg">
                       <svg viewBox="0 0 24 24" className="w-7 h-7 text-[color:var(--background)]" fill="currentColor">
                         <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
@@ -174,7 +182,6 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                         : "Sign in to save your analyses and access them anytime from any device."}
                     </p>
 
-                    {/* Error */}
                     <AnimatePresence>
                       {error && (
                         <motion.div
@@ -189,7 +196,6 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       )}
                     </AnimatePresence>
 
-                    {/* Google Sign-In */}
                     <button
                       id="google-signin-btn"
                       onClick={handleGoogleSignIn}
@@ -207,7 +213,6 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       {loading ? "Connecting..." : "Continue with Google"}
                     </button>
 
-                    {/* Skip / Cancel */}
                     <button
                       onClick={mode === "project-limit" ? onClose : mode === "questionnaire-required" ? onSkip : handleSkipRequest}
                       disabled={loading}
@@ -218,6 +223,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                   </div>
                 </div>
               </motion.div>
+
             ) : step === "skip-confirm" ? (
               <motion.div
                 key="confirm"
@@ -235,14 +241,12 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                     <div className="w-14 h-14 rounded-2xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center mx-auto mb-5">
                       <AlertTriangle size={26} className="text-orange-400" />
                     </div>
-
                     <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
                       Continue Without Saving?
                     </h3>
                     <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
                       Your analysis will not be saved and will be lost once you refresh or leave the page.
                     </p>
-
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={handleContinueAnyway}
@@ -260,6 +264,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                   </div>
                 </div>
               </motion.div>
+
             ) : step === "transfer" ? (
               <motion.div
                 key="transfer"
@@ -267,82 +272,93 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="relative w-full max-w-sm"
+                className="relative w-full max-w-md"
               >
                 <div
                   className="relative overflow-hidden rounded-[2.5rem] border border-[color:var(--border)] shadow-2xl"
                   style={{ background: "var(--surface)", backdropFilter: "blur(40px)" }}
                 >
-                  <div className="p-8 text-center flex flex-col items-center">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center mb-5">
+                  <div className="p-8 flex flex-col">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center mb-5 self-center">
                       <Chrome size={26} className="text-blue-400" />
                     </div>
-                    <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
-                      Transfer Project?
+                    <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-1 text-center">
+                      Transfer Projects
                     </h3>
-                    <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
-                      Do you want to transfer your unsaved project <span className="text-[color:var(--text-primary)] font-bold">&quot;{anonProject?.name}&quot;</span> to this account?
+                    <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-5 leading-relaxed text-center">
+                      Select which guest projects to move to your account. Unselected projects will be discarded.
                     </p>
-                    <div className="flex flex-col gap-2 w-full">
+
+                    {/* Select all toggle */}
+                    <button
+                      onClick={toggleAll}
+                      className="flex items-center gap-2 text-xs font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors mb-2 self-end"
+                    >
+                      {selectedIds.size === anonProjects.length ? (
+                        <CheckSquare size={14} />
+                      ) : (
+                        <Square size={14} />
+                      )}
+                      {selectedIds.size === anonProjects.length ? "Deselect all" : "Select all"}
+                    </button>
+
+                    {/* Project checklist */}
+                    <div className="flex flex-col gap-2 max-h-52 overflow-y-auto mb-6 pr-1">
+                      {anonProjects.map(project => (
+                        <button
+                          key={project.id}
+                          onClick={() => toggleProject(project.id)}
+                          className={`flex items-center gap-3 w-full px-4 py-3 rounded-2xl border text-left transition-all ${
+                            selectedIds.has(project.id)
+                              ? "border-[color:var(--text-primary)]/30 bg-[color:var(--text-primary)]/8"
+                              : "border-[color:var(--border)] bg-transparent opacity-50"
+                          }`}
+                        >
+                          {selectedIds.has(project.id) ? (
+                            <CheckSquare size={16} className="shrink-0 text-[color:var(--text-primary)]" />
+                          ) : (
+                            <Square size={16} className="shrink-0 text-[color:var(--text-secondary)]" />
+                          )}
+                          <span className="text-sm font-semibold text-[color:var(--text-primary)] truncate">
+                            {project.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
                       <button
-                        onClick={handleAcceptTransfer}
-                        className="w-full py-3.5 px-6 rounded-full border border-[color:var(--border)] text-[color:var(--background)] bg-[color:var(--text-primary)] font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98]"
+                        onClick={handleTransferSelected}
+                        disabled={transferring || selectedIds.size === 0}
+                        className="w-full py-3.5 px-6 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        Yes, Transfer It
+                        {transferring ? (
+                          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                        ) : null}
+                        {transferring
+                          ? "Transferring..."
+                          : selectedIds.size === 0
+                          ? "Select at least one project"
+                          : `Transfer ${selectedIds.size} Project${selectedIds.size > 1 ? "s" : ""}`}
                       </button>
                       <button
-                        onClick={handleRejectTransfer}
-                        className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-red-400 transition-colors"
+                        onClick={() => setStep("discard-confirm")}
+                        disabled={transferring}
+                        className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-red-400 transition-colors disabled:opacity-50"
                       >
-                        No, Discard It
+                        Discard All
                       </button>
                     </div>
                   </div>
                 </div>
               </motion.div>
-            ) : step === "transfer-collision" ? (
-              <motion.div
-                key="transfer-collision"
-                variants={modalVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                className="relative w-full max-w-sm"
-              >
-                <div
-                  className="relative overflow-hidden rounded-[2.5rem] border border-[color:var(--border)] shadow-2xl"
-                  style={{ background: "var(--surface)", backdropFilter: "blur(40px)" }}
-                >
-                  <div className="p-8 text-center flex flex-col items-center">
-                    <div className="w-14 h-14 rounded-2xl bg-orange-500/15 border border-orange-500/20 flex items-center justify-center mb-5">
-                      <AlertTriangle size={26} className="text-orange-400" />
-                    </div>
-                    <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
-                      Project Already Exists
-                    </h3>
-                    <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
-                      Your account already has a project named <span className="text-[color:var(--text-primary)] font-bold">&quot;{anonProject?.name}&quot;</span>. Do you want to replace it?
-                    </p>
-                    <div className="flex flex-col gap-2 w-full">
-                      <button
-                        onClick={handleReplaceAndTransfer}
-                        className="w-full py-3.5 px-6 rounded-full border border-[color:var(--border)] text-[color:var(--background)] bg-[color:var(--text-primary)] font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98]"
-                      >
-                        Yes, Replace It
-                      </button>
-                      <button
-                        onClick={handleSignOutAndRename}
-                        className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors"
-                      >
-                        Go Back and Rename
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
+
             ) : (
               <motion.div
-                key="transfer-confirm"
+                key="discard-confirm"
                 variants={modalVariants}
                 initial="hidden"
                 animate="visible"
@@ -358,20 +374,22 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, sign
                       <AlertTriangle size={26} className="text-orange-400" />
                     </div>
                     <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-2">
-                      Discard Unsaved Work?
+                      Discard All Projects?
                     </h3>
                     <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-7 leading-relaxed">
-                      You will instantly lose this work and it cannot be recovered. Are you sure?
+                      All {anonProjects.length} guest project{anonProjects.length > 1 ? "s" : ""} will be permanently deleted. This cannot be undone.
                     </p>
                     <div className="flex flex-col gap-2 w-full">
                       <button
-                        onClick={handleConfirmRejection}
-                        className="w-full py-3.5 px-6 rounded-full border border-red-500/20 bg-red-500/10 text-red-500 font-bold text-sm hover:bg-red-500/20 transition-all active:scale-[0.98]"
+                        onClick={handleDiscardAll}
+                        disabled={transferring}
+                        className="w-full py-3.5 px-6 rounded-full border border-red-500/20 bg-red-500/10 text-red-500 font-bold text-sm hover:bg-red-500/20 transition-all active:scale-[0.98] disabled:opacity-50"
                       >
-                        Yes, I&apos;m sure
+                        Yes, Discard All
                       </button>
                       <button
                         onClick={() => setStep("transfer")}
+                        disabled={transferring}
                         className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors"
                       >
                         Go Back

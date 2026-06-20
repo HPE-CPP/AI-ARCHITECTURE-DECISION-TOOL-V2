@@ -1,8 +1,7 @@
 /**
  * COMPONENT TESTS — AuthModal
- * Tests all 5 modal states (main, skip-confirm, transfer, transfer-collision,
- * transfer-confirm), Google sign-in flow, error handling, project transfer,
- * collision detection, and backdrop click behavior.
+ * Tests all modal states (main, skip-confirm, transfer, discard-confirm),
+ * Google sign-in flow, error handling, project checklist transfer, and backdrop click behavior.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -112,7 +111,7 @@ describe('AuthModal — Google Sign-In', () => {
     })
   })
 
-  it('shows transfer step when anonymous projects exist', async () => {
+  it('shows transfer checklist when anonymous projects exist', async () => {
     defaultProps.signIn.mockResolvedValueOnce(MOCK_USER)
     vi.doMock('@/lib/projects-store', () => ({
       getProjects: vi.fn().mockResolvedValue([
@@ -122,7 +121,8 @@ describe('AuthModal — Google Sign-In', () => {
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
     await waitFor(() => {
-      expect(screen.getByText('Transfer Project?')).toBeDefined()
+      expect(screen.getByText('Transfer Projects')).toBeDefined()
+      expect(screen.getByText('My Analysis')).toBeDefined()
     })
   })
 
@@ -189,8 +189,7 @@ describe('AuthModal — Skip Flow', () => {
 
 // ─── Transfer Steps ───────────────────────────────────────────────────────────
 describe('AuthModal — Project Transfer Flow', () => {
-  it('"No, Discard It" advances to transfer-confirm step', async () => {
-    // Jump directly to transfer state by manipulating signIn
+  it('"Discard All" advances to discard-confirm step', async () => {
     defaultProps.signIn.mockResolvedValueOnce(MOCK_USER)
     vi.doMock('@/lib/projects-store', () => ({
       getProjects: vi.fn().mockResolvedValue([
@@ -199,14 +198,14 @@ describe('AuthModal — Project Transfer Flow', () => {
     }))
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
-    await waitFor(() => screen.getByText('Transfer Project?'))
-    await userEvent.click(screen.getByText('No, Discard It'))
+    await waitFor(() => screen.getByText('Transfer Projects'))
+    await userEvent.click(screen.getByText('Discard All'))
     await waitFor(() => {
-      expect(screen.getByText('Discard Unsaved Work?')).toBeDefined()
+      expect(screen.getByText('Discard All Projects?')).toBeDefined()
     })
   })
 
-  it('"Go Back" from transfer-confirm returns to transfer step', async () => {
+  it('"Go Back" from discard-confirm returns to transfer checklist', async () => {
     defaultProps.signIn.mockResolvedValueOnce(MOCK_USER)
     vi.doMock('@/lib/projects-store', () => ({
       getProjects: vi.fn().mockResolvedValue([
@@ -215,12 +214,28 @@ describe('AuthModal — Project Transfer Flow', () => {
     }))
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
-    await waitFor(() => screen.getByText('Transfer Project?'))
-    await userEvent.click(screen.getByText('No, Discard It'))
-    await waitFor(() => screen.getByText('Discard Unsaved Work?'))
+    await waitFor(() => screen.getByText('Transfer Projects'))
+    await userEvent.click(screen.getByText('Discard All'))
+    await waitFor(() => screen.getByText('Discard All Projects?'))
     await userEvent.click(screen.getByText('Go Back'))
     await waitFor(() => {
-      expect(screen.getByText('Transfer Project?')).toBeDefined()
+      expect(screen.getByText('Transfer Projects')).toBeDefined()
     })
+  })
+
+  it('shows all guest projects as checkboxes, all pre-selected', async () => {
+    defaultProps.signIn.mockResolvedValueOnce(MOCK_USER)
+    vi.doMock('@/lib/projects-store', () => ({
+      getProjects: vi.fn().mockResolvedValue([
+        { id: 'p1', name: 'Project Alpha', user_id: 'guest_xxx', status: 'empty' },
+        { id: 'p2', name: 'Project Beta', user_id: 'guest_xxx', status: 'empty' },
+      ]),
+    }))
+    render(<AuthModal {...defaultProps} />)
+    await userEvent.click(screen.getByText('Continue with Google'))
+    await waitFor(() => screen.getByText('Transfer Projects'))
+    expect(screen.getByText('Project Alpha')).toBeDefined()
+    expect(screen.getByText('Project Beta')).toBeDefined()
+    expect(screen.getByText('Transfer 2 Projects')).toBeDefined()
   })
 })
