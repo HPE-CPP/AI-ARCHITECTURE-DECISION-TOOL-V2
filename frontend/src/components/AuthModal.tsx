@@ -95,31 +95,31 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
     conflictList: { id: string; name: string; existingId: string }[],
     resolutionMap: Record<string, { action: "replace" | "skip" | "rename"; newName: string }>
   ) => {
-    const { updateProject, deleteProject, clearGuestIds } = await import("@/lib/projects-store");
+    const { updateProject, deleteProject } = await import("@/lib/projects-store");
     const conflictById = new Map(conflictList.map(c => [c.id, c]));
     for (const project of anonProjects) {
       if (selectedIds.has(project.id)) {
         const conflict = conflictById.get(project.id);
         if (conflict) {
           const res = resolutionMap[project.id];
-          if (res.action === "replace") {
-            await deleteProject(conflict.existingId);
-            await updateProject(project.id, { userId: signedInUser!.uid });
-          } else if (res.action === "rename") {
-            await updateProject(project.id, { userId: signedInUser!.uid, name: res.newName.trim() });
-          } else {
-            // skip — discard the guest project, keep existing
+          if (!res || res.action === "skip") {
             await deleteProject(project.id);
+          } else if (res.action === "replace") {
+            await deleteProject(conflict.existingId);
+            const ok = await updateProject(project.id, { userId: signedInUser!.uid });
+            if (!ok) throw new Error("replace failed");
+          } else {
+            const ok = await updateProject(project.id, { userId: signedInUser!.uid, name: res.newName.trim() });
+            if (!ok) throw new Error("rename failed");
           }
         } else {
-          await updateProject(project.id, { userId: signedInUser!.uid });
+          const ok = await updateProject(project.id, { userId: signedInUser!.uid });
+          if (!ok) throw new Error("transfer failed");
         }
       } else {
         await deleteProject(project.id);
       }
     }
-    clearGuestIds();
-    onAuthSuccess(signedInUser!);
   };
 
   const handleTransferSelected = async () => {
@@ -148,15 +148,21 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
         }
         setConflicts(foundConflicts);
         setResolutions(defaultResolutions);
+        setTransferring(false);
         setStep("name-conflicts");
-      } else {
-        await doTransfer([], {});
+        return;
       }
+
+      await doTransfer([], {});
     } catch {
       setError("Transfer failed. Please try again.");
-    } finally {
       setTransferring(false);
+      return;
     }
+    const { clearGuestIds } = await import("@/lib/projects-store");
+    clearGuestIds();
+    setTransferring(false);
+    onAuthSuccess(signedInUser);
   };
 
   const handleApplyResolutions = async () => {
@@ -167,9 +173,13 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
       await doTransfer(conflicts, resolutions);
     } catch {
       setError("Transfer failed. Please try again.");
-    } finally {
       setTransferring(false);
+      return;
     }
+    const { clearGuestIds } = await import("@/lib/projects-store");
+    clearGuestIds();
+    setTransferring(false);
+    onAuthSuccess(signedInUser);
   };
 
   const handleDiscardAll = async () => {
@@ -503,7 +513,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                               onClick={() => setResolutions(r => ({ ...r, [conflict.id]: { action: "replace", newName: "" } }))}
                               className={`text-left text-xs px-3 py-2 rounded-xl border transition-all ${res.action === "replace" ? "border-[color:var(--text-primary)]/40 bg-[color:var(--text-primary)]/8 text-[color:var(--text-primary)]" : "border-[color:var(--border)] text-[color:var(--text-secondary)]"}`}
                             >
-                              <span className="font-semibold">Replace</span> — overwrite your existing project with this guest one
+                              <span className="font-semibold">Replace</span>: overwrite your existing project with this guest one
                             </button>
                             <div
                               className={`text-xs rounded-xl border transition-all cursor-pointer ${res.action === "rename" ? "border-[color:var(--text-primary)]/40 bg-[color:var(--text-primary)]/8" : "border-[color:var(--border)]"}`}
@@ -515,7 +525,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                             >
                               <div className="px-3 py-2">
                                 <span className={`font-semibold ${res.action === "rename" ? "text-[color:var(--text-primary)]" : "text-[color:var(--text-secondary)]"}`}>Rename</span>
-                                {res.action !== "rename" && <span className="text-[color:var(--text-secondary)]"> — transfer with a different name</span>}
+                                {res.action !== "rename" && <span className="text-[color:var(--text-secondary)]">: transfer with a different name</span>}
                               </div>
                               {res.action === "rename" && (
                                 <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
@@ -534,7 +544,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                               onClick={() => setResolutions(r => ({ ...r, [conflict.id]: { action: "skip", newName: "" } }))}
                               className={`text-left text-xs px-3 py-2 rounded-xl border transition-all ${res.action === "skip" ? "border-[color:var(--text-primary)]/40 bg-[color:var(--text-primary)]/8 text-[color:var(--text-primary)]" : "border-[color:var(--border)] text-[color:var(--text-secondary)]"}`}
                             >
-                              <span className="font-semibold">Skip</span> — keep your existing project, discard this guest one
+                              <span className="font-semibold">Skip</span>: keep your existing project, discard this guest one
                             </button>
                           </div>
                         );
