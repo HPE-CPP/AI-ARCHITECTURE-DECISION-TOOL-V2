@@ -48,7 +48,11 @@ export function CreateProjectModal({
       onClose();
     } catch (err: unknown) {
       console.error("[CreateProject] Failed to save project:", err);
-      setNameError("Unable to save project right now.");
+      // Surface the real reason (e.g. duplicate name) instead of a generic message.
+      const message = err instanceof Error && err.message.trim()
+        ? err.message
+        : "Unable to save project right now.";
+      setNameError(message);
     } finally {
       setLoading(false);
     }
