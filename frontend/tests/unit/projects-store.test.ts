@@ -267,16 +267,45 @@ describe('deleteProject', () => {
 // ─── duplicateProject ──────────────────────────────────────────────────────────
 describe('duplicateProject', () => {
   it('creates copy with "(Copy)" appended to name', async () => {
-    // First call: getProject
+    // 1: getProject (the original)
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify(MOCK_PROJECT), { status: 200 })
     )
-    // Second call: createProject
+    // 2: getProjects (collision check) — no existing copies
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ projects: [MOCK_PROJECT] }), { status: 200 })
+    )
+    // 3: createProject
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ ...MOCK_PROJECT, id: 'proj-002', name: 'Test Project (Copy)' }), { status: 200 })
     )
     const result = await duplicateProject('proj-001', 'user-001')
     expect(result?.name).toBe('Test Project (Copy)')
+
+    // The copy must be owned by the passed user, not a guest.
+    const createBody = JSON.parse(String(vi.mocked(fetch).mock.calls[2][1]?.body))
+    expect(createBody.user_id).toBe('user-001')
+    expect(createBody.name).toBe('Test Project (Copy)')
+  })
+
+  it('picks a collision-free name when "(Copy)" already exists', async () => {
+    // 1: getProject (the original)
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(MOCK_PROJECT), { status: 200 })
+    )
+    // 2: getProjects — a "(Copy)" already exists, so the next must be "(Copy 2)"
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        projects: [MOCK_PROJECT, { ...MOCK_PROJECT, id: 'proj-002', name: 'Test Project (Copy)' }],
+      }), { status: 200 })
+    )
+    // 3: createProject
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ...MOCK_PROJECT, id: 'proj-003', name: 'Test Project (Copy 2)' }), { status: 200 })
+    )
+    await duplicateProject('proj-001', 'user-001')
+    const createBody = JSON.parse(String(vi.mocked(fetch).mock.calls[2][1]?.body))
+    expect(createBody.name).toBe('Test Project (Copy 2)')
   })
 
   it('returns null when original project not found', async () => {
