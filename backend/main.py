@@ -46,14 +46,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
-        # Prevent MIME-type sniffing attacks
         response.headers["X-Content-Type-Options"] = "nosniff"
-        # Prevent this API from being framed by another page (clickjacking)
-        response.headers["X-Frame-Options"] = "DENY"
-        # Strict CSP: the API itself serves no HTML, so block everything
-        response.headers["Content-Security-Policy"] = "default-src 'none'"
-        # Do not send the Referer header cross-origin
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Swagger UI needs scripts/styles from CDN — skip strict CSP for docs paths
+        if request.url.path not in ("/docs", "/redoc", "/openapi.json"):
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Content-Security-Policy"] = "default-src 'none'"
         return response
 
 
