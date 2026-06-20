@@ -58,6 +58,7 @@ test-results/
 playwright-report/
 blob-report/
 **/__snapshots__/
+frontend/tests/coverage/
 
 # Test directories & assets
 # (Tests are now tracked for CI)
