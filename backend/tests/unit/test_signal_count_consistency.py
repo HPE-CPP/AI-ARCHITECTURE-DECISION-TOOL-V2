@@ -5,7 +5,6 @@ are citation_requirement and context_size. These tests lock every place that
 enumerates signals to the same 12 so a structure can never silently drift back
 to 10 (which would drop signals from analysis, scoring, chat, or the form).
 """
-import pytest
 
 EXPECTED_SIGNALS = {
     "dataset_size",
