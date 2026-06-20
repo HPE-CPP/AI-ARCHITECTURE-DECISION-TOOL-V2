@@ -30,12 +30,18 @@ export default function ProjectsPage() {
   // FIX FE-012: separate loading state so we can show skeletons during fetch
   const [loadingProjects, setLoadingProjects] = useState(true);
 
-  const [undoInfo, setUndoInfo] = useState<{
+  // Every project currently inside its 5s undo window. Each has its OWN timer,
+  // so deleting several in a row gives each one an independent undo window.
+  const [pendingDeletes, setPendingDeletes] = useState<{
     id: string;
     project: Project;
     secondsLeft: number;
-  } | null>(null);
-  const pendingDeleteRef = React.useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  }[]>([]);
+  // Backend-commit timers keyed by project id (kept out of state — not renderable).
+  const deleteTimersRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // IDs scheduled or in-flight for deletion. A background refetch must never
+  // resurrect these — the backend may still return them until their delete commits.
+  const pendingDeleteIdsRef = React.useRef<Set<string>>(new Set());
   const loadedRef = React.useRef(false);  // true after first successful fetch
 
   // Load projects on mount
@@ -44,11 +50,15 @@ export default function ProjectsPage() {
     setMounted(true);
 
     let cancelled = false;
+    // Drop any project still pending deletion so a refetch can't resurrect it.
+    const withoutPending = (data: Project[]) =>
+      data.filter(p => !pendingDeleteIdsRef.current.has(p.id));
+
     const initialLoad = async () => {
       setLoadingProjects(true);
       const data = await getProjects(user?.uid ?? null);
       if (cancelled) return;
-      setProjects(data);
+      setProjects(withoutPending(data));
       loadedRef.current = true;
       setLoadingProjects(false);
     };
@@ -59,14 +69,14 @@ export default function ProjectsPage() {
     } else {
       // Auth change while already loaded — silent refresh
       getProjects(user?.uid ?? null).then(data => {
-        if (!cancelled) setProjects(data);
+        if (!cancelled) setProjects(withoutPending(data));
       });
     }
 
     // Silent refresh — no loading spinner on subsequent calls
     const silentRefresh = async () => {
       const data = await getProjects(user?.uid ?? null);
-      if (!cancelled) setProjects(data);
+      if (!cancelled) setProjects(withoutPending(data));
     };
 
     window.addEventListener("projects-updated", silentRefresh);
@@ -134,63 +144,70 @@ export default function ProjectsPage() {
     const projectToDelete = projects.find(p => p.id === id);
     if (!projectToDelete) return;
 
-    // Cancel any previous pending delete first
-    if (pendingDeleteRef.current) {
-      clearTimeout(pendingDeleteRef.current.timer);
-      deleteProject(pendingDeleteRef.current.id).catch(() => {});
-    }
+    // Mark as pending so any background refetch won't resurrect this project
+    // before its own delete commits.
+    pendingDeleteIdsRef.current.add(id);
 
     // Hide from UI immediately
     setProjects(prev => prev.filter(p => p.id !== id));
 
-    // Defer actual backend delete by 5 s so undo can cancel it
+    // Defer this project's backend delete by 5 s so undo can cancel it.
+    // Each delete gets its OWN timer — other pending deletes are untouched.
     const timer = setTimeout(async () => {
-      pendingDeleteRef.current = null;
-      setUndoInfo(null);
+      deleteTimersRef.current.delete(id);
+      setPendingDeletes(prev => prev.filter(p => p.id !== id));
       try { await deleteProject(id); } catch (e) { console.error("Failed to delete project", e); }
+      finally { pendingDeleteIdsRef.current.delete(id); }
     }, 5000);
 
-    pendingDeleteRef.current = { id, timer };
-    setUndoInfo({ id, project: projectToDelete, secondsLeft: 5 });
+    deleteTimersRef.current.set(id, timer);
+    setPendingDeletes(prev => [...prev, { id, project: projectToDelete, secondsLeft: 5 }]);
   }, [projects]);
 
-  // If user navigates away mid-countdown, fire the delete immediately
+  // If user navigates away mid-countdown, flush every pending delete immediately
   useEffect(() => {
+    const timers = deleteTimersRef.current;
     return () => {
-      if (pendingDeleteRef.current) {
-        clearTimeout(pendingDeleteRef.current.timer);
-        deleteProject(pendingDeleteRef.current.id).catch(() => {});
-      }
+      timers.forEach((timer, id) => {
+        clearTimeout(timer);
+        deleteProject(id).catch(() => {});
+      });
+      timers.clear();
     };
   }, []);
 
-  const handleUndo = useCallback(() => {
-    if (!undoInfo || !pendingDeleteRef.current) return;
+  const handleUndo = useCallback((id: string) => {
+    const timer = deleteTimersRef.current.get(id);
+    if (!timer) return;
 
     // Cancel the scheduled delete — project still exists in backend
-    clearTimeout(pendingDeleteRef.current.timer);
-    pendingDeleteRef.current = null;
+    clearTimeout(timer);
+    deleteTimersRef.current.delete(id);
+    pendingDeleteIdsRef.current.delete(id);
+
+    const restored = pendingDeletes.find(p => p.id === id)?.project;
+    setPendingDeletes(prev => prev.filter(p => p.id !== id));
+    if (!restored) return;
 
     // Restore full project (original object with all data intact)
     setProjects(prev =>
-      [...prev, undoInfo.project].sort(
+      [...prev, restored].sort(
         (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
       )
     );
-    setUndoInfo(null);
-  }, [undoInfo]);
+  }, [pendingDeletes]);
 
-  // Countdown tick
+  // Countdown tick — decrements every pending delete's display timer once a second.
   useEffect(() => {
-    if (!undoInfo) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (undoInfo.secondsLeft <= 0) { setUndoInfo(null); return; }
-    const t = setTimeout(
-      () => setUndoInfo(prev => prev ? { ...prev, secondsLeft: prev.secondsLeft - 1 } : null),
+    if (pendingDeletes.length === 0) return;
+    const t = setInterval(
+      () => setPendingDeletes(prev =>
+        prev.map(p => ({ ...p, secondsLeft: Math.max(0, p.secondsLeft - 1) }))
+      ),
       1000,
     );
-    return () => clearTimeout(t);
-  }, [undoInfo]);
+    return () => clearInterval(t);
+  }, [pendingDeletes.length]);
 
   const handleDuplicate = useCallback((id: string) => {
     duplicateProject(id).then(() => {
@@ -403,51 +420,55 @@ export default function ProjectsPage() {
   />
       </div>
 
-      {/* Undo delete toast */}
-      <AnimatePresence>
-        {undoInfo && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-[color:var(--surface)] border border-[color:var(--border)] shadow-2xl shadow-black/40 backdrop-blur-md whitespace-nowrap"
-          >
-            <span className="text-sm text-[color:var(--text-secondary)]">
-              <span className="text-[color:var(--text-primary)] font-bold">
-                &ldquo;{undoInfo.project.name}&rdquo;
-              </span>{" "}
-              deleted
-            </span>
-
-            <button
-              onClick={handleUndo}
-              className="px-3 py-1.5 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] text-xs font-bold hover:opacity-80 transition-opacity"
+      {/* Undo delete toasts — one per pending delete, each with its own timer */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col-reverse items-center gap-2">
+        <AnimatePresence>
+          {pendingDeletes.map((pending) => (
+            <motion.div
+              key={pending.id}
+              layout
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-[color:var(--surface)] border border-[color:var(--border)] shadow-2xl shadow-black/40 backdrop-blur-md whitespace-nowrap"
             >
-              Undo
-            </button>
-
-            {/* Countdown ring */}
-            <div className="relative w-6 h-6 shrink-0">
-              <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" fill="none" stroke="var(--border)" strokeWidth="2" />
-                <circle
-                  cx="12" cy="12" r="10"
-                  fill="none"
-                  stroke="var(--text-secondary)"
-                  strokeWidth="2"
-                  strokeDasharray={String(2 * Math.PI * 10)}
-                  strokeDashoffset={String(2 * Math.PI * 10 * (1 - undoInfo.secondsLeft / 5))}
-                  style={{ transition: "stroke-dashoffset 0.9s linear" }}
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-[color:var(--text-secondary)]">
-                {undoInfo.secondsLeft}
+              <span className="text-sm text-[color:var(--text-secondary)]">
+                <span className="text-[color:var(--text-primary)] font-bold">
+                  &ldquo;{pending.project.name}&rdquo;
+                </span>{" "}
+                deleted
               </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+              <button
+                onClick={() => handleUndo(pending.id)}
+                className="px-3 py-1.5 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] text-xs font-bold hover:opacity-80 transition-opacity"
+              >
+                Undo
+              </button>
+
+              {/* Countdown ring */}
+              <div className="relative w-6 h-6 shrink-0">
+                <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" fill="none" stroke="var(--border)" strokeWidth="2" />
+                  <circle
+                    cx="12" cy="12" r="10"
+                    fill="none"
+                    stroke="var(--text-secondary)"
+                    strokeWidth="2"
+                    strokeDasharray={String(2 * Math.PI * 10)}
+                    strokeDashoffset={String(2 * Math.PI * 10 * (1 - pending.secondsLeft / 5))}
+                    style={{ transition: "stroke-dashoffset 0.9s linear" }}
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-[color:var(--text-secondary)]">
+                  {pending.secondsLeft}
+                </span>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { auth } from "./firebase";
-import { getApiBase } from "./api-base";
+import { getApiBase, toUserFacingFetchError } from "./api-base";
 const API_BASE = getApiBase();
 
 async function getAuthHeaders(): Promise<HeadersInit> {
@@ -106,17 +106,22 @@ export async function createProject(
   data: Pick<Project, "name" | "description"> & { userId?: string | null }
 ): Promise<Project> {
   const uid = data.userId || getGuestId();
-  const res = await fetch(`${API_BASE}/api/v1/projects`, {
-    method: "POST",
-    headers: await getAuthHeaders(),
-    body: JSON.stringify({
-      user_id: uid,
-      name: data.name.trim(),
-      description: data.description.trim()
-    }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/v1/projects`, {
+      method: "POST",
+      headers: await getAuthHeaders(),
+      body: JSON.stringify({
+        user_id: uid,
+        name: data.name.trim(),
+        description: data.description.trim()
+      }),
+    });
+  } catch (e) {
+    throw toUserFacingFetchError(e);
+  }
   if (!res.ok) {
-    const err = await res.json();
+    const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Failed to create project");
   }
   const project = await res.json();
