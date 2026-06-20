@@ -91,12 +91,15 @@ def client(db_session):
         """Bypass Firebase for tests — return a fixed test UID."""
         return TEST_USER_UID
 
+    from qdrant_client import QdrantClient as _QC
+    _mem_qdrant = _QC(":memory:")
     with patch("app.services.cache_service._client", None), \
+         patch("app.utils.faiss_store._client", _mem_qdrant), \
          patch("slowapi.util.get_remote_address", return_value=uuid.uuid4().hex):
         from main import app as fastapi_app
         fastapi_app.dependency_overrides[get_db] = override_get_db
         fastapi_app.dependency_overrides[verify_firebase_token] = override_verify_firebase_token
-        
+
         # Disable rate limiting for normal tests
         if hasattr(fastapi_app.state, "limiter"):
             fastapi_app.state.limiter.enabled = False
@@ -121,7 +124,10 @@ def auth_client(db_session):
     def override_get_db():
         yield db_session
 
+    from qdrant_client import QdrantClient as _QC
+    _mem_qdrant = _QC(":memory:")
     with patch("app.services.cache_service._client", None), \
+         patch("app.utils.faiss_store._client", _mem_qdrant), \
          patch("slowapi.util.get_remote_address", return_value=uuid.uuid4().hex):
         from main import app as fastapi_app
         fastapi_app.dependency_overrides[get_db] = override_get_db
