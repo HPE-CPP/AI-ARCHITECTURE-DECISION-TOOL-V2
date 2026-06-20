@@ -178,7 +178,7 @@ def generate_pdf(result: dict) -> bytes:
     top_score     = float(scores.get(recommended) or 0)
     conf_pct      = f"{confidence * 100:.0f}%" if confidence is not None else "N/A"
     active_signals = sum(1 for s in signals.values() if isinstance(s, dict) and s.get("value"))
-    total_signals  = len(signals) if signals else 10
+    total_signals  = len(signals) if signals else 12
 
     # ---- Build PDF ---------------------------------------------------------
     pdf = _PDF()

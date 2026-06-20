@@ -121,7 +121,7 @@ def _process_document_background(session_id: str, file_path: str, safe_filename:
             return
 
         _update_step(session_id, "signal_extraction", "complete",
-                     details=f"Extracted {extracted_count}/10 signals")
+                     details=f"Extracted {extracted_count}/{len(signals)} signals")
 
         # Confidence gate
         confident_signals = [

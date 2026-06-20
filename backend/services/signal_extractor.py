@@ -89,7 +89,7 @@ _ALL_KEYWORDS: frozenset[str] = frozenset(
 )
 register_signal_keywords(_ALL_KEYWORDS)
 
-EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Read the document and extract 10 architecture signals as JSON.
+EXTRACTION_PROMPT = """You are an expert AI architecture analyst. Read the document and extract 12 architecture signals as JSON.
 
 SIGNAL NAMES AND ALLOWED VALUES — you must use EXACTLY these strings for "value":
   dataset_size:          "small" | "medium" | "large" | "very_large"
@@ -132,8 +132,8 @@ IMPORTANT RULES:
 3. Set confidence >= 0.3 whenever you can infer a reasonable value.
 4. Output raw JSON only — no markdown, no explanation, no code blocks.
 
-EXAMPLE OUTPUT (fill in your actual findings from the document):
-{"dataset_size": {"value": "large", "confidence": 0.8, "source_text": "The total estimated dataset size is 120 GB", "page_number": 1}, "query_volume": {"value": "low", "confidence": 0.6, "source_text": "500 daily users", "page_number": 1}, "latency_requirement": {"value": "relaxed", "confidence": 0.7, "source_text": "response time must be under 2 seconds", "page_number": 1}, "data_volatility": {"value": "moderate", "confidence": 0.7, "source_text": "Support tickets are added daily", "page_number": 1}, "accuracy_requirement": {"value": "very_high", "confidence": 0.8, "source_text": "avoid hallucinating answers", "page_number": 1}, "domain_specificity": {"value": "specialized", "confidence": 0.7, "source_text": "Internal knowledge base articles", "page_number": 1}, "security_level": {"value": "elevated", "confidence": 0.7, "source_text": "documents contain internal procedures", "page_number": 1}, "cost_sensitivity": {"value": "high", "confidence": 0.6, "source_text": "cost efficiency is important", "page_number": 1}, "deployment_preference": {"value": "on_premise", "confidence": 0.8, "source_text": "prefer on-premise deployment", "page_number": 1}, "user_scale": {"value": "small", "confidence": 0.7, "source_text": "500 daily users", "page_number": 1}}
+EXAMPLE OUTPUT (fill in your actual findings from the document — you must include all 12 signals):
+{"dataset_size": {"value": "large", "confidence": 0.8, "source_text": "The total estimated dataset size is 120 GB", "page_number": 1}, "query_volume": {"value": "low", "confidence": 0.6, "source_text": "500 daily users", "page_number": 1}, "latency_requirement": {"value": "relaxed", "confidence": 0.7, "source_text": "response time must be under 2 seconds", "page_number": 1}, "data_volatility": {"value": "moderate", "confidence": 0.7, "source_text": "Support tickets are added daily", "page_number": 1}, "accuracy_requirement": {"value": "very_high", "confidence": 0.8, "source_text": "avoid hallucinating answers", "page_number": 1}, "domain_specificity": {"value": "specialized", "confidence": 0.7, "source_text": "Internal knowledge base articles", "page_number": 1}, "security_level": {"value": "elevated", "confidence": 0.7, "source_text": "documents contain internal procedures", "page_number": 1}, "cost_sensitivity": {"value": "high", "confidence": 0.6, "source_text": "cost efficiency is important", "page_number": 1}, "deployment_preference": {"value": "on_premise", "confidence": 0.8, "source_text": "prefer on-premise deployment", "page_number": 1}, "user_scale": {"value": "small", "confidence": 0.7, "source_text": "500 daily users", "page_number": 1}, "citation_requirement": {"value": "high", "confidence": 0.6, "source_text": "answers must cite the source documents", "page_number": 1}, "context_size": {"value": "large", "confidence": 0.6, "source_text": "large internal knowledge base", "page_number": 1}}
 
 RETRIEVED CONTEXT (if any):
 RETRIEVED_CONTEXT_PLACEHOLDER

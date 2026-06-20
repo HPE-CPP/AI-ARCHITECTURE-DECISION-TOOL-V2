@@ -40,6 +40,8 @@ SIGNAL_LABELS = {
     "cost_sensitivity": "Cost Sensitivity",
     "deployment_preference": "Deployment Preference",
     "user_scale": "User Scale",
+    "citation_requirement": "Citation Requirement",
+    "context_size": "Context Size",
 }
 
 

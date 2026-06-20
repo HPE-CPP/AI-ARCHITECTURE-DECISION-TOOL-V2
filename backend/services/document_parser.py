@@ -32,7 +32,7 @@ def validate_document_relevance(full_text: str, pages: list[dict]) -> tuple[bool
 
     Checks (in order):
       1. Minimum word count — a meaningful requirements doc needs substance.
-      2. Signal keyword category coverage — at least 3 of the 10 signal
+      2. Signal keyword category coverage — at least 3 of the 12 signal
          categories must have at least one keyword match.  A random cost report
          or UI screenshot will barely match any category.
       3. Keyword density — total keyword hits per 1 000 words.  A document that

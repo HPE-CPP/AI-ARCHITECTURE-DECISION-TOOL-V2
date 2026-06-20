@@ -351,9 +351,9 @@ class ScoringEngine:
         Only signals that actually have a non-null value contribute to the
         average — signals that were nulled by anti-hallucination should not
         inflate coverage or be counted in the mean (they were not scored).
-        Coverage (fraction of 10 signals that have a value) acts as a separate
+        Coverage (fraction of all signals that have a value) acts as a separate
         penalty so a recommendation from 3 signals is less confident than one
-        from 9, even if per-signal confidence is the same.
+        from 11, even if per-signal confidence is the same.
         """
         total = len(signals)
         if total == 0:
