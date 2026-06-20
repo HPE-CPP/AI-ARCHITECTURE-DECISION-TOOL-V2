@@ -14,13 +14,15 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode = "default" }: AuthModalProps) {
-  const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "discard-confirm">("main");
+  const [step, setStep] = useState<"main" | "skip-confirm" | "transfer" | "name-conflicts" | "discard-confirm">("main");
   const [loading, setLoading] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signedInUser, setSignedInUser] = useState<{ displayName: string | null; uid: string; email: string | null } | null>(null);
   const [anonProjects, setAnonProjects] = useState<{ id: string; name: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [conflicts, setConflicts] = useState<{ id: string; name: string; existingId: string }[]>([]);
+  const [resolutions, setResolutions] = useState<Record<string, { action: "replace" | "skip" | "rename"; newName: string }>>({});
 
   const handleGoogleSignIn = async () => {
     try {
@@ -89,27 +91,80 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
     }
   };
 
+  const doTransfer = async (
+    conflictList: { id: string; name: string; existingId: string }[],
+    resolutionMap: Record<string, { action: "replace" | "skip" | "rename"; newName: string }>
+  ) => {
+    const { updateProject, deleteProject, clearGuestIds } = await import("@/lib/projects-store");
+    const conflictById = new Map(conflictList.map(c => [c.id, c]));
+    for (const project of anonProjects) {
+      if (selectedIds.has(project.id)) {
+        const conflict = conflictById.get(project.id);
+        if (conflict) {
+          const res = resolutionMap[project.id];
+          if (res.action === "replace") {
+            await deleteProject(conflict.existingId);
+            await updateProject(project.id, { userId: signedInUser!.uid });
+          } else if (res.action === "rename") {
+            await updateProject(project.id, { userId: signedInUser!.uid, name: res.newName.trim() });
+          } else {
+            // skip — discard the guest project, keep existing
+            await deleteProject(project.id);
+          }
+        } else {
+          await updateProject(project.id, { userId: signedInUser!.uid });
+        }
+      } else {
+        await deleteProject(project.id);
+      }
+    }
+    clearGuestIds();
+    onAuthSuccess(signedInUser!);
+  };
+
   const handleTransferSelected = async () => {
     if (!signedInUser) return;
     setTransferring(true);
     setError(null);
     try {
-      const { updateProject, deleteProject, getProjects, clearGuestIds } = await import("@/lib/projects-store");
+      const { getProjects } = await import("@/lib/projects-store");
       const userProjects = await getProjects(signedInUser.uid);
-      const existingNames = new Set(userProjects.map((p: { name: string }) => p.name.trim().toLowerCase()));
+      const existingByName = new Map(
+        userProjects.map((p: { id: string; name: string }) => [p.name.trim().toLowerCase(), p.id as string])
+      );
 
+      const foundConflicts: { id: string; name: string; existingId: string }[] = [];
       for (const project of anonProjects) {
         if (selectedIds.has(project.id)) {
-          // Skip collision silently — user keeps their existing project with that name
-          if (!existingNames.has(project.name.trim().toLowerCase())) {
-            await updateProject(project.id, { userId: signedInUser.uid });
-          }
-        } else {
-          await deleteProject(project.id);
+          const existingId = existingByName.get(project.name.trim().toLowerCase());
+          if (existingId) foundConflicts.push({ id: project.id, name: project.name, existingId });
         }
       }
-      clearGuestIds();
-      onAuthSuccess(signedInUser);
+
+      if (foundConflicts.length > 0) {
+        const defaultResolutions: Record<string, { action: "replace" | "skip" | "rename"; newName: string }> = {};
+        for (const c of foundConflicts) {
+          defaultResolutions[c.id] = { action: "rename", newName: `${c.name} (Guest)` };
+        }
+        setConflicts(foundConflicts);
+        setResolutions(defaultResolutions);
+        setStep("name-conflicts");
+      } else {
+        await doTransfer([], {});
+      }
+    } catch {
+      setError("Transfer failed. Please try again.");
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const handleApplyResolutions = async () => {
+    if (!signedInUser) return;
+    setTransferring(true);
+    setError(null);
+    try {
+      await doTransfer(conflicts, resolutions);
     } catch {
       setError("Transfer failed. Please try again.");
     } finally {
@@ -392,6 +447,120 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
                         className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-red-400 transition-colors disabled:opacity-50"
                       >
                         Discard All
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+
+            ) : step === "name-conflicts" ? (
+              <motion.div
+                key="name-conflicts"
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="relative w-full max-w-md"
+              >
+                <div
+                  className="relative overflow-hidden rounded-[2.5rem] border border-[color:var(--border)] shadow-2xl"
+                  style={{ background: "var(--surface)", backdropFilter: "blur(40px)" }}
+                >
+                  <div className="p-8 flex flex-col">
+                    <div className="w-14 h-14 rounded-2xl bg-yellow-500/15 border border-yellow-500/20 flex items-center justify-center mb-5 self-center">
+                      <AlertTriangle size={26} className="text-yellow-400" />
+                    </div>
+                    <h3 className="text-xl font-black tracking-tight text-[color:var(--text-primary)] mb-1 text-center">
+                      Name Conflicts
+                    </h3>
+                    <p className="text-[color:var(--text-secondary)] text-sm font-medium mb-5 leading-relaxed text-center">
+                      {conflicts.length} project{conflicts.length > 1 ? "s" : ""} already exist{conflicts.length === 1 ? "s" : ""} with the same name in your account. Choose how to handle each.
+                    </p>
+
+                    <AnimatePresence>
+                      {error && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-start gap-2"
+                        >
+                          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                          {error}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <div className="flex flex-col gap-3 max-h-72 overflow-y-auto mb-6 pr-1">
+                      {conflicts.map(conflict => {
+                        const res = resolutions[conflict.id] ?? { action: "rename" as const, newName: `${conflict.name} (Guest)` };
+                        return (
+                          <div key={conflict.id} className="rounded-2xl border border-[color:var(--border)] p-4 flex flex-col gap-2">
+                            <p className="text-xs text-[color:var(--text-secondary)] mb-1">
+                              Conflict: <span className="font-bold text-[color:var(--text-primary)]">{conflict.name}</span>
+                            </p>
+                            <button
+                              onClick={() => setResolutions(r => ({ ...r, [conflict.id]: { action: "replace", newName: "" } }))}
+                              className={`text-left text-xs px-3 py-2 rounded-xl border transition-all ${res.action === "replace" ? "border-[color:var(--text-primary)]/40 bg-[color:var(--text-primary)]/8 text-[color:var(--text-primary)]" : "border-[color:var(--border)] text-[color:var(--text-secondary)]"}`}
+                            >
+                              <span className="font-semibold">Replace</span> — overwrite your existing project with this guest one
+                            </button>
+                            <div
+                              className={`text-xs rounded-xl border transition-all cursor-pointer ${res.action === "rename" ? "border-[color:var(--text-primary)]/40 bg-[color:var(--text-primary)]/8" : "border-[color:var(--border)]"}`}
+                              onClick={() => {
+                                if (res.action !== "rename") {
+                                  setResolutions(r => ({ ...r, [conflict.id]: { action: "rename", newName: r[conflict.id]?.newName || `${conflict.name} (Guest)` } }));
+                                }
+                              }}
+                            >
+                              <div className="px-3 py-2">
+                                <span className={`font-semibold ${res.action === "rename" ? "text-[color:var(--text-primary)]" : "text-[color:var(--text-secondary)]"}`}>Rename</span>
+                                {res.action !== "rename" && <span className="text-[color:var(--text-secondary)]"> — transfer with a different name</span>}
+                              </div>
+                              {res.action === "rename" && (
+                                <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    value={res.newName}
+                                    onChange={e => setResolutions(r => ({ ...r, [conflict.id]: { action: "rename", newName: e.target.value } }))}
+                                    className="w-full bg-[color:var(--background)]/50 border border-[color:var(--border)] rounded-lg px-2.5 py-1.5 text-xs text-[color:var(--text-primary)] outline-none focus:border-[color:var(--text-primary)]/50 transition-colors"
+                                    placeholder="New project name"
+                                    autoFocus
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => setResolutions(r => ({ ...r, [conflict.id]: { action: "skip", newName: "" } }))}
+                              className={`text-left text-xs px-3 py-2 rounded-xl border transition-all ${res.action === "skip" ? "border-[color:var(--text-primary)]/40 bg-[color:var(--text-primary)]/8 text-[color:var(--text-primary)]" : "border-[color:var(--border)] text-[color:var(--text-secondary)]"}`}
+                            >
+                              <span className="font-semibold">Skip</span> — keep your existing project, discard this guest one
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={handleApplyResolutions}
+                        disabled={transferring || Object.values(resolutions).some(r => r.action === "rename" && !r.newName.trim())}
+                        className="w-full py-3.5 px-6 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {transferring ? (
+                          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                        ) : null}
+                        {transferring ? "Transferring..." : "Continue Transfer"}
+                      </button>
+                      <button
+                        onClick={() => setStep("transfer")}
+                        disabled={transferring}
+                        className="w-full py-3 text-sm font-semibold text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors disabled:opacity-50"
+                      >
+                        Go Back
                       </button>
                     </div>
                   </div>
