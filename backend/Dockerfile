@@ -59,7 +59,7 @@ EXPOSE 8000
 
 # Docker-level health check — used by orchestrators (Railway, ECS, k8s, etc.)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/api/v1/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/api/v1/ping')" || exit 1
 
 # Production entrypoint:
 # - gunicorn manages multiple worker processes
