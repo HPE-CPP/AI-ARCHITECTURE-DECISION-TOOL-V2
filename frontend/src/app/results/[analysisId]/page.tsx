@@ -370,7 +370,7 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-semibold"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                Still running - complex documents can take up to 3 minutes
+                Still running - complex documents can take up to 2 minutes
               </motion.div>
             )}
           </div>
