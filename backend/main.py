@@ -84,16 +84,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
 
-    logger.info("Running Alembic migrations...")
-    alembic_ini = Path(__file__).resolve().parent / "alembic.ini"
-    alembic_cfg = AlembicConfig(str(alembic_ini))
-    inspector = inspect(engine)
-    if not inspector.has_table("alembic_version"):
-        alembic_command.stamp(alembic_cfg, "head")
-        logger.info("Stamped existing database with Alembic head.")
-    else:
-        alembic_command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migrations applied.")
+    try:
+        logger.info("Running Alembic migrations...")
+        alembic_ini = Path(__file__).resolve().parent / "alembic.ini"
+        alembic_cfg = AlembicConfig(str(alembic_ini))
+        inspector = inspect(engine)
+        if not inspector.has_table("alembic_version"):
+            alembic_command.stamp(alembic_cfg, "head")
+            logger.info("Stamped existing database with Alembic head.")
+        else:
+            alembic_command.upgrade(alembic_cfg, "head")
+            logger.info("Alembic migrations applied.")
+    except Exception as e:
+        logger.error("Alembic migrations skipped (DB unavailable): %s", e)
 
     logger.info("Verifying Qdrant connection...")
     try:
