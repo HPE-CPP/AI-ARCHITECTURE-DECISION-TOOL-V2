@@ -171,10 +171,25 @@ export async function deleteProject(id: string): Promise<void> {
 export async function duplicateProject(id: string, userId?: string | null): Promise<Project | null> {
   const original = await getProject(id);
   if (!original) return null;
+  const owner = userId || getGuestId();
+
+  // Backend enforces unique names per owner, so pick a name that isn't taken.
+  const existing = await getProjects(owner);
+  const taken = new Set(existing.map(p => p.name.trim().toLowerCase()));
+  // Strip any existing "(Copy)"/"(Copy N)" suffix so copies don't stack up,
+  // and leave room for the suffix within the 60-char name limit.
+  const base = original.name.replace(/\s*\(Copy(?: \d+)?\)\s*$/i, "").trim().slice(0, 48);
+  let name = `${base} (Copy)`;
+  let n = 2;
+  while (taken.has(name.toLowerCase())) {
+    name = `${base} (Copy ${n})`;
+    n++;
+  }
+
   return createProject({
-    name: `${original.name} (Copy)`,
+    name,
     description: original.description,
-    userId: userId || getGuestId()
+    userId: owner,
   });
 }
 

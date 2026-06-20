@@ -210,10 +210,10 @@ export default function ProjectsPage() {
   }, [pendingDeletes.length]);
 
   const handleDuplicate = useCallback((id: string) => {
-    duplicateProject(id).then(() => {
-      const userId = user?.uid ?? null;
-      getProjects(userId).then(setProjects);
-    });
+    const userId = user?.uid ?? null;
+    duplicateProject(id, userId)
+      .then(() => getProjects(userId).then(setProjects))
+      .catch((e) => console.error("Failed to duplicate project", e));
   }, [user]);
 
   const handleCloseModal = useCallback(() => {
