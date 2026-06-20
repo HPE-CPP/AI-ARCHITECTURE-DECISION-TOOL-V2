@@ -38,7 +38,42 @@ export function getGuestId(): string {
     guestId = "guest_" + uuidv4();
     localStorage.setItem("archguide_guest_id", guestId);
   }
+  // Keep a running list of every guest ID this browser has ever used
+  _trackGuestId(guestId);
   return guestId;
+}
+
+function _trackGuestId(id: string): void {
+  try {
+    const raw = localStorage.getItem("archguide_guest_ids");
+    const ids: string[] = raw ? JSON.parse(raw) : [];
+    if (!ids.includes(id)) {
+      ids.push(id);
+      localStorage.setItem("archguide_guest_ids", JSON.stringify(ids));
+    }
+  } catch { /* ignore */ }
+}
+
+/** Returns every guest ID this browser has ever created a project under. */
+export function getAllGuestIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("archguide_guest_ids");
+    const ids: string[] = raw ? JSON.parse(raw) : [];
+    // Always include the current session ID even if tracking missed it
+    const current = localStorage.getItem("archguide_guest_id");
+    if (current && !ids.includes(current)) ids.push(current);
+    return ids.filter(id => id.startsWith("guest_"));
+  } catch {
+    return [getGuestId()];
+  }
+}
+
+/** Call after a successful sign-in transfer to stop re-showing old guest projects. */
+export function clearGuestIds(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("archguide_guest_id");
+  localStorage.removeItem("archguide_guest_ids");
 }
 
 export async function getProjects(userId?: string | null): Promise<Project[]> {

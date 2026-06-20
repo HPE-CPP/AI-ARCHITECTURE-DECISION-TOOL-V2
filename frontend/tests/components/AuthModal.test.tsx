@@ -74,9 +74,10 @@ describe('AuthModal — Google Sign-In', () => {
     let resolve!: (v: any) => void
     defaultProps.signIn.mockReturnValueOnce(new Promise(r => { resolve = r }))
 
-    // Mock getProjects to return empty
     vi.doMock('@/lib/projects-store', () => ({
       getProjects: vi.fn().mockResolvedValue([]),
+      getAllGuestIds: vi.fn().mockReturnValue(['guest_xxx']),
+      clearGuestIds: vi.fn(),
     }))
 
     render(<AuthModal {...defaultProps} />)
@@ -103,6 +104,8 @@ describe('AuthModal — Google Sign-In', () => {
     defaultProps.signIn.mockResolvedValueOnce(MOCK_USER)
     vi.doMock('@/lib/projects-store', () => ({
       getProjects: vi.fn().mockResolvedValue([]),
+      getAllGuestIds: vi.fn().mockReturnValue(['guest_xxx']),
+      clearGuestIds: vi.fn(),
     }))
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
@@ -117,6 +120,8 @@ describe('AuthModal — Google Sign-In', () => {
       getProjects: vi.fn().mockResolvedValue([
         { id: 'anon-proj-1', name: 'My Analysis', user_id: 'guest_xxx', status: 'empty' }
       ]),
+      getAllGuestIds: vi.fn().mockReturnValue(['guest_xxx']),
+      clearGuestIds: vi.fn(),
     }))
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
@@ -195,6 +200,8 @@ describe('AuthModal — Project Transfer Flow', () => {
       getProjects: vi.fn().mockResolvedValue([
         { id: 'anon-proj-1', name: 'Finance Platform', user_id: 'guest_xxx', status: 'empty' }
       ]),
+      getAllGuestIds: vi.fn().mockReturnValue(['guest_xxx']),
+      clearGuestIds: vi.fn(),
     }))
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
@@ -211,6 +218,8 @@ describe('AuthModal — Project Transfer Flow', () => {
       getProjects: vi.fn().mockResolvedValue([
         { id: 'anon-proj-1', name: 'Finance Platform', user_id: 'guest_xxx', status: 'empty' }
       ]),
+      getAllGuestIds: vi.fn().mockReturnValue(['guest_xxx']),
+      clearGuestIds: vi.fn(),
     }))
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
@@ -230,6 +239,8 @@ describe('AuthModal — Project Transfer Flow', () => {
         { id: 'p1', name: 'Project Alpha', user_id: 'guest_xxx', status: 'empty' },
         { id: 'p2', name: 'Project Beta', user_id: 'guest_xxx', status: 'empty' },
       ]),
+      getAllGuestIds: vi.fn().mockReturnValue(['guest_xxx']),
+      clearGuestIds: vi.fn(),
     }))
     render(<AuthModal {...defaultProps} />)
     await userEvent.click(screen.getByText('Continue with Google'))
