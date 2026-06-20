@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { X, Chrome, AlertTriangle, CheckSquare, Square } from "lucide-react";
 
@@ -23,6 +23,20 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [conflicts, setConflicts] = useState<{ id: string; name: string; existingId: string }[]>([]);
   const [resolutions, setResolutions] = useState<Record<string, { action: "replace" | "skip" | "rename"; newName: string }>>({});
+
+  useEffect(() => {
+    if (isOpen) {
+      setStep("main");
+      setLoading(false);
+      setTransferring(false);
+      setError(null);
+      setSignedInUser(null);
+      setAnonProjects([]);
+      setSelectedIds(new Set());
+      setConflicts([]);
+      setResolutions({});
+    }
+  }, [isOpen]);
 
   const handleGoogleSignIn = async () => {
     try {
