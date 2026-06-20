@@ -28,8 +28,18 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
       setError(null);
       const user = await signIn();
 
-      const { getProjects } = await import("@/lib/projects-store");
-      const projects = await getProjects(null);
+      const { getProjects, getAllGuestIds } = await import("@/lib/projects-store");
+
+      // Fetch projects from every guest ID this browser has ever used (covers
+      // projects created in older sessions where localStorage was different)
+      const guestIds = getAllGuestIds();
+      const arrays = await Promise.all(guestIds.map((id: string) => getProjects(id)));
+      const seen = new Set<string>();
+      const projects = arrays.flat().filter((p: { id: string }) => {
+        if (seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+      });
 
       if (projects.length > 0) {
         setSignedInUser(user);
@@ -84,7 +94,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
     setTransferring(true);
     setError(null);
     try {
-      const { updateProject, deleteProject, getProjects } = await import("@/lib/projects-store");
+      const { updateProject, deleteProject, getProjects, clearGuestIds } = await import("@/lib/projects-store");
       const userProjects = await getProjects(signedInUser.uid);
       const existingNames = new Set(userProjects.map((p: { name: string }) => p.name.trim().toLowerCase()));
 
@@ -98,6 +108,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
           await deleteProject(project.id);
         }
       }
+      clearGuestIds();
       onAuthSuccess(signedInUser);
     } catch {
       setError("Transfer failed. Please try again.");
@@ -111,10 +122,11 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess, onSkip, signIn, mode
     setTransferring(true);
     setError(null);
     try {
-      const { deleteProject } = await import("@/lib/projects-store");
+      const { deleteProject, clearGuestIds } = await import("@/lib/projects-store");
       for (const project of anonProjects) {
         await deleteProject(project.id);
       }
+      clearGuestIds();
       onAuthSuccess(signedInUser);
     } catch {
       setError("Failed to discard projects. Please try again.");

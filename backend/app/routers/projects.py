@@ -281,8 +281,10 @@ def delete_project(
         raise HTTPException(404, "Project not found")
 
     if uid:
-        # Authenticated — must own the project
-        if project.user_id != uid:
+        # Authenticated — must own the project OR it must be a guest project.
+        # Guest projects can be deleted by any authenticated user during the
+        # sign-in transfer flow (discard unselected / discard-all).
+        if project.user_id != uid and not project.user_id.startswith("guest_"):
             raise HTTPException(403, "You do not have permission to delete this project")
     else:
         # Unauthenticated — must be a guest project
