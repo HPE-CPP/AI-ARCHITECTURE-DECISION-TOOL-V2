@@ -21,7 +21,12 @@ from app.db.session import get_db, SessionLocal
 from app.db.models import Session as SessionModel
 from app.services import vector_service, signal_service, recommendation_service, cache_service
 from app.core.security import verify_firebase_token
-from services.document_parser import DocumentParser, detect_sections, validate_document_relevance
+from services.document_parser import (
+    DocumentParser, detect_sections, validate_document_relevance,
+    build_user_facing_message, log_relevance_assessment
+)
+from services.signal_extractor import SIGNAL_SCHEMA
+from services.llm_client import get_llm_client
 from config import settings
 from app.limiter import limiter
 
@@ -71,16 +76,27 @@ def _process_document_background(session_id: str, file_path: str, safe_filename:
 
         # Stage 2: Document relevance gate
         _update_step(session_id, "relevance_check", "in_progress")
-        is_relevant, issue_type, relevance_msg = validate_document_relevance(
-            doc_data["full_text"], doc_data.get("pages", [])
-        )
-        if not is_relevant:
-            _update_step(session_id, "relevance_check", "rejected", details=relevance_msg)
+        _llm_for_review = get_llm_client(provider)
+        assessment = asyncio.run(validate_document_relevance(
+            doc_data["full_text"],
+            doc_data["word_count"],
+            SIGNAL_SCHEMA,
+            _llm_for_review,
+        ))
+
+        # 1. Developer log — full detail, file only, never reaches frontend
+        log_relevance_assessment(session_id=session_id, filename=safe_filename, assessment=assessment)
+
+        # 2. User-facing decision trace — short, plain-English, this is what the frontend shows
+        user_message = build_user_facing_message(assessment)
+        
+        if not assessment.passed:
+            _update_step(session_id, "relevance_check", "rejected", details=user_message)
             session_row.status = "error"
             db.commit()
             return
-        _update_step(session_id, "relevance_check", "complete",
-                     details=f"Document passes relevance check ({doc_data['word_count']} words)")
+            
+        _update_step(session_id, "relevance_check", "complete", details=user_message)
 
         # Stage 3: Section detection
         _update_step(session_id, "section_detection", "in_progress")
