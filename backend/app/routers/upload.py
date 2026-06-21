@@ -144,11 +144,11 @@ def _process_document_background(session_id: str, file_path: str, safe_filename:
             s for s in signals.values()
             if s.get("value") and s.get("confidence", 0) >= 0.35
         ]
-        if len(confident_signals) < 3:
+        if len(confident_signals) < 4:
             session_row.status = "error"
             db.commit()
             _update_step(session_id, "confidence_gate", "error",
-                         details=f"Only {len(confident_signals)} signals with sufficient confidence (minimum 3 required).")
+                         details=f"Only {len(confident_signals)} signals with sufficient confidence (minimum 4 required).")
             return
 
         # Signal concentration warning
