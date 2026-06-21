@@ -9,13 +9,12 @@ from services.document_parser import (
     DocumentParser, detect_sections, score_page_relevance,
     get_relevant_pages, register_signal_keywords,
     # Risk-scoring gate
-    RiskTier, RuleFlag, RelevanceAssessment,
+    RiskTier, RuleFlag,
     rule_length_ceiling, rule_keyword_density, rule_category_coverage,
     rule_resume_shape, rule_circular_upload,
     assess_document_risk, validate_document_relevance,
     MAX_REASONABLE_WORD_COUNT, EXTREME_WORD_COUNT,
     AUTO_REJECT_THRESHOLD, REVIEW_THRESHOLD,
-    MIN_CATEGORIES_REQUIRED,
 )
 
 
