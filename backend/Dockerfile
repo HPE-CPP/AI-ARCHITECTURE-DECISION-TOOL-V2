@@ -53,7 +53,7 @@ RUN groupadd --gid 1001 appgroup && \
 COPY --chown=appuser:appgroup . .
 
 # Pre-create runtime directories that the app writes to at startup
-RUN mkdir -p faiss_index && chown appuser:appgroup faiss_index
+RUN mkdir -p faiss_index logs && chown appuser:appgroup faiss_index logs
 
 # Switch to non-root user
 USER appuser

@@ -22,16 +22,24 @@ from docx import Document
 
 logger = logging.getLogger(__name__)
 
-# Configure a dedicated file logger for developer relevance gate metrics
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
-os.makedirs(log_dir, exist_ok=True)
+# Configure a dedicated file logger for developer relevance gate metrics.
+# File logging is best-effort: in restricted-permission environments (e.g. a
+# container running as a non-root user where /app/logs is not writable) the
+# directory creation or FileHandler would raise OSError. That must never crash
+# module import — doing so prevents the whole app from booting. Degrade to the
+# default logging config instead.
 relevance_logger = logging.getLogger("relevance_gate")
 relevance_logger.setLevel(logging.INFO)
 # Avoid adding handlers multiple times in dev reload
 if not relevance_logger.handlers:
-    fh = logging.FileHandler(os.path.join(log_dir, "relevance_gate.log"))
-    fh.setFormatter(logging.Formatter('%(message)s'))
-    relevance_logger.addHandler(fh)
+    try:
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        fh = logging.FileHandler(os.path.join(log_dir, "relevance_gate.log"))
+        fh.setFormatter(logging.Formatter('%(message)s'))
+        relevance_logger.addHandler(fh)
+    except OSError:
+        logger.warning("relevance_gate file logging disabled (logs dir not writable)")
 
 # ── Flat set of all signal keywords used for page relevance scoring ──────────
 # Populated by signal_extractor at import time to avoid circular deps.
