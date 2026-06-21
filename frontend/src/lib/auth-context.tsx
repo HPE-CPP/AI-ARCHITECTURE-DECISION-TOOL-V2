@@ -54,6 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         displayName: u.displayName,
         photoURL: u.photoURL,
       };
+      // The /users/sync endpoint requires a valid Firebase JWT (SEC-001).
+      // Without this Authorization header the backend returns 401 and the
+      // user is never persisted to Postgres.
+      const idToken = await u.getIdToken();
       const apiUrl = getApiBase();
       const MAX_RETRIES = 3;
       let lastError: unknown;
@@ -61,7 +65,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await fetch(`${apiUrl}/api/v1/users/sync`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${idToken}`,
+            },
             body: JSON.stringify(payload),
           });
           if (res.ok) break;
