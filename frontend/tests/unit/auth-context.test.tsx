@@ -85,6 +85,7 @@ describe('AuthProvider — signIn', () => {
       uid: 'uid-001',
       email: 'test@example.com',
       displayName: 'Test User',
+      getIdToken: async () => 'test-id-token',
     })
 
     const { getByTestId } = render(<AuthProvider><TestConsumer /></AuthProvider>)
@@ -101,6 +102,7 @@ describe('AuthProvider — signIn', () => {
       uid: 'uid-001',
       email: 'test@example.com',
       displayName: 'Test User',
+      getIdToken: async () => 'test-id-token',
     })
     const { getByTestId } = render(<AuthProvider><TestConsumer /></AuthProvider>)
     await waitFor(() => expect(getByTestId('loading').textContent).toBe('false'))
@@ -117,6 +119,7 @@ describe('AuthProvider — signIn', () => {
       email: 'sync@example.com',
       displayName: 'Sync User',
       photoURL: null,
+      getIdToken: async () => 'test-id-token',
     }
     ;(signInWithGoogle as any).mockResolvedValueOnce(mockUser)
 
@@ -137,6 +140,7 @@ describe('AuthProvider — signIn', () => {
       uid: 'uid-002',
       email: 'test@example.com',
       displayName: 'Test',
+      getIdToken: async () => 'test-id-token',
     })
     vi.mocked(fetch).mockRejectedValueOnce(new Error('Backend down'))
 
@@ -155,6 +159,7 @@ describe('AuthProvider — signOut', () => {
       uid: 'uid-001',
       email: 'test@example.com',
       displayName: 'Test User',
+      getIdToken: async () => 'test-id-token',
     })
     ;(signOutUser as any).mockResolvedValueOnce(undefined)
 
