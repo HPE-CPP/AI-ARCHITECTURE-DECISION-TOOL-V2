@@ -68,7 +68,7 @@ function parseUploadError(message: string): ParsedError {
       variant: "guidance",
     };
   }
-  if (m.includes("signal(s) could be extracted") || m.includes("minimum 3 required")) {
+  if (m.includes("signal(s) could be extracted") || m.includes("minimum 4 required")) {
     return {
       title: "Could not read enough requirements",
       body: "The document passed the first check but the AI could not find enough specific requirements inside it.",

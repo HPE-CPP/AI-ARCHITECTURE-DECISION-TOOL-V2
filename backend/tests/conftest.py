@@ -206,6 +206,18 @@ MOCK_LLM_RESPONSE = {
         "source_text": "100,000+ active users across the enterprise.",
         "page_number": 2,
     },
+    "citation_requirement": {
+        "value": "high",
+        "confidence": 0.83,
+        "source_text": "Every answer must cite the source document for audit purposes.",
+        "page_number": 5,
+    },
+    "context_size": {
+        "value": "large",
+        "confidence": 0.8,
+        "source_text": "Responses draw on lengthy regulatory filings and contracts.",
+        "page_number": 4,
+    },
 }
 
 
@@ -251,7 +263,7 @@ def mock_llm_hallucinating():
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def complete_signals():
-    """All 10 signals with high confidence — deterministic scoring."""
+    """All 12 signals with high confidence — deterministic scoring."""
     return {k: dict(v) for k, v in MOCK_LLM_RESPONSE.items()}
 
 
