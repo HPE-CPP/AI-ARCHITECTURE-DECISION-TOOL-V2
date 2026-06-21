@@ -14,8 +14,13 @@ import app.db.models  # noqa: F401 — register all models
 
 config = context.config
 
-# Override sqlalchemy.url from our settings (ignore alembic.ini value)
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Override sqlalchemy.url from our settings (ignore alembic.ini value).
+# Alembic stores this in a ConfigParser, which treats '%' as interpolation
+# syntax. URLs with percent-encoded characters (e.g. a password containing
+# '%40' for '@') would raise "invalid interpolation syntax" and silently skip
+# migrations. Escape '%' as '%%' so ConfigParser round-trips it back to the
+# literal URL when read by engine_from_config / get_main_option.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
