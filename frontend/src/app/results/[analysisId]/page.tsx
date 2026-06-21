@@ -167,6 +167,38 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
     });
   }, [questionnaireOptions]);
 
+  const isProcessing = loading || ["queued", "processing", "parsing", "extracting_signals", "scoring", "validating", "detecting_sections"].includes(result?.status || "");
+
+  useEffect(() => {
+    if (!isProcessing) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Push a dummy state to trap the back button
+    window.history.pushState(null, "", window.location.href);
+
+    const handlePopState = () => {
+      const confirmLeave = window.confirm(
+        "Analysis is in progress. If you leave, your progress will be lost. Are you sure you want to go back?"
+      );
+      if (!confirmLeave) {
+        window.history.pushState(null, "", window.location.href);
+      } else {
+        window.history.back();
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [isProcessing]);
+
   useEffect(() => {
     getQuestionnaireOptions()
       .then(setQuestionnaireOptions)
