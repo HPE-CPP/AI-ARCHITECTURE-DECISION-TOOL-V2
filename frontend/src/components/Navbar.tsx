@@ -276,19 +276,19 @@ export function Navbar() {
               </button>
               {user ? (
                 <button
-                  aria-label="Open menu"
-                  onClick={() => setIsMobileMenuOpen(true)}
+                  aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                   className="w-9 h-9 flex items-center justify-center rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-black text-[11px] active:scale-90 transition-transform"
                 >
-                  {userInitial}
+                  {isMobileMenuOpen ? <X size={16} /> : userInitial}
                 </button>
               ) : (
                 <button
-                  aria-label="Open menu"
-                  onClick={() => setIsMobileMenuOpen(true)}
+                  aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                   className="w-9 h-9 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90 transition-transform"
                 >
-                  <Menu size={22} />
+                  {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
                 </button>
               )}
             </div>
@@ -557,13 +557,7 @@ export function Navbar() {
             exit={{ opacity: 0, y: -20 }}
             className="fixed inset-0 z-40 md:hidden bg-[color:var(--background)] pt-20 px-6 flex flex-col gap-4"
           >
-            {/* Close button */}
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/8 border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90 transition-transform"
-            >
-              <X size={20} />
-            </button>
+
 
             <div className="flex flex-col gap-3">
               {navLinks.map((link, i) => {
