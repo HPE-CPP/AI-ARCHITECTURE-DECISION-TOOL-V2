@@ -11,7 +11,7 @@ The auth bypass in conftest makes every request authenticated as TEST_USER_UID.
 import uuid
 import pytest
 
-from tests.conftest import TEST_USER_UID
+TEST_USER_UID = "test_firebase_uid_001"
 
 
 def _make_guest_project(db_session, name: str, guest_id: str = "guest_abc123"):
