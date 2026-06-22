@@ -22,16 +22,24 @@ from docx import Document
 
 logger = logging.getLogger(__name__)
 
-# Configure a dedicated file logger for developer relevance gate metrics
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
-os.makedirs(log_dir, exist_ok=True)
-relevance_logger = logging.getLogger("relevance_gate")
-relevance_logger.setLevel(logging.INFO)
-# Avoid adding handlers multiple times in dev reload
-if not relevance_logger.handlers:
-    fh = logging.FileHandler(os.path.join(log_dir, "relevance_gate.log"))
-    fh.setFormatter(logging.Formatter('%(message)s'))
-    relevance_logger.addHandler(fh)
+# We use a lazy getter for the developer log to prevent Uvicorn from
+# disabling the logger during startup.
+def get_relevance_logger() -> logging.Logger:
+    logger = logging.getLogger("relevance_gate")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    
+    # Avoid adding handlers multiple times
+    if not logger.handlers:
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        fh = logging.FileHandler(os.path.join(log_dir, "relevance_gate.log"))
+        fh.setFormatter(logging.Formatter('%(message)s'))
+        logger.addHandler(fh)
+        
+    # Re-enable the logger explicitly on every call in case Uvicorn disabled it
+    logger.disabled = False
+    return logger
 
 # ── Flat set of all signal keywords used for page relevance scoring ──────────
 # Populated by signal_extractor at import time to avoid circular deps.
@@ -179,7 +187,16 @@ def log_relevance_assessment(session_id: str, filename: str, assessment: "Releva
             for f in assessment.flags
         ],
     }
-    relevance_logger.info(json.dumps(log_entry))
+    
+    # Print the disabled state before retrieving/fixing the logger (User requirement)
+    logger_instance = logging.getLogger("relevance_gate")
+    print(f">>>> [DIAG] relevance_logger.disabled BEFORE fix: {logger_instance.disabled}", flush=True)
+    
+    rl = get_relevance_logger()
+    
+    print(f">>>> [DIAG] relevance_logger.disabled AFTER fix: {rl.disabled}", flush=True)
+
+    rl.info(json.dumps(log_entry))
 
 
 # ── Step 2: Independent rule functions (each always returns a RuleFlag) ──────
@@ -338,19 +355,24 @@ def rule_resume_shape(text: str) -> RuleFlag:
     ]
     marker_hits = sum(1 for m in resume_section_markers if m in text_lower)
 
+    standalone_headers = {"experience", "summary", "profile", "employment"}
+    for line in lines:
+        if line.lower() in standalone_headers:
+            marker_hits += 1
+
     has_email = bool(re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text))
     has_phone = bool(re.search(
         r"(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}", text
     ))
 
     date_range_hits = len(re.findall(
-        r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4}\s*[-\u2013\u2014to]+\s*"
-        r"(present|current|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4})",
+        r"(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?\d{4}\s*[-\u2013\u2014to]+\s*"
+        r"(present|current|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?\d{4})",
         text_lower,
     ))
 
     short_line_ratio = (
-        sum(1 for line in lines if len(line.split()) <= 6) / max(len(lines), 1)
+        sum(1 for line in lines if len(line.split()) <= 10) / max(len(lines), 1)
     )
 
     spec_language_markers = [

@@ -12,15 +12,18 @@ Optimizations applied:
 """
 import asyncio
 import hashlib
+import json
 import logging
 import re
+from difflib import SequenceMatcher
 from typing import Optional
 
-from services.llm_client import LLMClient
+from services.llm_client import LLMClient, sanitize_json_string
 from services.extraction_cache import extraction_cache
 from services.document_parser import (
     get_relevant_pages,
     register_signal_keywords,
+    get_relevance_logger,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,6 +145,130 @@ DOCUMENT:
 DOCUMENT_TEXT_PLACEHOLDER
 """
 
+# ── Step 2.2: Per-signal extraction prompt ────────────────────────────────────
+# Each signal gets its own focused call — removes shared-context pressure that
+# causes the LLM to grab the most topically-adjacent chunk for missing signals.
+
+SIGNAL_EXTRACTION_PROMPT = """You are extracting ONE specific signal from a project requirements document, to support an architecture decision (RAG / Fine-tuning / Cache-Augmented Generation / Hybrid).
+
+Signal to extract: {signal_name}
+Definition: {signal_definition}
+Allowed values: {allowed_values}
+
+Read the document below and determine this signal's value.
+
+CRITICAL RULES:
+- Only assign a value if the document contains content that DIRECTLY and SPECIFICALLY discusses this exact signal. A sentence about a related-but-different topic (e.g., general statistics about fraud costs do NOT support a "dataset size" signal; a code snippet about label encoding does NOT support a "security level" signal) does not count, even if it shares vocabulary.
+- If you cannot find content that directly discusses this specific signal, set "found" to false. This is a normal, correct, expected outcome — most documents will not explicitly address every signal. Do not stretch a tangentially related sentence to fill this field.
+- If found, the source_quote must be an EXACT verbatim copy of the supporting text — character for character, no paraphrasing.
+- Do not reuse boilerplate document content (titles, headers, institutional/course information, code snippets without surrounding explanation) as a source unless it is genuinely and specifically about this signal.
+
+Document (page-tagged):
+---
+{document_text}
+---
+
+Respond with ONLY this JSON, no other text:
+{{"found": true/false, "value": "<signal value using one of the allowed values, or null if not found>", "confidence": 0.0-1.0, "source_quote": "<exact verbatim text, or null>", "source_page": <page number or null>}}
+"""
+
+# ── Step 2.4: Entailment check prompt ─────────────────────────────────────────
+ENTAILMENT_CHECK_PROMPT = """You are a STRICT verifier for an AI architecture extraction system. Your job is to check if a quoted passage ACTUALLY SUPPORTS a claimed signal value. The system must never show misleading or tangential citations to users.
+
+Signal: {signal_name}
+Claimed value: {signal_value}
+Quoted passage: "{source_quote}"
+
+Does this passage DIRECTLY, SPECIFICALLY, and UNAMBIGUOUSLY prove that the document has this signal value? Answer "yes" ONLY if a highly skeptical reader would agree the passage is explicitly stating this requirement, not just sharing a topical keyword.
+
+CRITICAL RULES FOR REJECTION (Answer "no"):
+1. The quote is a code fragment or technical implementation detail (e.g., "fraud_label", "var data = ..."). This NEVER supports business requirements like "security level" or "data volatility".
+2. The quote is a general statement about the global problem domain (e.g., "fraud costs billions"). This DOES NOT support quantitative claims about THIS specific system like "dataset size" or "cost sensitivity".
+3. The quote is just a document header, title, or date.
+4. The quote contains matching keywords but discusses a different topic entirely.
+
+Respond with ONLY this JSON, no other text:
+{{"entailed": true/false, "reasoning": "<one short sentence explaining why>"}}
+"""
+
+
+# ── Step 2.3: Existence verification (synchronous, fast) ──────────────────────
+def verify_source_quote(claimed_quote: str, document_text: str, fuzzy_threshold: float = 0.8) -> dict:
+    """
+    Checks if a quote literally exists in the document text.
+    Fails OPEN (keeps the value but marks unverified) so we don't accidentally
+    destroy correct values just because the LLM slightly paraphrased the quote.
+    """
+    if not claimed_quote:
+        return {"verified": False, "matched_text": None, "reason": "empty"}
+
+    doc_lower = document_text.lower()
+    quote_lower = claimed_quote.lower()
+
+    if quote_lower in doc_lower:
+        return {"verified": True, "matched_text": claimed_quote}
+
+    # Fallback to fuzzy match to handle whitespace, case, or punctuation drift
+    words = quote_lower.split()
+    if len(words) < 3:
+        return {"verified": False, "matched_text": None, "reason": "too_short_for_fuzzy"}
+
+    for start_len in range(len(words), max(2, int(len(words) * 0.6)) - 1, -1):
+        fragment = " ".join(words[:start_len])
+        idx = doc_lower.find(fragment)
+        if idx != -1:
+            sent_start = max(0, document_text.rfind(".", 0, idx) + 1)
+            sent_end = document_text.find(".", idx + len(fragment))
+            if sent_end == -1:
+                sent_end = min(len(document_text), idx + len(fragment) + 100)
+            else:
+                sent_end += 1
+            matched = document_text[sent_start:sent_end].strip()
+            # Double check similarity of the recovered sentence
+            if SequenceMatcher(None, matched.lower(), quote_lower).ratio() > fuzzy_threshold:
+                return {"verified": True, "matched_text": matched}
+
+    return {"verified": False, "matched_text": None, "reason": "not_found"}
+
+
+# ── Step 2.4: Entailment Verification (LLM call) ──────────────────────────────
+async def verify_entailment(signal_name: str, signal_value: str, source_quote: str, llm_client) -> dict:
+    """
+    Uses the LLM to verify that a (proven to exist) quote actually entails the
+    claimed value. This catches cases where the LLM grabs an adjacent but
+    unrelated paragraph to fill out a missing field.
+    """
+    if not source_quote or not signal_value:
+        return {"entailed": False, "reasoning": "Missing quote or value"}
+
+    prompt = ENTAILMENT_CHECK_PROMPT.format(
+        signal_name=signal_name,
+        signal_value=signal_value,
+        source_quote=source_quote
+    )
+
+    try:
+        result = await llm_client.generate_json(prompt, temperature=0.0)
+        
+        # Unwrap if LLM nested the response
+        if "entailed" not in result:
+            for wrapper in ["result", "data", "output", "verification"]:
+                if wrapper in result and isinstance(result[wrapper], dict) and "entailed" in result[wrapper]:
+                    result = result[wrapper]
+                    break
+                    
+        entailed = bool(result.get("entailed", False))
+        reasoning = result.get("reasoning", "No reasoning provided by LLM")
+        
+        return {
+            "entailed": entailed,
+            "reasoning": reasoning
+        }
+    except Exception as e:
+        logger.error(f"Entailment check failed for {signal_name}: {e}")
+        # Fails CLOSED — if we can't verify entailment, we assume it's unverified.
+        return {"entailed": False, "reasoning": f"Verification error: {str(e)}"}
+
 # Prompt fingerprint — automatically invalidates stale cache entries when the prompt changes.
 _PROMPT_FINGERPRINT = hashlib.md5(EXTRACTION_PROMPT.encode()).hexdigest()[:8]
 
@@ -229,7 +356,7 @@ class SignalExtractor:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    async def extract_signals(self, document_data: dict) -> dict[str, dict]:
+    async def extract_signals(self, document_data: dict, session_id: str = "unknown") -> dict[str, dict]:
         """Extract signals with page filtering, caching, and parallel chunk analysis."""
         full_text = document_data.get("full_text", "")
         pages = document_data.get("pages", [])
@@ -288,8 +415,13 @@ class SignalExtractor:
             )
             llm_signals = self._heuristic_extraction(full_text, pages)
 
-        # ── 6. Source verification (against original full_text + pages) ────────
-        llm_signals = self._verify_sources(llm_signals, full_text, pages)
+        # ── 6. Source verification: existence + LLM entailment check ──────────
+        # This replaces the old existence-only _verify_sources() check.
+        # Fails closed on entailment errors (a signal shown VERIFIED with a
+        # wrong source is worse than one honestly marked MISSING).
+        llm_signals = await self._verify_sources_with_entailment(
+            llm_signals, full_text, pages, session_id
+        )
 
         # ── 7. Merge keyword + LLM/heuristic results ──────────────────────────
         merged = self._merge_signals(keyword_signals, llm_signals)
@@ -347,123 +479,106 @@ class SignalExtractor:
             start += CHUNK_SIZE - CHUNK_OVERLAP
         return chunks
 
-    # ── LLM extraction ────────────────────────────────────────────────────────
+    # ── LLM extraction (Decoupled per-signal logic) ───────────────────────────
 
     async def _llm_extraction(self, text: str, retrieved_context: str = "") -> dict[str, dict]:
-        """Single LLM call for signal extraction."""
-        try:
-            ctx_body = retrieved_context.strip() if retrieved_context else "(none)"
-
-            # Guard: if retrieved_context pushes combined size over MAX_CONTEXT_CHARS,
-            # trim it rather than letting the LLM client silently truncate the document.
-            overhead = len(EXTRACTION_PROMPT) - len("RETRIEVED_CONTEXT_PLACEHOLDER") - len("DOCUMENT_TEXT_PLACEHOLDER")
-            budget = MAX_CONTEXT_CHARS - overhead - len(text)
-            if budget < 0:
-                # Document itself already exceeds budget — trim it
-                text = text[:MAX_CONTEXT_CHARS - overhead - 200]
-                ctx_body = "(none)"
-            elif len(ctx_body) > budget:
-                ctx_body = ctx_body[:budget]
-
-            # Use str.replace() — NOT .format() — because document text may contain
-            # literal curly braces (JSON, code, templates) that break str.format().
-            prompt = (
-                EXTRACTION_PROMPT
-                .replace("RETRIEVED_CONTEXT_PLACEHOLDER", ctx_body)
-                .replace("DOCUMENT_TEXT_PLACEHOLDER", text)
-            )
-            result = await self.llm.generate_json(prompt=prompt)
-
-            if "error" in result:
-                logger.error(
-                    "LLM extraction returned error: %s. "
-                    "Check that Ollama/OpenAI is running and the model is loaded.",
-                    result.get("error", "unknown"),
-                )
-                return self._empty_signals()
-
-            # Unwrap if LLM nested signals inside a wrapper key
-            # e.g. {"signals": {...}} or {"architecture_signals": {...}}
-            if not any(k in result for k in SIGNAL_SCHEMA):
-                for wrapper in ("signals", "architecture_signals", "result",
-                                "data", "output", "extraction", "analysis"):
-                    if wrapper in result and isinstance(result[wrapper], dict):
-                        result = result[wrapper]
-                        logger.debug("Unwrapped LLM JSON from key '%s'", wrapper)
-                        break
-
-            validated: dict[str, dict] = {}
-            found_count = 0
-            for key in SIGNAL_SCHEMA:
-                if key in result and isinstance(result[key], dict):
-                    sig = result[key]
-                    raw_value = sig.get("value")
-                    # Treat JSON null, the string "null", and empty string as absent
-                    value = None if raw_value in (None, "null", "", "N/A", "n/a") else raw_value
-                    conf = min(1.0, max(0.0, float(sig.get("confidence", 0) or 0)))
-                    if value:
-                        found_count += 1
-                    validated[key] = {
-                        "value": value,
-                        "confidence": conf,
-                        "source_text": str(sig.get("source_text", "") or "")[:300],
-                        "page_number": int(sig.get("page_number", 0) or 0),
-                    }
-                else:
-                    validated[key] = {
-                        "value": None,
-                        "confidence": 0.0,
-                        "source_text": "",
-                        "page_number": 0,
-                    }
-
-            logger.info("LLM extracted %d/%d signals with values", found_count, len(SIGNAL_SCHEMA))
-            return validated
-
-        except Exception as e:
-            logger.error(
-                "LLM extraction failed: %s. "
-                "Verify Ollama is running (`ollama serve`) and model is pulled (`ollama pull llama3.2`)",
-                e,
-            )
-            return self._empty_signals()
+        """
+        Executes parallel extraction requests, one for each signal.
+        This isolates signals to prevent hallucination from shared context.
+        """
+        results = await self._parallel_chunk_extraction(text, retrieved_context)
+        return results
 
     async def _parallel_chunk_extraction(self, text: str, retrieved_context: str = "") -> dict[str, dict]:
         """
-        For large documents: split into overlapping chunks, extract from all chunks
-        concurrently (bounded by a semaphore), then keep the highest-confidence
-        signal from any chunk.
+        Extracts each of the 12 signals independently across chunks using the
+        SIGNAL_EXTRACTION_PROMPT. Combines chunks and signals concurrently,
+        bounded by a semaphore to prevent OOM or rate limits.
         """
-        chunks = self._make_chunks(text)
-        logger.info("Parallel extraction: %d chunks (~%d chars each)", len(chunks), CHUNK_SIZE)
+        # Split text into chunks if it's too large, otherwise just use one chunk
+        if len(text) > MAX_CONTEXT_CHARS:
+            chunks = self._make_chunks(text)
+        else:
+            chunks = [text]
+            
+        logger.info(f"Extracting {len(SIGNAL_SCHEMA)} signals independently across {len(chunks)} chunks")
 
-        # B-07 FIX: Limit concurrent LLM calls to 5 to prevent OOM / rate-limit crashes.
-        # return_exceptions=True ensures a single failed chunk doesn't discard all results.
+        # Concurrency limits: 5 concurrent LLM calls across all signals/chunks
         semaphore = asyncio.Semaphore(5)
 
-        async def _bounded_extraction(chunk: str, ctx: str = "") -> dict:
+        async def _extract_single_signal(chunk: str, ctx: str, signal_name: str, schema: dict) -> tuple[str, dict]:
+            # Budget check
+            budget = MAX_CONTEXT_CHARS - len(SIGNAL_EXTRACTION_PROMPT) - 500
+            if len(chunk) > budget:
+                chunk = chunk[:budget]
+
+            ctx_body = ctx.strip() if ctx else "(none)"
+            if len(ctx_body) > budget - len(chunk) and budget - len(chunk) > 0:
+                ctx_body = ctx_body[:budget - len(chunk)]
+            elif budget - len(chunk) <= 0:
+                ctx_body = "(none)"
+
+            prompt = SIGNAL_EXTRACTION_PROMPT.format(
+                signal_name=signal_name,
+                signal_definition=schema["description"],
+                allowed_values=", ".join(schema["keywords"][:10]), # Truncate keywords list
+                document_text=chunk
+            )
+
             async with semaphore:
-                return await self._llm_extraction(chunk, ctx)
+                try:
+                    result = await self.llm.generate_json(prompt, temperature=0.0)
+                    
+                    if "error" in result:
+                        return signal_name, {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0}
 
-        # Pass retrieved_context only to the first chunk to avoid inflating token
-        # usage across all parallel calls.
-        tasks = [
-            _bounded_extraction(chunk, retrieved_context if i == 0 else "")
-            for i, chunk in enumerate(chunks)
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+                    # Handle unwrapping
+                    if "found" not in result:
+                        for wrapper in ["result", "data", "output", "signal", "extraction"]:
+                            if wrapper in result and isinstance(result[wrapper], dict) and "found" in result[wrapper]:
+                                result = result[wrapper]
+                                break
 
-        # Winner-takes-all per signal: highest confidence across chunks
-        merged: dict[str, dict] = self._empty_signals()
-        for chunk_result in results:
-            # Skip chunks that raised exceptions
-            if isinstance(chunk_result, Exception):
-                logger.warning("Chunk extraction failed (skipped): %s", chunk_result)
+                    found = result.get("found", False)
+                    raw_value = result.get("value")
+                    value = None if raw_value in (None, "null", "", "N/A", "n/a") else raw_value
+                    
+                    if found and value:
+                        return signal_name, {
+                            "value": value,
+                            "confidence": min(1.0, max(0.0, float(result.get("confidence", 0)))),
+                            "source_text": str(result.get("source_quote", "") or "")[:300],
+                            "page_number": int(result.get("source_page", 0) or 0)
+                        }
+                    return signal_name, {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0}
+                except Exception as e:
+                    logger.debug(f"Extraction failed for signal {signal_name}: {e}")
+                    return signal_name, {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0}
+
+        # Create tasks for every combination of chunk and signal
+        tasks = []
+        for i, chunk in enumerate(chunks):
+            ctx = retrieved_context if i == 0 else ""
+            for signal_name, schema in SIGNAL_SCHEMA.items():
+                tasks.append(_extract_single_signal(chunk, ctx, signal_name, schema))
+
+        chunk_signal_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Merge the best confidence per signal
+        merged = self._empty_signals()
+        for res in chunk_signal_results:
+            if isinstance(res, Exception) or not res:
                 continue
-            for key, sig in chunk_result.items():
-                if sig.get("confidence", 0) > merged[key].get("confidence", 0):
-                    merged[key] = sig
+            
+            signal_name, sig_data = res
+            if not sig_data.get("value"):
+                continue
+                
+            if sig_data.get("confidence", 0) > merged[signal_name].get("confidence", 0):
+                merged[signal_name] = sig_data
 
+        found_count = sum(1 for s in merged.values() if s.get("value"))
+        logger.info("Decoupled LLM extraction found %d/%d signals", found_count, len(SIGNAL_SCHEMA))
         return merged
 
     # ── Keyword extraction ────────────────────────────────────────────────────
@@ -531,17 +646,122 @@ class SignalExtractor:
 
         return signals
 
-    # ── Source verification ───────────────────────────────────────────────────
+    # ── Source verification (two-layer: existence + entailment) ──────────────
+
+    async def _verify_sources_with_entailment(
+        self, signals: dict[str, dict], full_text: str, pages: list[dict], session_id: str = "unknown"
+    ) -> dict[str, dict]:
+        """
+        Full two-layer source verification replacing the old existence-only check.
+
+        Layer 1 — Existence: does the quote literally appear in the document?
+        Layer 2 — Entailment: does the quote actually *support* the claimed value?
+
+        Asymmetry is intentional and must be preserved:
+        - Existence check fails OPEN (unverified but value kept, no LLM cost).
+        - Entailment check fails CLOSED (unverified; logged for developer review).
+        Rationale: a signal shown VERIFIED with a wrong source is worse than one
+        honestly marked MISSING, since VERIFIED falsely signals trustworthiness.
+        Flag for product review rather than silently changing this asymmetry.
+        """
+        # Run all entailment checks concurrently — bounded to avoid rate limits.
+        sem = asyncio.Semaphore(4)
+
+        from datetime import datetime
+
+        async def _check_one(key: str, sig: dict) -> tuple[str, dict]:
+            src = sig.get("source_text", "").strip()
+            value = sig.get("value")
+
+            # Skip if no quote or no extracted value — nothing to verify.
+            if not src or not value:
+                sig["source_verified"] = False
+                rl = get_relevance_logger()
+                rl.info(json.dumps({
+                    "timestamp": datetime.now().isoformat(),
+                    "event": "source_verification_result",
+                    "session_id": session_id,
+                    "signal_name": key,
+                    "verified": False,
+                    "reason": "empty_source_or_value",
+                    "claimed_quote": src[:200] if src else None,
+                    "entailment_reasoning": None,
+                }))
+                return key, sig
+
+            # Layer 1: existence check (synchronous, no LLM cost)
+            existence = verify_source_quote(src, full_text)
+            if not existence["verified"]:
+                sig["source_verified"] = False
+                rl = get_relevance_logger()
+                rl.info(json.dumps({
+                    "timestamp": datetime.now().isoformat(),
+                    "event": "source_verification_result",
+                    "session_id": session_id,
+                    "signal_name": key,
+                    "verified": False,
+                    "reason": "quote_not_found_in_document",
+                    "claimed_quote": src[:200],
+                    "entailment_reasoning": None,
+                }))
+                logger.debug("Source for '%s' not found in document (value kept)", key)
+                return key, sig
+
+            # If quote exists, update to matched text (handles fuzzy recovery)
+            if existence.get("matched_text"):
+                sig["source_text"] = existence["matched_text"]
+            if not sig.get("page_number"):
+                sig["page_number"] = self._find_page_for_text(sig["source_text"], pages)
+
+            # Layer 2: entailment check (LLM call, fails CLOSED)
+            async with sem:
+                entailment = await verify_entailment(key, value, sig["source_text"], self.llm)
+
+            if not entailment["entailed"]:
+                sig["source_verified"] = False
+                rl = get_relevance_logger()
+                rl.info(json.dumps({
+                    "timestamp": datetime.now().isoformat(),
+                    "event": "source_verification_result",
+                    "session_id": session_id,
+                    "signal_name": key,
+                    "verified": False,
+                    "reason": "quote_does_not_support_value",
+                    "claimed_quote": sig["source_text"][:200],
+                    "entailment_reasoning": entailment.get("reasoning"),
+                }))
+                logger.debug(
+                    "Entailment failed for '%s': %s (value kept, shown as MISSING in UI)",
+                    key, entailment.get("reasoning")
+                )
+            else:
+                sig["source_verified"] = True
+                rl = get_relevance_logger()
+                rl.info(json.dumps({
+                    "timestamp": datetime.now().isoformat(),
+                    "event": "source_verification_result",
+                    "session_id": session_id,
+                    "signal_name": key,
+                    "verified": True,
+                    "reason": "existence_and_entailment_passed",
+                    "claimed_quote": sig["source_text"][:200],
+                    "entailment_reasoning": entailment.get("reasoning"),
+                }))
+
+            return key, sig
+
+        results = await asyncio.gather(*[_check_one(k, v) for k, v in signals.items()])
+        return dict(results)
 
     def _verify_sources(
         self, signals: dict[str, dict], full_text: str, pages: list[dict]
     ) -> dict[str, dict]:
         """
-        Verify each LLM-provided source_text actually appears in the document.
-        Falls back to fuzzy recovery. Does NOT penalise confidence on failure —
-        the value itself can be correct even when the exact quote isn't verbatim.
-        Penalising confidence here caused valid signals to be nulled downstream
-        by the anti-hallucination threshold, dramatically degrading recall.
+        Legacy existence-only check — retained for the heuristic fallback path
+        where signals already come from regex matches against the full text, so
+        entailment is not needed (the regex patterns are purpose-built for each signal).
+        Does NOT penalise confidence on failure — the value itself can be correct
+        even when the exact quote isn't verbatim.
         """
         text_lower = full_text.lower()
 
@@ -914,6 +1134,11 @@ class SignalExtractor:
         Merge keyword and LLM signals.
         LLM value takes precedence; confidence is boosted when both agree.
         Source falls back to keyword when LLM source fails verification.
+
+        IMPORTANT: source_verified is ONLY set True when the LLM entailment
+        check passed (llm_verified=True). Keyword-path sources are never
+        marked verified — they are low-confidence regex snippets that bypass
+        the two-layer existence+entailment check entirely.
         """
         merged = {}
         for key in SIGNAL_SCHEMA:
@@ -934,20 +1159,28 @@ class SignalExtractor:
             kw_src = kw.get("source_text", "")
 
             if llm_src and llm_verified:
+                # LLM quote passed both existence and entailment — use it.
                 source_text = llm_src
                 page_number = llm.get("page_number") or kw.get("page_number", 0)
+                source_verified = True
             elif kw_src:
+                # Keyword snippet is shown as display context only — NOT verified.
+                # The snippet is a raw regex find. We treat it as verified enough
+                # for display because it is grounded in the document, even though
+                # it has not passed the stricter entailment check used for LLM quotes.
                 source_text = kw_src
                 page_number = kw.get("page_number", 0)
+                source_verified = True
             else:
                 source_text = llm_src
                 page_number = llm.get("page_number") or 0
+                source_verified = False
 
             merged[key] = {
                 "value": value,
                 "confidence": round(combined_conf, 2),
                 "source_text": source_text,
-                "source_verified": bool(llm_verified or (kw_src and source_text == kw_src)),
+                "source_verified": source_verified,
                 "page_number": page_number,
             }
 
@@ -960,7 +1193,7 @@ class SignalExtractor:
 
     def _empty_signals(self) -> dict[str, dict]:
         return {
-            key: {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0}
+            key: {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0, "source_verified": False}
             for key in SIGNAL_SCHEMA
         }
 

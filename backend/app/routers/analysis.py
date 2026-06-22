@@ -221,6 +221,12 @@ def submit_followup(
         signals=updated_signals,
     )
 
+    if result.get("status") != "complete":
+        session_row.status = "error"
+        db.commit()
+        _inject_project_info(result, session_row, db)
+        return result
+
     # Attach cost analysis
     if result.get("status") == "complete" and result.get("recommended"):
         result["cost_analysis"] = generate_cost_analysis(result)

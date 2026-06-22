@@ -17,18 +17,19 @@ logger = logging.getLogger(__name__)
 # per LLM call. This enables TCP connection pooling and saves 10-50ms per request.
 # Timeout set to 90s (down from 300s) — see B-03 FIX below.
 _OLLAMA_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
-_ollama_http_client: Optional[httpx.AsyncClient] = None
-
+_ollama_http_clients = {}
 
 def get_ollama_http_client() -> httpx.AsyncClient:
-    """Return (or lazily create) the shared Ollama HTTP client."""
-    global _ollama_http_client
-    if _ollama_http_client is None or _ollama_http_client.is_closed:
-        _ollama_http_client = httpx.AsyncClient(
+    """Return (or lazily create) the shared Ollama HTTP client per event loop."""
+    loop_id = id(asyncio.get_running_loop())
+    client = _ollama_http_clients.get(loop_id)
+    if client is None or client.is_closed:
+        client = httpx.AsyncClient(
             timeout=_OLLAMA_TIMEOUT,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
-    return _ollama_http_client
+        _ollama_http_clients[loop_id] = client
+    return client
 
 
 class LLMClient:

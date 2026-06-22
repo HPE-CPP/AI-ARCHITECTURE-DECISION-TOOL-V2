@@ -56,6 +56,7 @@ def _process_document_background(session_id: str, file_path: str, safe_filename:
     Writes progress to Redis at each stage so the results page polling
     shows real-time steps instead of a fake progress bar.
     """
+    print(f"\n>>>> [DIAG] _process_document_background ENTERED for session={session_id} file={safe_filename}\n", flush=True)
     db = SessionLocal()
     try:
         session_row = db.query(SessionModel).get(uuid.UUID(session_id))
@@ -77,15 +78,19 @@ def _process_document_background(session_id: str, file_path: str, safe_filename:
         # Stage 2: Document relevance gate
         _update_step(session_id, "relevance_check", "in_progress")
         _llm_for_review = get_llm_client(provider)
+        
+        print(f">>>> [DIAG] About to call validate_document_relevance for session={session_id}", flush=True)
         assessment = asyncio.run(validate_document_relevance(
             doc_data["full_text"],
             doc_data["word_count"],
             SIGNAL_SCHEMA,
             _llm_for_review,
         ))
+        print(f">>>> [DIAG] validate_document_relevance RETURNED: passed={assessment.passed} tier={assessment.risk_tier} for session={session_id}", flush=True)
 
         # 1. Developer log — full detail, file only, never reaches frontend
         log_relevance_assessment(session_id=session_id, filename=safe_filename, assessment=assessment)
+        print(f">>>> [DIAG] log_relevance_assessment CALLED for session={session_id}", flush=True)
 
         # 2. User-facing decision trace — short, plain-English, this is what the frontend shows
         user_message = build_user_facing_message(assessment)
@@ -174,6 +179,14 @@ def _process_document_background(session_id: str, file_path: str, safe_filename:
         result_response = recommendation_service.score_and_persist(
             db=db, session_id=session_id, signals=signals, decision_trace=trace,
         )
+
+        if result_response.get("status") != "complete":
+            _update_step(session_id, "scoring", "error", details=result_response.get("error_message"))
+            _update_step(session_id, "validating", "skipped", details="Skipped because the document did not contain enough verified signals.")
+            session_row.status = "error"
+            db.commit()
+            return
+
         _update_step(session_id, "scoring", "complete")
 
         # Stage 7: Validating — emitted so the live activity log reaches the

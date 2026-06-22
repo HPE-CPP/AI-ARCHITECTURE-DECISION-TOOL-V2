@@ -18,6 +18,26 @@ logger = logging.getLogger(__name__)
 _scoring_engine = ScoringEngine()
 
 
+def _insufficient_signals_response(session_id: str, scoring_result: dict, signals: dict, decision_trace: list) -> dict:
+    evaluated_factors = scoring_result.get("evaluated_factors", 0)
+    verified_factors = scoring_result.get("verified_factors", 0)
+    min_signals_to_show_results = scoring_result.get("min_signals_to_show_results", 5)
+    total_factors = scoring_result.get("total_factors", len(signals))
+    message = (
+        f"Couldn't find enough signals in the document. "
+        f"Found {evaluated_factors}/{total_factors} signals; "
+        f"at least {min_signals_to_show_results} are required before showing results."
+    )
+    return {
+        "analysis_id": session_id,
+        "status": "error",
+        "error_message": message,
+        "signals": signals,
+        "decision_trace": decision_trace,
+        "verified_factors": verified_factors,
+    }
+
+
 def _result_to_response(session_id: str, result: Result, signals: dict) -> dict:
     """Serialise a Result ORM row into the AnalysisResponse dict shape."""
     return {
@@ -56,6 +76,9 @@ def score_and_persist(
     scoring_result = _scoring_engine.score(signals)
     sensitivity = _scoring_engine.sensitivity_analysis(signals)
     followups = generate_followup_questions(signals)
+
+    if not scoring_result.get("data_sufficient", False):
+        return _insufficient_signals_response(session_id, scoring_result, signals, decision_trace)
 
     session_uuid = uuid.UUID(session_id)
 

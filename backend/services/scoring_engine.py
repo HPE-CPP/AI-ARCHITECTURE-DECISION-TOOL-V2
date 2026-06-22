@@ -9,6 +9,8 @@ from services.signal_extractor import SIGNAL_SCHEMA
 
 logger = logging.getLogger(__name__)
 
+MIN_SIGNALS_TO_SHOW_RESULTS = 5
+
 # Scoring rules: each signal value maps to score adjustments for each architecture
 # Format: signal_value -> {architecture: score_delta}
 SCORING_RULES: dict[str, dict[str, dict[str, float]]] = {
@@ -176,6 +178,7 @@ class ScoringEngine:
         factor_breakdown: dict[str, dict[str, float]] = {arch: {} for arch in self.architectures}
         total_weight = 0.0
         evaluated_factors = 0
+        verified_factors = 0
 
         for signal_name, signal_data in signals.items():
             value = signal_data.get("value")
@@ -201,6 +204,8 @@ class ScoringEngine:
             effective_weight = weight * confidence # yaha pe we do weight * confidence
             total_weight += effective_weight
             evaluated_factors += 1
+            if signal_data.get("source_verified", False):
+                verified_factors += 1
 
             for arch in self.architectures:
                 arch_score = value_scores.get(arch, 0.5)
@@ -326,9 +331,12 @@ class ScoringEngine:
             else:
                 suitability[arch] = "Not Recommended"
 
-        # AI-5.2 FIX: Detect zero-signal state and flag it so callers can warn users.
-        # When all signals are missing, scores are all 0.0 and ranking is arbitrary.
-        data_sufficient = evaluated_factors > 0
+        # Fail closed unless we have at least a small signal set.
+        # The source verifier is intentionally strict, so it is used as a
+        # quality signal rather than a hard gate. The minimum extracted-signal
+        # count is what determines whether the document is informative enough
+        # to show results at all.
+        data_sufficient = evaluated_factors >= MIN_SIGNALS_TO_SHOW_RESULTS
 
         return {
             "scores": scores,
@@ -338,10 +346,12 @@ class ScoringEngine:
             "suitability": suitability,
             "factor_breakdown": factor_breakdown,
             "evaluated_factors": evaluated_factors,
-            "total_factors": len(SIGNAL_SCHEMA) if hasattr(self, 'rules') else 10,
+            "verified_factors": verified_factors,
+            "min_signals_to_show_results": MIN_SIGNALS_TO_SHOW_RESULTS,
+            "total_factors": len(SIGNAL_SCHEMA),
             "architecture_details": ARCHITECTURE_DESCRIPTIONS,
             "why_not": self._generate_why_not(ranked, scores, factor_breakdown),
-            # AI-5.2: False when no signals were evaluated — frontend should show a warning.
+            # False whenever the document lacks enough verified evidence to trust the ranking.
             "data_sufficient": data_sufficient,
         }
 

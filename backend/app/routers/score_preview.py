@@ -8,7 +8,7 @@ Signal Editor on the frontend — no DB writes, no auth required.
 This file is SELF-CONTAINED.  It imports only from services/ which already
 exist.  No changes to any other file are needed to register this router.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
  
 from services.scoring_engine import ScoringEngine, SCORING_RULES
@@ -54,6 +54,15 @@ def score_preview(body: ScorePreviewRequest):
             signal_dict[signal_name] = {"value": None, "confidence": 0.0}
  
     result = _engine.score(signal_dict)
+
+    if not result.get("data_sufficient", False):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Couldn't find enough signals. "
+                f"At least {result.get('min_signals_to_show_results', 5)} signals are required before showing results."
+            ),
+        )
  
     raw_scores: dict[str, float] = result.get("scores", {})
     ranking: list[str] = result.get("ranking", [])

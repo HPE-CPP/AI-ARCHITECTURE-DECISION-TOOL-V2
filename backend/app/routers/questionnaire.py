@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.db.session import get_db
 from app.db.models import Session as SessionModel, Signal
 from app.services import recommendation_service
+from app.services import cache_service
 from app.schemas.session import QuestionnaireInput, AnalysisResponse
 from app.core.security import verify_firebase_token
 from services.signal_extractor import SignalExtractor
@@ -109,6 +110,12 @@ def submit_questionnaire(
         signals=signals,
         decision_trace=trace,
     )
+
+    if result.get("status") != "complete":
+        cache_service.set("decision_trace", session_id, result.get("decision_trace", trace), ttl=3600)
+        session_row.status = "error"
+        db.commit()
+        return result
 
     # Mark session complete
     session_row.status = "completed"

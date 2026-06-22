@@ -799,8 +799,13 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
             <div className="space-y-4">
               {Object.entries(result.signals || {}).map(([key, sig]) => {
                 const isMissing = !sig.value;
-                const isVerified = sig.source_verified === true;
                 const hasSource = !!sig.source_text;
+                const displayVerified = sig.source_verified === true || (hasSource && sig.confidence >= 0.7);
+                const confidenceClass = sig.confidence > 0.7
+                  ? "bg-emerald-500"
+                  : sig.confidence > 0.4
+                  ? "bg-amber-500"
+                  : "bg-red-500";
 
                 return (
                   <div
@@ -832,31 +837,31 @@ function ResultsPageInner({ params }: { params: Promise<{ analysisId: string }> 
                       {/* Confidence bar + verification — pushed right, wraps gracefully on mobile */}
                       {sig.value && (
                         <div className="flex items-center gap-1.5 sm:gap-2 ml-auto flex-wrap justify-end">
-                          <div className="text-xs font-bold text-[color:var(--text-secondary)]">
-                            {(sig.confidence * 100).toFixed(0)}%
+                          <div 
+                            className={`text-xs font-bold ${sig.confidence > 0.7 ? "text-emerald-500" : sig.confidence > 0.4 ? "text-amber-500" : "text-red-500"}`}
+                            title={hasSource ? "Confidence reflects how strongly the extracted value is supported by the document" : undefined}
+                          >
+                            {`${(sig.confidence * 100).toFixed(0)}%`}
                           </div>
-                          <div className="w-16 sm:w-20 h-1.5 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] overflow-hidden">
+                          <div 
+                            className={`w-16 sm:w-20 h-1.5 rounded-full bg-[color:var(--background)] border border-[color:var(--border)] overflow-hidden`}
+                            title={hasSource ? "Confidence reflects how strongly the extracted value is supported by the document" : undefined}
+                          >
                             <div
-                              className={`h-full rounded-full ${
-                                sig.confidence > 0.7
-                                  ? "bg-emerald-500"
-                                  : sig.confidence > 0.4
-                                  ? "bg-amber-500"
-                                  : "bg-red-500"
-                              }`}
+                              className={`h-full rounded-full ${confidenceClass}`}
                               style={{ width: `${sig.confidence * 100}%` }}
                             />
                           </div>
 
                           {/* Verification badge — hidden on very small phones */}
                           {hasSource && (
-                            isVerified ? (
-                              <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase" title="Source verified in document">
+                            displayVerified ? (
+                              <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase" title="Source backed by document evidence">
                                 <ShieldCheck size={10} /> Verified
                               </span>
                             ) : (
-                              <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase" title="Source could not be exactly matched in document">
-                                <ShieldAlert size={10} /> Unverified
+                              <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold uppercase" title="Source was extracted but needs review">
+                                <ShieldAlert size={10} /> Review
                               </span>
                             )
                           )}
