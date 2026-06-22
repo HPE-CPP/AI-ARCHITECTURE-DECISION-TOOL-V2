@@ -5,7 +5,7 @@ import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { motion } from "framer-motion";
-import { IndianRupee, Download, TrendingUp, Zap, AlertTriangle } from "lucide-react";
+import { IndianRupee, Download, TrendingUp, Zap, AlertTriangle, Info } from "lucide-react";
 
 /** Format integer with Indian comma notation: 1,00,000 */
 function fmtInr(n: number): string {
@@ -162,6 +162,13 @@ export function CostAnalysis({ data, result }: { data: CostAnalysisData; result:
             <p className="text-lg text-[var(--text-secondary)] font-medium">
               Annual estimate (incl. setup): {fmtRange(recArch.annual_total)}
             </p>
+            <div className="mt-4 flex items-start gap-2 text-sm text-[var(--text-secondary)] opacity-80 max-w-xl">
+              <Info size={16} className="flex-shrink-0 mt-0.5" />
+              <span>
+                These figures are approximate estimates and may vary depending on the
+                cloud platform, region, and pricing plan you choose.
+              </span>
+            </div>
             <button
               onClick={() => exportCostAnalysis(result)}
               className="mt-6 sm:mt-8 flex items-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 rounded-full border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--text-primary)] hover:text-[var(--background)] transition-all font-bold shadow-lg shadow-black/5 hover:-translate-y-0.5 group/btn text-sm sm:text-base"

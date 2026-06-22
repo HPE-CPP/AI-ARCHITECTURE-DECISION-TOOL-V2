@@ -245,6 +245,12 @@ def generate_cost_pdf(cost_data: dict, analysis_id: str = "N/A") -> bytes:
     pdf.set_xy(20, hero_y + 33)
     pdf.cell(0, 5, f"Annual estimate (incl. setup):  {_inr_range(rec_annual)}")
 
+    pdf.set_xy(20, hero_y + 40)
+    pdf.set_font("Helvetica", "I", 6.5)
+    pdf.set_text_color(*_MIST)
+    pdf.cell(0, 4, _s(
+        "Approximate estimate - actual cost varies with the cloud platform, region, and pricing plan chosen."))
+
     # Stat boxes
     box_x  = 151
     box_w  = 46
