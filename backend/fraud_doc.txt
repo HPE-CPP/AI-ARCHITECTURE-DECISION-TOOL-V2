@@ -1,0 +1,17 @@
+# System Architecture: Fraud Detection Pipeline
+Date: 2024-01-01
+Author: Engineering Team
+
+## Overview
+This document outlines the architecture for our new financial transaction monitoring system, designed to combat global fraud, which is costing the global economy hundreds of billions of dollars annually. The dataset size is extremely massive, encompassing over 500 million historical records. We are very cost-sensitive, with a strict budget cap of $5,000/month for cloud resources.
+
+## Data Processing
+The system will ingest streaming transaction data. Transactions are scored by the model. The output is a probability score between 0 and 1. If the score is > 0.9, it is flagged as 1, otherwise 0, which is then classified into a final fraud_label.
+
+## Performance
+The pipeline is optimized for high throughput. Expected throughput is 50,000 queries per day. Note that latency is an important factor: response time must be under 1 second for all queries.
+
+## Requirements
+- The model must process incoming transactions quickly.
+- We need to deploy this to AWS us-east-1.
+- Security level is critical and we must maintain HIPAA and SOC2 compliance at all times.

@@ -1,0 +1,29 @@
+John Doe
+Software Engineer
+San Francisco, CA | john.doe@email.com | 555-0100
+
+SUMMARY
+Experienced software engineer with 5 years in backend development. 
+Passionate about building scalable distributed systems and working with python.
+
+EXPERIENCE
+Software Engineer - TechCorp Inc. (2020 - Present)
+- Designed and implemented microservices using Python and FastAPI
+- Reduced latency by 20% by migrating database queries from MySQL to PostgreSQL
+- Collaborated with front-end team to integrate REST APIs
+- Deployed applications on AWS using Docker and Kubernetes
+
+Junior Developer - Startup LLC (2018 - 2020)
+- Maintained legacy codebase in Java
+- Wrote unit tests and increased coverage to 85%
+- Managed CI/CD pipelines using Jenkins
+
+EDUCATION
+B.S. Computer Science, State University (2014 - 2018)
+- Graduated Cum Laude
+- Coursework: Data Structures, Algorithms, Operating Systems, Database Management
+
+SKILLS
+Languages: Python, Java, JavaScript, SQL
+Frameworks: FastAPI, Django, React
+Tools: Git, Docker, Kubernetes, AWS, Jenkins, Linux

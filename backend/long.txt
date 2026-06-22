@@ -1,0 +1,33 @@
+This is just a long list of words to see if the parser accepts it.
+Apple banana orange grape pineapple mango watermelon peach strawberry blueberry raspberry blackberry cranberry.
+Dog cat mouse bird fish lizard snake turtle frog toad salamander newt.
+Red blue green yellow orange purple pink black white brown gray.
+One two three four five six seven eight nine ten.
+Monday Tuesday Wednesday Thursday Friday Saturday Sunday.
+January February March April May June July August September October November December.
+The quick brown fox jumps over the lazy dog.
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+Just adding more words to make it long enough to pass the word count threshold. We need more than eighty words. Let's keep adding random sentences. The weather is nice today. I like to eat pizza. Programming is fun. Python is a great language. We are testing a document parser. It should reject this document because it is not an architecture document. It has no relevant architecture context. It is just random words. Let's see if the keyword density or category coverage catches this garbage text.
+(Adding a few more words just to be absolutely sure it passes the 80 word minimum rule easily so we test the actual logic rules and LLM gate instead of just length.)
+We also need a lot of words to test the keyword density properly. If there are too few words, the density is artificially high if one keyword matches. So let's add padding.
+Padding padding padding. More words here. Just filling up space.
+Database server cloud performance scalability latency throughput queue broker stream API endpoint frontend backend middleware caching caching caching. 
+Wait, if I add keywords it might pass! Let me not add architecture keywords. Let's just add normal words.
+Car truck bus train airplane boat ship bicycle motorcycle scooter.
+House apartment condo townhouse mansion cabin tent.
+Table chair sofa bed desk lamp bookshelf dresser nightstand.
+Shirt pants dress skirt shorts sweater jacket coat hat gloves.
+Apple banana orange grape pineapple mango watermelon peach strawberry blueberry raspberry blackberry cranberry.
+Dog cat mouse bird fish lizard snake turtle frog toad salamander newt.
+Red blue green yellow orange purple pink black white brown gray.
+One two three four five six seven eight nine ten.
+Monday Tuesday Wednesday Thursday Friday Saturday Sunday.
+January February March April May June July August September October November December.
+The quick brown fox jumps over the lazy dog.
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
