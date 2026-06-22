@@ -209,6 +209,39 @@ class TestRecommendationService:
         assert row is not None
         assert row.recommended_architecture == result["recommended"]
 
+    def test_score_and_persist_rejects_empty_signals(self, db_session, seed_session):
+        from app.services import recommendation_service
+        from app.db.models import Result
+
+        sparse_signals = {
+            k: {"value": None, "confidence": 0.0, "source_text": "", "page_number": 0, "source_verified": False}
+            for k in [
+                "dataset_size",
+                "query_volume",
+                "latency_requirement",
+                "data_volatility",
+                "accuracy_requirement",
+                "domain_specificity",
+                "security_level",
+                "cost_sensitivity",
+                "deployment_preference",
+                "user_scale",
+                "citation_requirement",
+                "context_size",
+            ]
+        }
+
+        with patch("app.services.cache_service.set_result"):
+            result = recommendation_service.score_and_persist(
+                db=db_session,
+                session_id=str(seed_session.id),
+                signals=sparse_signals,
+            )
+
+        assert result["status"] == "error"
+        assert "Couldn't find enough signals" in result["error_message"]
+        assert db_session.query(Result).filter(Result.session_id == seed_session.id).count() == 0
+
     def test_score_and_persist_upserts_on_re_score(self, db_session, seed_session, seed_result, complete_signals):
         """Re-scoring must replace the existing result row, not create a duplicate."""
         from app.services import recommendation_service

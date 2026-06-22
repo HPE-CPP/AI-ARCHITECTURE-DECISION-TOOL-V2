@@ -209,6 +209,7 @@ class TestSignalMerging:
                                 "page_number": 0, "source_verified": False}}
         merged = self.extractor._merge_signals(kw, llm)
         assert merged["dataset_size"]["source_text"] == "keyword found here"
+        assert merged["dataset_size"]["source_verified"] is True
 
 
 @pytest.mark.unit
